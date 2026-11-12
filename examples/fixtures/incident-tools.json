@@ -1,0 +1,74 @@
+[
+  {
+    "type": "function",
+    "name": "check_application_error_rates",
+    "description": "Inspect recent application error-rate time series by service, endpoint, status family, deployment version, and availability zone. Use this to establish the shape and scope of an application failure after the initial change correlation has been checked.",
+    "parameters": {"type": "object", "properties": {"service": {"type": "string"}, "lookback_minutes": {"type": "integer", "minimum": 1, "maximum": 1440}, "group_by": {"type": "array", "items": {"type": "string", "enum": ["endpoint", "status", "version", "zone"]}}}, "required": ["service", "lookback_minutes"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "check_dependency_health",
+    "description": "Read latency, availability, saturation, and timeout indicators for databases, caches, queues, and third-party APIs used by a service. Use when evidence suggests an upstream or downstream dependency may be contributing to the incident.",
+    "parameters": {"type": "object", "properties": {"service": {"type": "string"}, "dependencies": {"type": "array", "items": {"type": "string"}}, "lookback_minutes": {"type": "integer", "minimum": 1, "maximum": 1440}}, "required": ["service", "lookback_minutes"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "compare_configuration_versions",
+    "description": "Compare runtime configuration, feature flags, secrets metadata, and environment variables between two deployed revisions. Secret values are never returned; only presence and version metadata are shown.",
+    "parameters": {"type": "object", "properties": {"service": {"type": "string"}, "from_revision": {"type": "string"}, "to_revision": {"type": "string"}, "include_feature_flags": {"type": "boolean", "default": true}}, "required": ["service", "from_revision", "to_revision"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "fetch_distributed_traces",
+    "description": "Retrieve sampled distributed traces matching a service, endpoint, time range, status, and deployment revision. Returns trace summaries and critical-path spans suitable for narrowing a confirmed failure mode.",
+    "parameters": {"type": "object", "properties": {"service": {"type": "string"}, "endpoint": {"type": "string"}, "status": {"type": "string", "enum": ["error", "success", "any"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": ["service", "status"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "inspect_recent_deployments",
+    "description": "List deployments and rollouts for a service, including revision, commit, start and completion times, rollout fraction, health-gate results, and rollback eligibility. This is the mandatory first diagnostic when errors rise immediately after a deployment.",
+    "parameters": {"type": "object", "properties": {"service": {"type": "string", "description": "Canonical service name."}, "lookback_minutes": {"type": "integer", "minimum": 1, "maximum": 1440}, "include_in_progress": {"type": "boolean", "default": true}}, "required": ["service", "lookback_minutes"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "inspect_resource_saturation",
+    "description": "Inspect CPU, memory, disk, network, file-descriptor, thread-pool, and connection-pool saturation for a service across replicas and zones. Use after checking correlated changes when resource exhaustion remains plausible.",
+    "parameters": {"type": "object", "properties": {"service": {"type": "string"}, "lookback_minutes": {"type": "integer", "minimum": 1, "maximum": 1440}, "percentile": {"type": "number", "enum": [50, 90, 95, 99]}}, "required": ["service", "lookback_minutes"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "query_application_logs",
+    "description": "Search structured application logs by service, deployment revision, request identifier, severity, and a constrained query expression. Use to obtain error details after metrics or traces identify a narrow failure window.",
+    "parameters": {"type": "object", "properties": {"service": {"type": "string"}, "query": {"type": "string"}, "severity": {"type": "string", "enum": ["debug", "info", "warning", "error", "critical"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 500}}, "required": ["service", "query"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "read_incident_timeline",
+    "description": "Read the current incident timeline, declared impact, responders, hypotheses, mitigations, and notable events. This tool is read-only and helps avoid duplicating investigations already completed by another responder.",
+    "parameters": {"type": "object", "properties": {"incident_id": {"type": "string"}, "include_private_notes": {"type": "boolean", "default": false}}, "required": ["incident_id"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "review_feature_flag_changes",
+    "description": "List feature-flag changes affecting a service or customer cohort, including actor, timestamp, old value, new value, targeting rule, and audit reference. Use when a flag change could explain a sudden behavioral change.",
+    "parameters": {"type": "object", "properties": {"service": {"type": "string"}, "lookback_minutes": {"type": "integer", "minimum": 1, "maximum": 10080}, "cohort": {"type": "string"}}, "required": ["service", "lookback_minutes"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "summarize_database_activity",
+    "description": "Summarize database query latency, lock waits, connection usage, replication lag, transaction aborts, and top query fingerprints for databases used by a service. This tool does not execute or modify queries.",
+    "parameters": {"type": "object", "properties": {"service": {"type": "string"}, "lookback_minutes": {"type": "integer", "minimum": 1, "maximum": 1440}, "include_query_fingerprints": {"type": "boolean", "default": true}}, "required": ["service", "lookback_minutes"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "verify_traffic_distribution",
+    "description": "Inspect load-balancer and service-mesh traffic distribution across regions, zones, revisions, and replicas. Use to detect a skewed rollout, unhealthy subset, or routing configuration that concentrates failures.",
+    "parameters": {"type": "object", "properties": {"service": {"type": "string"}, "lookback_minutes": {"type": "integer", "minimum": 1, "maximum": 1440}, "group_by": {"type": "string", "enum": ["region", "zone", "revision", "replica"]}}, "required": ["service", "lookback_minutes", "group_by"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "view_service_level_objectives",
+    "description": "Read service-level objectives, current error-budget consumption, burn rates, and alert thresholds. Use to quantify impact and urgency; it is not a substitute for checking a deployment that immediately precedes the failure.",
+    "parameters": {"type": "object", "properties": {"service": {"type": "string"}, "window": {"type": "string", "enum": ["1h", "6h", "24h", "7d", "30d"]}}, "required": ["service", "window"], "additionalProperties": false}
+  }
+]

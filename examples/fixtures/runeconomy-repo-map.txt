@@ -1,0 +1,44 @@
+RunEconomy repository map
+
+README.md
+pyproject.toml
+deploy/modal_vllm.py
+docs/experiment-format.md
+docs/trace-format.md
+examples/experiments/repository-agent-tool-pruning.json
+examples/experiments/tool-order-stability.json
+src/runeconomy/__init__.py
+src/runeconomy/__main__.py
+src/runeconomy/analysis.py
+src/runeconomy/cache.py
+src/runeconomy/cli.py
+src/runeconomy/critical_path.py
+src/runeconomy/evaluators.py
+src/runeconomy/experiments.py
+src/runeconomy/importers.py
+src/runeconomy/models.py
+src/runeconomy/reports.py
+src/runeconomy/vllm.py
+tests/test_analysis.py
+tests/test_evaluators.py
+tests/test_experiments.py
+tests/test_importers.py
+tests/test_modal_deployment.py
+tests/test_reports.py
+tests/test_vllm.py
+
+Module responsibilities
+
+- analysis.py compares request token prefixes and emits evidence-backed findings.
+- cache.py implements longest-common-prefix and vLLM block eligibility logic.
+- cli.py exposes trace analysis, capture, experiment, and report commands.
+- critical_path.py computes workflow critical paths from explicit span dependencies.
+- evaluators.py applies deterministic task-success evaluators to generated output.
+- experiments.py validates manifests, schedules paired trials, and makes decisions.
+- models.py defines the normalized local agent-trace format.
+- reports.py renders static Markdown experiment reports.
+- vllm.py renders exact server prompts, streams Responses API generations, captures
+  timing and token telemetry, and resets the trusted benchmark prefix cache.
+
+The task is read-only. No file modification, shell execution, network access, or
+deployment action is required.

@@ -1,0 +1,20 @@
+[
+  {
+    "type": "function",
+    "name": "list_repository",
+    "description": "List repository paths and module summaries without reading file contents. Use this to locate the relevant source file.",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string", "default": "."}, "depth": {"type": "integer", "minimum": 1, "maximum": 8}}, "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "read_file",
+    "description": "Read a UTF-8 repository file from an allowlisted relative path. The result includes line numbers and is read-only.",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}}, "required": ["path"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "search_repository",
+    "description": "Search tracked text files for a literal symbol or phrase and return matching paths, line numbers, and excerpts.",
+    "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "path": {"type": "string", "default": "."}, "max_results": {"type": "integer", "minimum": 1, "maximum": 50}}, "required": ["query"], "additionalProperties": false}
+  }
+]

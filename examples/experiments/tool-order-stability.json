@@ -1,0 +1,84 @@
+{
+  "schema_version": "0.1",
+  "experiment_id": "stable-tool-order-v1",
+  "backend": {
+    "kind": "vllm",
+    "base_url": "https://vllm.example.invalid",
+    "api_key_env": "VLLM_API_KEY",
+    "model": "Qwen/Qwen2.5-1.5B-Instruct",
+    "model_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+    "tokenizer_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+    "chat_template_digest": "sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+    "backend_version": "0.33.0",
+    "hardware": "1x NVIDIA A10 24GB on Modal",
+    "block_size": 16,
+    "engine_config": {
+      "enable_prefix_caching": true,
+      "tensor_parallel_size": 1,
+      "dtype": "bfloat16",
+      "max_model_len": 8192,
+      "gpu_memory_utilization": 0.85,
+      "max_num_seqs": 8
+    }
+  },
+  "sampling": {
+    "temperature": 0.0,
+    "max_output_tokens": 64,
+    "seed": 303
+  },
+  "execution": {
+    "repetitions": 20,
+    "warmup_repetitions": 3,
+    "order": "alternating",
+    "seed": 303,
+    "cache_treatment": "warm",
+    "arrival_pattern": "sequential",
+    "reset_external": false,
+    "require_evaluation": true
+  },
+  "acceptance": {
+    "primary_metric": "server_ttft_ms",
+    "max_task_success_regression": 0.0,
+    "min_completed_rate": 1.0,
+    "min_cached_token_gain": 800,
+    "require_latency_improvement": true
+  },
+  "json_fixtures": [
+    {
+      "name": "INCIDENT_TOOLS",
+      "path": "../fixtures/incident-tools.json",
+      "sha256": "sha256:418baafc1499766dcaed1ceb94d1391eca4039c68cd1309387707a3dc67edd01"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "errors-immediately-after-deployment",
+      "evaluator": {
+        "kind": "regex",
+        "pattern": "\\s*inspect_recent_deployments[.!]?\\s*",
+        "flags": ["IGNORECASE"],
+        "full_match": false
+      },
+      "variants": {
+        "baseline": {
+          "request_transform": {"kind": "shuffle_tools"},
+          "request": {
+            "instructions": "You are an incident-response routing agent. Choose the single best first diagnostic tool from the supplied catalog. Do not call a tool. Return only its exact tool name and no explanation.",
+            "input": "The checkout-api error rate rose from 0.3% to 12% four minutes after a deployment completed. The changed code is on the failing request path. Database and payment-provider latency are healthy, and CPU utilization is 42%. Which diagnostic tool must be used first?",
+            "tools": {"$fixture": "INCIDENT_TOOLS"},
+            "tool_choice": "none"
+          }
+        },
+        "candidate": {
+          "request_transform": {"kind": "canonicalize_tools"},
+          "request": {
+            "instructions": "You are an incident-response routing agent. Choose the single best first diagnostic tool from the supplied catalog. Do not call a tool. Return only its exact tool name and no explanation.",
+            "input": "The checkout-api error rate rose from 0.3% to 12% four minutes after a deployment completed. The changed code is on the failing request path. Database and payment-provider latency are healthy, and CPU utilization is 42%. Which diagnostic tool must be used first?",
+            "tools": {"$fixture": "INCIDENT_TOOLS"},
+            "tool_choice": "none"
+          }
+        }
+      }
+    }
+  ]
+}

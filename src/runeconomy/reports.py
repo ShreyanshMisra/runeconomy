@@ -1,0 +1,531 @@
+"""Static, shareable reports for controlled experiment results."""
+
+from __future__ import annotations
+
+import html
+import json
+from importlib.resources import files
+from typing import Any, Mapping
+
+
+def _number(value: Any, digits: int = 1) -> str:
+    return "unknown" if value is None else f"{float(value):.{digits}f}"
+
+
+def _percent(value: Any, digits: int = 1) -> str:
+    return "unknown" if value is None else f"{float(value) * 100:.{digits}f}%"
+
+
+def _interval(effect: Mapping[str, Any], digits: int = 1) -> str:
+    interval = effect.get("bootstrap_95_ci")
+    if not isinstance(interval, list) or len(interval) != 2:
+        return "unknown"
+    return f"[{_number(interval[0], digits)}, {_number(interval[1], digits)}]"
+
+
+def _percent_interval(effect: Mapping[str, Any]) -> str:
+    interval = effect.get("bootstrap_95_ci")
+    if not isinstance(interval, list) or len(interval) != 2:
+        return "unknown"
+    if interval[0] is None or interval[1] is None:
+        return "unknown"
+    return f"[{float(interval[0]) * 100:.1f}, {float(interval[1]) * 100:.1f}] pp"
+
+
+def render_experiment_markdown(result: Mapping[str, Any]) -> str:
+    if not isinstance(result.get("summary"), dict) or not isinstance(
+        result.get("decision"), dict
+    ):
+        raise ValueError("result must contain summary and decision objects")
+    experiment_id = result.get("experiment_id", "unknown-experiment")
+    decision = result["decision"]
+    raw_summary = result["summary"]
+    summary = raw_summary.get("workflow", raw_summary)
+    variants = summary["variants"]
+    effects = summary["effects"]
+    provenance = result.get("provenance", {})
+
+    metrics = (
+        ("input_tokens", "Input tokens", 1),
+        ("cached_tokens", "Cached tokens", 1),
+        ("cache_coverage", "Cache coverage", 3),
+        ("server_ttft_ms", "Server TTFT (ms)", 1),
+        ("client_ttft_ms", "Client TTFT (ms)", 1),
+        ("total_latency_ms", "Total latency (ms)", 1),
+        ("output_tokens", "Output tokens", 1),
+        ("task_success", "Task success", 3),
+    )
+    lines = [
+        f"# NegativeSplit report: {experiment_id}",
+        "",
+        f"**Decision: {str(decision.get('status', 'unknown')).upper()}**",
+        "",
+        str(decision.get("reason", "No decision reason recorded.")),
+        "",
+        "## Environment",
+        "",
+        f"- Model: `{provenance.get('model', 'unknown')}`",
+        f"- Model revision: `{provenance.get('model_revision', 'unknown')}`",
+        f"- Backend: vLLM `{provenance.get('backend_version', 'unknown')}`",
+        f"- Hardware: {provenance.get('hardware', 'unknown')}",
+        f"- Cache treatment: `{provenance.get('cache_treatment', 'unknown')}`",
+        f"- Trial order: `{provenance.get('order', 'unknown')}`",
+        f"- Optimization target: `{provenance.get('acceptance', {}).get('optimization_target', 'cache_reuse')}`",
+        f"- Manifest SHA-256: `{provenance.get('manifest_sha256', 'unknown')}`",
+        "",
+        "## Outcomes",
+        "",
+        "| Variant | Completion rate | Task-success rate | Evaluated trials |",
+        "|---|---:|---:|---:|",
+    ]
+    for variant in ("baseline", "candidate"):
+        outcomes = variants[variant]["outcomes"]
+        lines.append(
+            f"| {variant.title()} | {_percent(outcomes.get('completed_rate'))} | "
+            f"{_percent(outcomes.get('task_success_rate'))} | "
+            f"{outcomes.get('evaluated_count', 0)} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Inference results",
+            "",
+            "| Metric | Baseline mean | Candidate mean | Candidate − baseline | 95% paired bootstrap CI |",
+            "|---|---:|---:|---:|---:|",
+        ]
+    )
+    for key, label, digits in metrics:
+        baseline = variants["baseline"][key]["mean"]
+        candidate = variants["candidate"][key]["mean"]
+        effect = effects[key]
+        if key in {"cache_coverage", "task_success"}:
+            baseline_text = _percent(baseline)
+            candidate_text = _percent(candidate)
+            delta = effect.get("candidate_minus_baseline_mean")
+            delta_text = "unknown" if delta is None else f"{float(delta) * 100:.1f} pp"
+            interval_text = _percent_interval(effect)
+        else:
+            baseline_text = _number(baseline, digits)
+            candidate_text = _number(candidate, digits)
+            delta_text = _number(effect.get("candidate_minus_baseline_mean"), digits)
+            interval_text = _interval(effect, digits)
+        lines.append(
+            f"| {label} | {baseline_text} | {candidate_text} | "
+            f"{delta_text} | {interval_text} |"
+        )
+
+    prediction = summary.get("prediction_vs_observation", {})
+    lines.extend(
+        [
+            "",
+            "## Prediction versus observation",
+            "",
+            f"- Predicted cached-token delta: {_number(prediction.get('predicted_candidate_minus_baseline_cached_tokens'))}",
+            f"- Observed cached-token delta: {_number(prediction.get('observed_candidate_minus_baseline_cached_tokens'))}",
+            f"- Realization ratio: {_number(prediction.get('realization_ratio'), 3)}",
+            "",
+            "## Verification checks",
+            "",
+            "| Check | Required | Passed |",
+            "|---|---:|---:|",
+        ]
+    )
+    for check in decision.get("checks", []):
+        required = check.get("required", True)
+        lines.append(
+            f"| `{check.get('name', 'unknown')}` | "
+            f"{'yes' if required else 'no'} | "
+            f"{'yes' if check.get('passed') else 'no'} |"
+        )
+    if summary is not raw_summary:
+        lines.extend(
+            [
+                "",
+                "## Workflow aggregation",
+                "",
+                f"- Sequential inference steps: {summary.get('step_count', 'unknown')}",
+                f"- Claim: {summary.get('claim', 'unknown')}",
+            ]
+        )
+    evaluated_count = sum(
+        int(variants[name].get("outcomes", {}).get("evaluated_count", 0) or 0)
+        for name in ("baseline", "candidate")
+    )
+    evaluation_text = (
+        "Generated output text was evaluated locally; generated text was not persisted in "
+        "raw trial records."
+        if evaluated_count
+        else "Task success was not evaluated for this experiment."
+    )
+    lines.extend(
+        [
+            "",
+            "## Claim boundary",
+            "",
+            f"{evaluation_text} An exact output-digest match is not treated as semantic "
+            "correctness. The decision above applies only to the pinned workload, backend, "
+            "hardware, and acceptance thresholds recorded here.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def load_demo_result() -> dict[str, Any]:
+    """Load the bundled, sanitized measured result used by the CPU-only demo."""
+
+    resource = files("runeconomy").joinpath("data/repository-agent-tool-pruning.json")
+    payload = json.loads(resource.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("bundled demo result must be a JSON object")
+    return payload
+
+
+def _signed_percent(value: Any) -> str:
+    if value is None:
+        return "unknown"
+    return f"{float(value) * 100:+.1f}%"
+
+
+def render_experiment_html(result: Mapping[str, Any]) -> str:
+    """Render a generic report using only fields recorded in an experiment result."""
+
+    if not isinstance(result.get("summary"), dict) or not isinstance(
+        result.get("decision"), dict
+    ):
+        raise ValueError("result must contain summary and decision objects")
+    raw_summary = result["summary"]
+    summary = raw_summary.get("workflow", raw_summary)
+    variants = summary.get("variants")
+    effects = summary.get("effects")
+    if not isinstance(variants, dict) or not isinstance(effects, dict):
+        raise ValueError("result summary must contain variants and effects objects")
+    if not all(
+        isinstance(variants.get(name), dict) for name in ("baseline", "candidate")
+    ):
+        raise ValueError("result summary must contain baseline and candidate variants")
+
+    metric_specs = (
+        ("input_tokens", "Input tokens", 1, False),
+        ("cached_tokens", "Cached tokens", 1, False),
+        ("cache_coverage", "Cache coverage", 1, True),
+        ("server_ttft_ms", "Server TTFT (ms)", 1, False),
+        ("client_ttft_ms", "Client TTFT (ms)", 1, False),
+        ("total_latency_ms", "Total latency (ms)", 1, False),
+        ("output_tokens", "Output tokens", 1, False),
+        ("task_success", "Task success", 1, True),
+    )
+    metric_rows: list[str] = []
+    for key, label, digits, percentage in metric_specs:
+        baseline_metric = variants["baseline"].get(key)
+        candidate_metric = variants["candidate"].get(key)
+        effect = effects.get(key)
+        if not all(
+            isinstance(item, dict)
+            for item in (baseline_metric, candidate_metric, effect)
+        ):
+            continue
+        baseline_value = baseline_metric.get("mean")
+        candidate_value = candidate_metric.get("mean")
+        delta = effect.get("candidate_minus_baseline_mean")
+        if percentage:
+            baseline_text = _percent(baseline_value)
+            candidate_text = _percent(candidate_value)
+            delta_text = "unknown" if delta is None else f"{float(delta) * 100:.1f} pp"
+            interval_text = _percent_interval(effect)
+        else:
+            baseline_text = _number(baseline_value, digits)
+            candidate_text = _number(candidate_value, digits)
+            delta_text = _number(delta, digits)
+            interval_text = _interval(effect, digits)
+        metric_rows.append(
+            "<tr>"
+            f"<td>{html.escape(label)}</td>"
+            f'<td class="number">{html.escape(baseline_text)}</td>'
+            f'<td class="number">{html.escape(candidate_text)}</td>'
+            f'<td class="number">{html.escape(delta_text)}</td>'
+            f'<td class="number">{html.escape(interval_text)}</td>'
+            "</tr>"
+        )
+
+    outcome_rows: list[str] = []
+    evaluated_total = 0
+    for name in ("baseline", "candidate"):
+        outcomes = variants[name].get("outcomes", {})
+        if not isinstance(outcomes, dict):
+            outcomes = {}
+        evaluated = int(outcomes.get("evaluated_count", 0) or 0)
+        evaluated_total += evaluated
+        outcome_rows.append(
+            "<tr>"
+            f"<td>{name.title()}</td>"
+            f'<td class="number">{html.escape(_percent(outcomes.get("completed_rate")))}</td>'
+            f'<td class="number">{html.escape(_percent(outcomes.get("task_success_rate")))}</td>'
+            f'<td class="number">{evaluated}</td>'
+            "</tr>"
+        )
+
+    decision = result["decision"]
+    check_rows = []
+    for check in decision.get("checks", []):
+        if not isinstance(check, dict):
+            continue
+        check_rows.append(
+            "<tr>"
+            f"<td><code>{html.escape(str(check.get('name', 'unknown')))}</code></td>"
+            f"<td>{'yes' if check.get('required', True) else 'no'}</td>"
+            f"<td>{'yes' if check.get('passed') else 'no'}</td>"
+            "</tr>"
+        )
+    provenance = result.get("provenance", {})
+    if not isinstance(provenance, dict):
+        provenance = {}
+    workflow_note = ""
+    if summary is not raw_summary:
+        workflow_note = (
+            "<p><strong>Workflow aggregation:</strong> "
+            f"{html.escape(str(summary.get('step_count', 'unknown')))} sequential "
+            "inference steps per workflow unit.</p>"
+        )
+    evaluation_note = (
+        "Generated output was evaluated locally. Generated text is not stored in the "
+        "trial result."
+        if evaluated_total
+        else "Task success was not evaluated for this experiment."
+    )
+    evaluator_errors = result.get("evaluator_errors", [])
+    error_count = len(evaluator_errors) if isinstance(evaluator_errors, list) else 0
+    error_note = (
+        f"<p><strong>Evaluator infrastructure errors:</strong> {error_count}. "
+        "Affected trials have unknown task success and cannot support a verified decision.</p>"
+        if error_count
+        else ""
+    )
+    experiment_id = html.escape(str(result.get("experiment_id", "unknown")))
+    status = html.escape(str(decision.get("status", "unknown")))
+    reason = html.escape(str(decision.get("reason", "No reason recorded.")))
+
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RunEconomy NegativeSplit report — {experiment_id}</title>
+<style>
+body {{ margin: 0; background: #fff; color: #111; font: 14px/1.45 Arial, sans-serif; }}
+main {{ width: min(980px, calc(100% - 32px)); margin: 32px auto 64px; }}
+header {{ border-bottom: 2px solid #111; padding-bottom: 12px; }}
+h1 {{ margin: 0 0 4px; font: 700 25px/1.2 Georgia, serif; }}
+h2 {{ margin: 26px 0 8px; font: 700 18px/1.2 Georgia, serif; }}
+table {{ width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-variant-numeric: tabular-nums; }}
+th, td {{ border: 1px solid #aaa; padding: 7px 8px; text-align: left; vertical-align: top; }}
+th {{ background: #eee; }} .number {{ text-align: right; white-space: nowrap; }}
+code {{ font: 12px ui-monospace, monospace; overflow-wrap: anywhere; }}
+.note {{ color: #444; }} footer {{ border-top: 1px solid #999; margin-top: 28px; padding-top: 10px; color: #555; }}
+</style></head><body><main>
+<header><h1>RunEconomy NegativeSplit report</h1><div>Experiment: <code>{experiment_id}</code></div></header>
+<h2>Decision</h2><p><strong>{status}</strong> — {reason}</p>{workflow_note}{error_note}
+<h2>Outcomes</h2><table><thead><tr><th>Variant</th><th class="number">Completion rate</th><th class="number">Task-success rate</th><th class="number">Evaluated trials</th></tr></thead><tbody>{"".join(outcome_rows)}</tbody></table>
+<h2>Inference results</h2><table><thead><tr><th>Metric</th><th class="number">Baseline mean</th><th class="number">Candidate mean</th><th class="number">Candidate − baseline</th><th class="number">95% paired bootstrap CI</th></tr></thead><tbody>{"".join(metric_rows)}</tbody></table>
+<h2>Verification checks</h2><table><thead><tr><th>Check</th><th>Required</th><th>Passed</th></tr></thead><tbody>{"".join(check_rows)}</tbody></table>
+<h2>Recorded environment</h2><table><tbody>
+<tr><th>Model</th><td><code>{html.escape(str(provenance.get("model", "unknown")))}</code></td></tr>
+<tr><th>Model revision</th><td><code>{html.escape(str(provenance.get("model_revision", "unknown")))}</code></td></tr>
+<tr><th>Backend</th><td><code>{html.escape(str(provenance.get("backend_kind", "vllm")))} {html.escape(str(provenance.get("backend_version", "unknown")))}</code></td></tr>
+<tr><th>Hardware</th><td>{html.escape(str(provenance.get("hardware", "unknown")))}</td></tr>
+<tr><th>Cache treatment</th><td><code>{html.escape(str(provenance.get("cache_treatment", "unknown")))}</code></td></tr>
+<tr><th>Manifest SHA-256</th><td><code>{html.escape(str(provenance.get("manifest_sha256", "unknown")))}</code></td></tr>
+</tbody></table>
+<h2>Claim boundary</h2><p>{html.escape(evaluation_note)} Exact output-digest agreement is not treated as semantic correctness. The decision applies only to the recorded workload, backend, hardware, and acceptance thresholds.</p>
+<footer>Generated from recorded RunEconomy aggregate result fields. No remote scripts, fonts, or network resources are used.</footer>
+</main></body></html>"""
+
+
+def render_demo_html(result: Mapping[str, Any]) -> str:
+    """Render the repository-agent demonstration from its bundled evidence."""
+
+    if not isinstance(result.get("summary"), dict) or not isinstance(
+        result.get("decision"), dict
+    ):
+        raise ValueError("result must contain summary and decision objects")
+    raw_summary = result["summary"]
+    summary = raw_summary.get("workflow", raw_summary)
+    variants = summary["variants"]
+    effects = summary["effects"]
+    decision = result["decision"]
+    provenance = result.get("provenance", {})
+    sanitization = result.get("sanitization", {})
+    context = result.get("measurement_context", {})
+
+    def mean(variant: str, metric: str) -> Any:
+        return variants[variant][metric]["mean"]
+
+    baseline_input = mean("baseline", "input_tokens")
+    candidate_input = mean("candidate", "input_tokens")
+    baseline_latency = mean("baseline", "total_latency_ms")
+    candidate_latency = mean("candidate", "total_latency_ms")
+    baseline_success = variants["baseline"]["outcomes"]["task_success_rate"]
+    candidate_success = variants["candidate"]["outcomes"]["task_success_rate"]
+    input_effect = effects["input_tokens"]
+    latency_effect = effects["total_latency_ms"]
+    latency_ci = latency_effect.get("bootstrap_95_ci") or [None, None]
+    status = html.escape(str(decision.get("status", "unknown")))
+    experiment_id = html.escape(str(result.get("experiment_id", "unknown")))
+    model = html.escape(str(provenance.get("model", "unknown")))
+    hardware = html.escape(str(provenance.get("hardware", "unknown")))
+    backend = html.escape(str(provenance.get("backend_version", "unknown")))
+    measured_at = html.escape(str(result.get("created_at", "unknown")))
+    raw_trials = html.escape(str(sanitization.get("raw_trial_count", "unknown")))
+    manifest_sha = html.escape(str(provenance.get("manifest_sha256", "unknown")))
+    baseline_tools = html.escape(str(context.get("baseline_tool_count", "unknown")))
+    candidate_tools = html.escape(str(context.get("candidate_tool_count", "unknown")))
+    measured_pairs = html.escape(
+        str(
+            context.get(
+                "measured_workflow_pair_count",
+                input_effect.get("paired_count", "unknown"),
+            )
+        )
+    )
+    warmup_pairs = html.escape(
+        str(context.get("warmup_workflow_pair_count", "unknown"))
+    )
+    measured_calls = html.escape(
+        str(context.get("measured_inference_call_count", "unknown"))
+    )
+    warmup_calls = html.escape(
+        str(context.get("warmup_inference_call_count", "unknown"))
+    )
+    evaluator_kind = html.escape(str(context.get("evaluator_kind", "unknown")))
+    rename_note = html.escape(str(context.get("post_measurement_change", "")))
+    workflow_steps = html.escape(str(context.get("workflow_step_count", "unknown")))
+    candidate_tool_names = context.get("candidate_tool_names", [])
+    candidate_tools_text = (
+        ", ".join(
+            f"<code>{html.escape(str(name))}</code>" for name in candidate_tool_names
+        )
+        or "not recorded"
+    )
+    changed_fields = context.get("changed_request_fields", [])
+    changed_fields_text = (
+        ", ".join(f"<code>{html.escape(str(name))}</code>" for name in changed_fields)
+        or "not recorded"
+    )
+    raw_result_sha = html.escape(str(sanitization.get("raw_result_sha256", "unknown")))
+
+    server_baseline = mean("baseline", "server_ttft_ms")
+    server_candidate = mean("candidate", "server_ttft_ms")
+    server_effect = effects["server_ttft_ms"]
+    server_ci = server_effect.get("bootstrap_95_ci") or [None, None]
+    client_baseline = mean("baseline", "client_ttft_ms")
+    client_candidate = mean("candidate", "client_ttft_ms")
+    client_effect = effects["client_ttft_ms"]
+    client_ci = client_effect.get("bootstrap_95_ci") or [None, None]
+    success_effect = effects["task_success"]
+    success_ci = success_effect.get("bootstrap_95_ci") or [None, None]
+
+    check_rows = []
+    for check in decision.get("checks", []):
+        required = check.get("required", True)
+        passed = bool(check.get("passed"))
+        check_rows.append(
+            "<tr>"
+            f"<td><code>{html.escape(str(check.get('name', 'unknown')))}</code></td>"
+            f"<td>{'required' if required else 'informational'}</td>"
+            f'<td class="{"pass" if passed else ""}">'
+            f"{'PASS' if passed else 'NOT MET'}</td>"
+            "</tr>"
+        )
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RunEconomy NegativeSplit report — {experiment_id}</title>
+<style>
+* {{ box-sizing: border-box; }}
+body {{ margin: 0; background: #fff; color: #111; font: 14px/1.45 Arial, Helvetica, sans-serif; }}
+main {{ width: min(980px, calc(100% - 32px)); margin: 32px auto 64px; }}
+header {{ border-bottom: 2px solid #111; padding-bottom: 14px; margin-bottom: 24px; }}
+h1 {{ margin: 0 0 4px; font: 700 26px/1.2 Georgia, "Times New Roman", serif; }}
+h2 {{ margin: 28px 0 8px; font: 700 18px/1.25 Georgia, "Times New Roman", serif; }}
+p {{ max-width: 880px; margin: 8px 0; }}
+.subtle {{ color: #555; }}
+.note {{ color: #333; font-size: 13px; }}
+table {{ width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-variant-numeric: tabular-nums; }}
+th, td {{ border: 1px solid #aaa; padding: 7px 8px; text-align: left; vertical-align: top; }}
+th {{ background: #eee; font-weight: 700; }}
+td.number, th.number {{ text-align: right; white-space: nowrap; }}
+code {{ font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }}
+.pass {{ font-weight: 700; }}
+ul {{ margin-top: 6px; padding-left: 22px; }}
+footer {{ border-top: 1px solid #999; margin-top: 30px; padding-top: 10px; color: #555; font-size: 12px; }}
+@media(max-width: 700px) {{ body {{ font-size: 13px; }} th, td {{ padding: 5px; }} main {{ width: calc(100% - 20px); }} }}
+</style>
+</head>
+<body><main>
+<header>
+  <h1>RunEconomy NegativeSplit report</h1>
+  <div>Experiment: <code>{experiment_id}</code></div>
+  <div class="subtle">Recorded at {measured_at}</div>
+</header>
+
+<h2>Result</h2>
+<p><strong>Runner decision:</strong> {status}.</p>
+<p>The runner compared a baseline containing {baseline_tools} tool definitions per request with a candidate containing {candidate_tools}. In this pinned replay, the candidate used fewer input tokens and had lower summed inference latency. Both variants had a {_percent(candidate_success)} workflow evaluator pass rate.</p>
+<p class="note"><strong>Meaning of “verified”:</strong> this is the decision produced by the RunEconomy acceptance rules shown below. It is not an independent audit, certification, or claim that the result generalizes beyond this experiment.</p>
+
+<h2>Measured workflow results</h2>
+<table>
+<thead><tr><th>Metric</th><th class="number">Baseline mean</th><th class="number">Candidate mean</th><th class="number">Candidate − baseline</th><th class="number">Relative change</th><th class="number">95% paired bootstrap CI for difference</th></tr></thead>
+<tbody>
+<tr><td>Input tokens, summed over two inference calls</td><td class="number">{_number(baseline_input, 0)}</td><td class="number">{_number(candidate_input, 0)}</td><td class="number">{_number(input_effect.get("candidate_minus_baseline_mean"), 0)}</td><td class="number">{_signed_percent(input_effect.get("relative_change"))}</td><td class="number">[{_number(input_effect.get("bootstrap_95_ci")[0], 0)}, {_number(input_effect.get("bootstrap_95_ci")[1], 0)}]</td></tr>
+<tr><td>Server TTFT, summed (ms)</td><td class="number">{_number(server_baseline, 1)}</td><td class="number">{_number(server_candidate, 1)}</td><td class="number">{_number(server_effect.get("candidate_minus_baseline_mean"), 1)}</td><td class="number">{_signed_percent(server_effect.get("relative_change"))}</td><td class="number">[{_number(server_ci[0], 1)}, {_number(server_ci[1], 1)}]</td></tr>
+<tr><td>Client TTFT, summed (ms)</td><td class="number">{_number(client_baseline, 1)}</td><td class="number">{_number(client_candidate, 1)}</td><td class="number">{_number(client_effect.get("candidate_minus_baseline_mean"), 1)}</td><td class="number">{_signed_percent(client_effect.get("relative_change"))}</td><td class="number">[{_number(client_ci[0], 1)}, {_number(client_ci[1], 1)}]</td></tr>
+<tr><td>Inference latency, summed (ms)</td><td class="number">{_number(baseline_latency, 1)}</td><td class="number">{_number(candidate_latency, 1)}</td><td class="number">{_number(latency_effect.get("candidate_minus_baseline_mean"), 1)}</td><td class="number">{_signed_percent(latency_effect.get("relative_change"))}</td><td class="number">[{_number(latency_ci[0], 1)}, {_number(latency_ci[1], 1)}]</td></tr>
+<tr><td>Workflow evaluator pass rate</td><td class="number">{_percent(baseline_success)}</td><td class="number">{_percent(candidate_success)}</td><td class="number">{float(success_effect.get("candidate_minus_baseline_mean", 0)) * 100:.1f} percentage points</td><td class="number">{_signed_percent(success_effect.get("relative_change"))}</td><td class="number">[{float(success_ci[0]) * 100:.1f}, {float(success_ci[1]) * 100:.1f}] percentage points</td></tr>
+</tbody></table>
+
+<h2>Experiment design</h2>
+<table><tbody>
+<tr><th>Workflow unit</th><td>{workflow_steps} sequential inference calls treated as critical-path steps. Reported workflow latency is their sum and excludes fixture access and tool runtime.</td></tr>
+<tr><th>Baseline</th><td>{baseline_tools} tool definitions on each request.</td></tr>
+<tr><th>Candidate</th><td>{candidate_tools} tool definitions on each request: {candidate_tools_text}.</td></tr>
+<tr><th>Changed request field</th><td>{changed_fields_text}. Within each case, the baseline and candidate request objects otherwise matched.</td></tr>
+<tr><th>Evaluation</th><td>{evaluator_kind}.</td></tr>
+<tr><th>Measured sample</th><td>{measured_pairs} paired workflows = {measured_calls} measured inference calls.</td></tr>
+<tr><th>Warmup sample</th><td>{warmup_pairs} paired workflows = {warmup_calls} warmup inference calls.</td></tr>
+<tr><th>Total retained before sanitization</th><td>{raw_trials} inference trial records.</td></tr>
+</tbody></table>
+
+<h2>Acceptance checks</h2>
+<table><thead><tr><th>Check</th><th>Role in decision</th><th>Recorded result</th></tr></thead>
+<tbody>{"".join(check_rows)}</tbody></table>
+
+<h2>Recorded environment</h2>
+<table><tbody>
+<tr><th>Model</th><td><code>{model}</code></td></tr>
+<tr><th>Model revision</th><td><code>{html.escape(str(provenance.get("model_revision", "unknown")))}</code></td></tr>
+<tr><th>Backend</th><td>vLLM <code>{backend}</code></td></tr>
+<tr><th>Hardware</th><td>{hardware}</td></tr>
+<tr><th>Cache treatment</th><td><code>{html.escape(str(provenance.get("cache_treatment", "unknown")))}</code></td></tr>
+<tr><th>Trial order</th><td><code>{html.escape(str(provenance.get("order", "unknown")))}</code></td></tr>
+<tr><th>Recorded resolved-manifest fingerprint</th><td><code>{manifest_sha}</code></td></tr>
+</tbody></table>
+
+<h2>Provenance note</h2>
+<p>{rename_note}</p>
+
+<h2>Limitations and claim boundary</h2>
+<ul>
+  <li>The workload was a fixture-backed repository-analysis replay, not a live autonomous agent executing arbitrary tools.</li>
+  <li>The workflow evaluator used two deterministic regex checks. “100% pass rate” refers to those checks, not an independent assessment of general answer quality.</li>
+  <li>The measurement used one pinned small model, one A10 GPU, sequential traffic, and cold-cache treatment.</li>
+  <li>The latency metric sums two inference calls and excludes fixture access and tool runtime.</li>
+  <li>The experiment does not establish behavior under high concurrency, multiple replicas, larger models, SGLang, or other workloads.</li>
+</ul>
+
+<h2>Sanitization</h2>
+<p>This HTML was generated from a checked-in aggregate result copied from the local raw result. The aggregate result matches the raw result for the recorded summary, decision, and provenance fields. Per-trial records, prompt token IDs, output digests, generated output, and request content are not embedded in this report.</p>
+<p>Local raw-result SHA-256 recorded during sanitization: <code>{raw_result_sha}</code>.</p>
+
+<footer>No remote scripts, fonts, or network resources are used.</footer>
+</main></body></html>"""

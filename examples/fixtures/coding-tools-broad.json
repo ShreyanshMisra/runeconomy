@@ -1,0 +1,74 @@
+[
+  {
+    "type": "function",
+    "name": "apply_patch",
+    "description": "Apply an explicitly supplied unified patch to one or more repository files. This mutates the working tree and should only be used after inspection and when the user has requested an implementation change.",
+    "parameters": {"type": "object", "properties": {"patch": {"type": "string"}, "check_only": {"type": "boolean", "default": false}}, "required": ["patch"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "create_branch",
+    "description": "Create a new version-control branch at the current revision. Branch creation changes repository state and is unnecessary for read-only investigation or when a branch is already prepared.",
+    "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "start_point": {"type": "string"}}, "required": ["name"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "fetch_dependency_documentation",
+    "description": "Retrieve official documentation for a named third-party dependency and version. Use only when local code and pinned dependency metadata cannot answer an API or compatibility question.",
+    "parameters": {"type": "object", "properties": {"package": {"type": "string"}, "version": {"type": "string"}, "topic": {"type": "string"}}, "required": ["package", "topic"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "inspect_git_history",
+    "description": "Inspect commits, authorship, and diffs for a path or revision range. This is useful for regressions and historical intent, but not needed when the current source directly answers a narrow structural question.",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "revision_range": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}, "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "list_repository",
+    "description": "List repository paths and optional module summaries without reading file contents. Use this to locate the most relevant source file before requesting its contents.",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string", "default": "."}, "depth": {"type": "integer", "minimum": 1, "maximum": 8}, "include_summaries": {"type": "boolean", "default": true}}, "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "read_file",
+    "description": "Read a UTF-8 repository file from an allowlisted relative path. The result includes line numbers and is read-only. Prefer a narrow line range after locating the correct file.",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "start_line": {"type": "integer", "minimum": 1}, "end_line": {"type": "integer", "minimum": 1}}, "required": ["path"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "run_command",
+    "description": "Execute an allowlisted development command in the repository and return standard output, standard error, duration, and exit status. Commands can mutate state and must not be used for a read-only source question.",
+    "parameters": {"type": "object", "properties": {"argv": {"type": "array", "items": {"type": "string"}}, "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 600}}, "required": ["argv"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "run_tests",
+    "description": "Run a selected test module, test case, or configured repository test suite and report failures. Use after a code change or when behavior cannot be established through direct source inspection.",
+    "parameters": {"type": "object", "properties": {"target": {"type": "string"}, "extra_arguments": {"type": "array", "items": {"type": "string"}}, "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 1200}}, "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "search_repository",
+    "description": "Search tracked text files for a literal string or regular expression and return matching paths, line numbers, and excerpts. Use when a symbol or behavior cannot be located from the repository map.",
+    "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "path": {"type": "string", "default": "."}, "regex": {"type": "boolean", "default": false}, "max_results": {"type": "integer", "minimum": 1, "maximum": 200}}, "required": ["query"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "summarize_diff",
+    "description": "Summarize the current working-tree diff by file, changed behavior, and likely test impact. It is useful during implementation review but irrelevant when no repository changes have been requested.",
+    "parameters": {"type": "object", "properties": {"include_untracked": {"type": "boolean", "default": false}, "max_lines": {"type": "integer", "minimum": 1, "maximum": 5000}}, "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "write_file",
+    "description": "Create or replace a repository file with supplied content. This is a mutating operation and should never be used when the task asks only for analysis or identification.",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}, "create_parents": {"type": "boolean", "default": false}}, "required": ["path", "content"], "additionalProperties": false}
+  },
+  {
+    "type": "function",
+    "name": "write_pull_request_description",
+    "description": "Draft a pull-request title and description from an existing diff and test evidence. This produces text but is only relevant after a completed implementation with reviewable changes.",
+    "parameters": {"type": "object", "properties": {"audience": {"type": "string", "enum": ["maintainers", "internal", "public"]}, "include_test_plan": {"type": "boolean", "default": true}}, "additionalProperties": false}
+  }
+]

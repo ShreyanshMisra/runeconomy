@@ -1,0 +1,8 @@
+{
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "instructions": "Answer concisely.",
+  "input": "Reply with the single word ready.",
+  "temperature": 0.0,
+  "max_output_tokens": 8,
+  "seed": 101
+}

@@ -1,0 +1,71 @@
+{
+  "schema_version": "0.1",
+  "experiment_id": "timestamp-placement-v1",
+  "backend": {
+    "kind": "vllm",
+    "base_url": "https://vllm.example.invalid",
+    "api_key_env": "VLLM_API_KEY",
+    "model": "Qwen/Qwen2.5-1.5B-Instruct",
+    "model_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+    "tokenizer_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+    "chat_template_digest": "sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+    "backend_version": "0.33.0",
+    "hardware": "1x NVIDIA A10 24GB on Modal",
+    "block_size": 16,
+    "engine_config": {
+      "enable_prefix_caching": true,
+      "tensor_parallel_size": 1,
+      "dtype": "bfloat16",
+      "max_model_len": 8192,
+      "gpu_memory_utilization": 0.85,
+      "max_num_seqs": 8
+    }
+  },
+  "sampling": {
+    "temperature": 0.0,
+    "max_output_tokens": 64,
+    "seed": 101
+  },
+  "execution": {
+    "repetitions": 10,
+    "warmup_repetitions": 2,
+    "order": "alternating",
+    "seed": 101,
+    "cache_treatment": "warm",
+    "arrival_pattern": "sequential",
+    "reset_external": false,
+    "require_evaluation": true
+  },
+  "acceptance": {
+    "primary_metric": "server_ttft_ms",
+    "max_task_success_regression": 0.0,
+    "min_completed_rate": 1.0,
+    "min_cached_token_gain": 8,
+    "require_latency_improvement": true
+  },
+  "cases": [
+    {
+      "case_id": "triage-001",
+      "evaluator": {
+        "kind": "regex",
+        "pattern": ".*(deploy|revision|rollback).*",
+        "flags": ["IGNORECASE", "DOTALL"],
+        "full_match": true
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "instructions": "Request timestamp: {{AID_TRIAL_ID}}\nYou are an incident-response assistant. Answer in exactly one sentence of no more than 25 words.",
+            "input": "The API error rate exceeded 5%. What should the on-call engineer check first?"
+          }
+        },
+        "candidate": {
+          "request": {
+            "instructions": "You are an incident-response assistant. Answer in exactly one sentence of no more than 25 words.",
+            "input": "Request timestamp: {{AID_TRIAL_ID}}\nThe API error rate exceeded 5%. What should the on-call engineer check first?"
+          }
+        }
+      }
+    }
+  ]
+}

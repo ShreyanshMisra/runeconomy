@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "runeconomy"
+version = "0.1.0"
+description = "Find inference waste in agent workflows and verify performance improvements"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "shrey" }]
+keywords = [
+    "ai-agents",
+    "inference",
+    "llm",
+    "observability",
+    "performance",
+    "vllm",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+    "Topic :: System :: Benchmark",
+]
+dependencies = [
+    "jsonschema>=4.23,<5",
+]
+
+[project.urls]
+Homepage = "https://github.com/ShreyanshMisra/runeconomy"
+Repository = "https://github.com/ShreyanshMisra/runeconomy"
+Issues = "https://github.com/ShreyanshMisra/runeconomy/issues"
+
+[project.scripts]
+runeconomy = "runeconomy.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/runeconomy"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/LICENSE",
+    "/README.md",
+    "/docs",
+    "/examples",
+    "/pyproject.toml",
+    "/src",
+    "/tests",
+]
+exclude = [
+    "/docs/internal",
+]
+
+[dependency-groups]
+dev = [
+    "modal>=1.6.3",
+    "pytest>=8.3,<10",
+]
+

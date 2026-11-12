@@ -1,0 +1,692 @@
+{
+  "created_at": "2026-11-12T00:46:43.577728+00:00",
+  "decision": {
+    "checks": [
+      {
+        "name": "task_success_noninferior",
+        "observed": {
+          "baseline": 1.0,
+          "candidate": 1.0
+        },
+        "passed": true,
+        "threshold": {
+          "max_regression": 0.0
+        }
+      },
+      {
+        "name": "completion_rate",
+        "observed": {
+          "baseline": 1.0,
+          "candidate": 1.0
+        },
+        "passed": true,
+        "threshold": 1.0
+      },
+      {
+        "name": "cached_token_gain",
+        "observed": {
+          "bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "candidate_minus_baseline_mean": 0.0,
+          "paired_count": 15,
+          "relative_change": null
+        },
+        "passed": true,
+        "required": false,
+        "threshold": 0.0
+      },
+      {
+        "name": "prediction_direction_matches_observation",
+        "observed": {
+          "claim": "prediction is a full-block static upper bound under the observed request order",
+          "observed_candidate_minus_baseline_cached_tokens": 0.0,
+          "predicted_candidate_minus_baseline_cached_tokens": 0.0,
+          "realization_ratio": null
+        },
+        "passed": false,
+        "required": false,
+        "threshold": "both deltas > 0"
+      },
+      {
+        "name": "input_token_reduction",
+        "observed": {
+          "bootstrap_95_ci": [
+            -2172.0,
+            -2172.0
+          ],
+          "candidate_minus_baseline_mean": -2172.0,
+          "paired_count": 15,
+          "relative_change": -0.3715996578272027
+        },
+        "passed": true,
+        "required": true,
+        "threshold": 1000.0
+      },
+      {
+        "name": "total_latency_ms_improvement",
+        "observed": {
+          "bootstrap_95_ci": [
+            -159.20677564960593,
+            -40.25896926953768
+          ],
+          "candidate_minus_baseline_mean": -111.84528632632767,
+          "paired_count": 15,
+          "relative_change": -0.14789982062074106
+        },
+        "passed": true,
+        "required": true,
+        "threshold": "upper bound of 95% CI < 0"
+      }
+    ],
+    "reason": "all required quality, optimization-target, and performance checks passed",
+    "status": "verified"
+  },
+  "experiment_id": "repository-agent-tool-pruning-v1",
+  "provenance": {
+    "acceptance": {
+      "max_task_success_regression": 0.0,
+      "min_cached_token_gain": 0.0,
+      "min_completed_rate": 1.0,
+      "min_input_token_reduction": 1000.0,
+      "optimization_target": "input_tokens",
+      "primary_metric": "total_latency_ms",
+      "require_latency_improvement": true
+    },
+    "arrival_pattern": "sequential",
+    "backend_kind": "vllm",
+    "backend_version": "0.33.0",
+    "block_size": 16,
+    "cache_treatment": "cold",
+    "cases_form_workflow": true,
+    "chat_template_digest": "sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+    "engine_config": {
+      "dtype": "bfloat16",
+      "enable_prefix_caching": true,
+      "gpu_memory_utilization": 0.85,
+      "max_model_len": 8192,
+      "max_num_seqs": 8,
+      "tensor_parallel_size": 1
+    },
+    "hardware": "1x NVIDIA A10 24GB on Modal",
+    "manifest_sha256": "a6abed9ffd660ff5c278598597add0e797d66e41c220781a8672ab783b6ea22c",
+    "model": "Qwen/Qwen2.5-1.5B-Instruct",
+    "model_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+    "order": "alternating",
+    "sampling": {
+      "max_output_tokens": 64,
+      "seed": 404,
+      "temperature": 0.0
+    },
+    "seed": 404,
+    "tokenizer_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
+  },
+  "result_schema_version": "0.2",
+  "measurement_context": {
+    "baseline_tool_count": 12,
+    "candidate_tool_count": 3,
+    "candidate_tool_names": [
+      "list_repository",
+      "read_file",
+      "search_repository"
+    ],
+    "changed_request_fields": [
+      "tools"
+    ],
+    "current_example_manifest_matches_recorded_fingerprint": false,
+    "evaluator_kind": "two deterministic regex evaluators; workflow success required both to pass",
+    "measured_inference_call_count": 60,
+    "measured_workflow_pair_count": 15,
+    "post_measurement_change": "The project and source paths were renamed after this run. The recorded manifest fingerprint belongs to the original pre-rename resolved manifest; the current branded example manifest is not byte-identical.",
+    "warmup_inference_call_count": 8,
+    "warmup_workflow_pair_count": 2,
+    "workflow_step_count": 2
+  },
+  "sanitization": {
+    "claim": "Aggregate evidence only; raw trials remain local and generated output was never persisted.",
+    "generated_output_included": false,
+    "raw_result_sha256": "887d3343e23a05e14e64aed73f3dd17b8de9786f3055849769f28c95ccf3d44f",
+    "raw_trial_count": 68,
+    "raw_trials_included": false,
+    "source": "measured Modal/vLLM experiment"
+  },
+  "summary": {
+    "effects": {
+      "cache_coverage": {
+        "bootstrap_95_ci": [
+          0.0,
+          0.0
+        ],
+        "candidate_minus_baseline_mean": 0.0,
+        "paired_count": 30,
+        "relative_change": null
+      },
+      "cached_tokens": {
+        "bootstrap_95_ci": [
+          0.0,
+          0.0
+        ],
+        "candidate_minus_baseline_mean": 0.0,
+        "paired_count": 30,
+        "relative_change": null
+      },
+      "client_ttft_ms": {
+        "bootstrap_95_ci": [
+          -89.54875269361462,
+          -25.749909629424412
+        ],
+        "candidate_minus_baseline_mean": -62.425701467630766,
+        "paired_count": 30,
+        "relative_change": -0.18766318464196927
+      },
+      "generation_time_ms": {
+        "bootstrap_95_ci": [
+          2.6001355333420406,
+          5.3419397333376155
+        ],
+        "candidate_minus_baseline_mean": 3.974238666673576,
+        "paired_count": 30,
+        "relative_change": 0.08801678533603911
+      },
+      "input_tokens": {
+        "bootstrap_95_ci": [
+          -1086.0,
+          -1086.0
+        ],
+        "candidate_minus_baseline_mean": -1086.0,
+        "paired_count": 30,
+        "relative_change": -0.3715996578272027
+      },
+      "output_tokens": {
+        "bootstrap_95_ci": [
+          0.3333333333333333,
+          0.6666666666666666
+        ],
+        "candidate_minus_baseline_mean": 0.5,
+        "paired_count": 30,
+        "relative_change": 0.07692307692307693
+      },
+      "predicted_eligible_cached_tokens": {
+        "bootstrap_95_ci": [
+          0.0,
+          0.0
+        ],
+        "candidate_minus_baseline_mean": 0.0,
+        "paired_count": 30,
+        "relative_change": null
+      },
+      "server_queue_ms": {
+        "bootstrap_95_ci": [
+          -0.0067957666639510235,
+          0.0019240333311169404
+        ],
+        "candidate_minus_baseline_mean": -0.0018091666674990847,
+        "paired_count": 30,
+        "relative_change": -0.054170613256072045
+      },
+      "server_ttft_ms": {
+        "bootstrap_95_ci": [
+          -53.76813130000642,
+          -50.90614330000752
+        ],
+        "candidate_minus_baseline_mean": -52.28074556667176,
+        "paired_count": 30,
+        "relative_change": -0.30530734899622286
+      },
+      "task_success": {
+        "bootstrap_95_ci": [
+          0.0,
+          0.0
+        ],
+        "candidate_minus_baseline_mean": 0.0,
+        "paired_count": 30,
+        "relative_change": 0.0
+      },
+      "total_latency_ms": {
+        "bootstrap_95_ci": [
+          -82.32609729942244,
+          -17.911588930292055
+        ],
+        "candidate_minus_baseline_mean": -55.92264316316383,
+        "paired_count": 30,
+        "relative_change": -0.14789982062074106
+      }
+    },
+    "paired_output_digest": {
+      "claim": "exact-byte-equivalent output only; not semantic correctness",
+      "exact_match_rate": 0.0,
+      "pair_count": 30
+    },
+    "prediction_vs_observation": {
+      "claim": "prediction is a full-block static upper bound under the observed request order",
+      "observed_candidate_minus_baseline_cached_tokens": 0.0,
+      "predicted_candidate_minus_baseline_cached_tokens": 0.0,
+      "realization_ratio": null
+    },
+    "variants": {
+      "baseline": {
+        "cache_coverage": {
+          "count": 30,
+          "mean": 0.0,
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "cached_tokens": {
+          "count": 30,
+          "mean": 0.0,
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "client_ttft_ms": {
+          "count": 30,
+          "mean": 332.6475653001883,
+          "median": 327.16210451326333,
+          "p95": 461.2856659805402
+        },
+        "generation_time_ms": {
+          "count": 30,
+          "mean": 45.153190399994024,
+          "median": 45.23082800000111,
+          "p95": 74.12153999999305
+        },
+        "input_tokens": {
+          "count": 30,
+          "mean": 2922.5,
+          "median": 2922.5,
+          "p95": 3927.0
+        },
+        "outcomes": {
+          "completed_rate": 1.0,
+          "evaluated_count": 30,
+          "status_counts": {
+            "completed": 30
+          },
+          "task_success_rate": 1.0
+        },
+        "output_tokens": {
+          "count": 30,
+          "mean": 6.5,
+          "median": 6.5,
+          "p95": 10.0
+        },
+        "predicted_eligible_cached_tokens": {
+          "count": 30,
+          "mean": 0.0,
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "server_queue_ms": {
+          "count": 30,
+          "mean": 0.03339756666491667,
+          "median": 0.0320904999995264,
+          "p95": 0.04475000000070395
+        },
+        "server_ttft_ms": {
+          "count": 30,
+          "mean": 171.23972200000517,
+          "median": 171.83657100000005,
+          "p95": 232.854562
+        },
+        "task_success": {
+          "count": 30,
+          "mean": 1.0,
+          "median": 1.0,
+          "p95": 1.0
+        },
+        "total_latency_ms": {
+          "count": 30,
+          "mean": 378.1116361632788,
+          "median": 373.3816250169184,
+          "p95": 462.18799997586757
+        }
+      },
+      "candidate": {
+        "cache_coverage": {
+          "count": 30,
+          "mean": 0.0,
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "cached_tokens": {
+          "count": 30,
+          "mean": 0.0,
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "client_ttft_ms": {
+          "count": 30,
+          "mean": 270.2218638325576,
+          "median": 252.15254197246395,
+          "p95": 328.7658329936676
+        },
+        "generation_time_ms": {
+          "count": 30,
+          "mean": 49.127429066667595,
+          "median": 49.096772500007546,
+          "p95": 82.01619299998697
+        },
+        "input_tokens": {
+          "count": 30,
+          "mean": 1836.5,
+          "median": 1836.5,
+          "p95": 2841.0
+        },
+        "outcomes": {
+          "completed_rate": 1.0,
+          "evaluated_count": 30,
+          "status_counts": {
+            "completed": 30
+          },
+          "task_success_rate": 1.0
+        },
+        "output_tokens": {
+          "count": 30,
+          "mean": 7.0,
+          "median": 7.0,
+          "p95": 11.0
+        },
+        "predicted_eligible_cached_tokens": {
+          "count": 30,
+          "mean": 0.0,
+          "median": 0.0,
+          "p95": 0.0
+        },
+        "server_queue_ms": {
+          "count": 30,
+          "mean": 0.03158839999741758,
+          "median": 0.031170499994459533,
+          "p95": 0.04436100002180865
+        },
+        "server_ttft_ms": {
+          "count": 30,
+          "mean": 118.95897643333342,
+          "median": 119.19050599999537,
+          "p95": 176.5559650000057
+        },
+        "task_success": {
+          "count": 30,
+          "mean": 1.0,
+          "median": 1.0,
+          "p95": 1.0
+        },
+        "total_latency_ms": {
+          "count": 30,
+          "mean": 322.188993000115,
+          "median": 301.4242500066757,
+          "p95": 401.89991699298844
+        }
+      }
+    },
+    "workflow": {
+      "claim": "cases are treated as sequential critical-path inference steps; reported workflow latency is their sum and excludes tool runtime",
+      "effects": {
+        "cache_coverage": {
+          "bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "candidate_minus_baseline_mean": 0.0,
+          "paired_count": 15,
+          "relative_change": null
+        },
+        "cached_tokens": {
+          "bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "candidate_minus_baseline_mean": 0.0,
+          "paired_count": 15,
+          "relative_change": null
+        },
+        "client_ttft_ms": {
+          "bootstrap_95_ci": [
+            -173.79676418301338,
+            -51.699005447638534
+          ],
+          "candidate_minus_baseline_mean": -124.85140293526153,
+          "paired_count": 15,
+          "relative_change": -0.18766318464196927
+        },
+        "generation_time_ms": {
+          "bootstrap_95_ci": [
+            7.7858627333398545,
+            8.11493820001298
+          ],
+          "candidate_minus_baseline_mean": 7.948477333347152,
+          "paired_count": 15,
+          "relative_change": 0.08801678533603911
+        },
+        "input_tokens": {
+          "bootstrap_95_ci": [
+            -2172.0,
+            -2172.0
+          ],
+          "candidate_minus_baseline_mean": -2172.0,
+          "paired_count": 15,
+          "relative_change": -0.3715996578272027
+        },
+        "output_tokens": {
+          "bootstrap_95_ci": [
+            1.0,
+            1.0
+          ],
+          "candidate_minus_baseline_mean": 1.0,
+          "paired_count": 15,
+          "relative_change": 0.07692307692307693
+        },
+        "predicted_eligible_cached_tokens": {
+          "bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "candidate_minus_baseline_mean": 0.0,
+          "paired_count": 15,
+          "relative_change": null
+        },
+        "server_queue_ms": {
+          "bootstrap_95_ci": [
+            -0.013266066669833284,
+            0.003319400000615739
+          ],
+          "candidate_minus_baseline_mean": -0.0036183333349981694,
+          "paired_count": 15,
+          "relative_change": -0.054170613256072045
+        },
+        "server_ttft_ms": {
+          "bootstrap_95_ci": [
+            -104.85160206667008,
+            -104.27054606668094
+          ],
+          "candidate_minus_baseline_mean": -104.56149113334352,
+          "paired_count": 15,
+          "relative_change": -0.30530734899622286
+        },
+        "task_success": {
+          "bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "candidate_minus_baseline_mean": 0.0,
+          "paired_count": 15,
+          "relative_change": 0.0
+        },
+        "total_latency_ms": {
+          "bootstrap_95_ci": [
+            -159.20677564960593,
+            -40.25896926953768
+          ],
+          "candidate_minus_baseline_mean": -111.84528632632767,
+          "paired_count": 15,
+          "relative_change": -0.14789982062074106
+        }
+      },
+      "paired_output_digest": {
+        "claim": "exact-byte-equivalent output only; not semantic correctness",
+        "exact_match_rate": 0.0,
+        "pair_count": 15
+      },
+      "prediction_vs_observation": {
+        "claim": "prediction is a full-block static upper bound under the observed request order",
+        "observed_candidate_minus_baseline_cached_tokens": 0.0,
+        "predicted_candidate_minus_baseline_cached_tokens": 0.0,
+        "realization_ratio": null
+      },
+      "step_count": 2,
+      "variants": {
+        "baseline": {
+          "cache_coverage": {
+            "count": 15,
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0
+          },
+          "cached_tokens": {
+            "count": 15,
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0
+          },
+          "client_ttft_ms": {
+            "count": 15,
+            "mean": 665.2951306003766,
+            "median": 660.9662489499897,
+            "p95": 791.2403750233352
+          },
+          "generation_time_ms": {
+            "count": 15,
+            "mean": 90.30638079998805,
+            "median": 90.26443199996947,
+            "p95": 90.89639399999783
+          },
+          "input_tokens": {
+            "count": 15,
+            "mean": 5845.0,
+            "median": 5845.0,
+            "p95": 5845.0
+          },
+          "outcomes": {
+            "completed_rate": 1.0,
+            "evaluated_count": 15,
+            "status_counts": {
+              "completed": 15
+            },
+            "task_success_rate": 1.0
+          },
+          "output_tokens": {
+            "count": 15,
+            "mean": 13.0,
+            "median": 13.0,
+            "p95": 13.0
+          },
+          "predicted_eligible_cached_tokens": {
+            "count": 15,
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0
+          },
+          "server_queue_ms": {
+            "count": 15,
+            "mean": 0.06679513332983333,
+            "median": 0.06613100001118255,
+            "p95": 0.11884199997780343
+          },
+          "server_ttft_ms": {
+            "count": 15,
+            "mean": 342.47944400001035,
+            "median": 342.2752149999724,
+            "p95": 344.0432069999986
+          },
+          "task_success": {
+            "count": 15,
+            "mean": 1.0,
+            "median": 1.0,
+            "p95": 1.0
+          },
+          "total_latency_ms": {
+            "count": 15,
+            "mean": 756.2232723265575,
+            "median": 760.0516670499928,
+            "p95": 864.5518759731203
+          }
+        },
+        "candidate": {
+          "cache_coverage": {
+            "count": 15,
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0
+          },
+          "cached_tokens": {
+            "count": 15,
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0
+          },
+          "client_ttft_ms": {
+            "count": 15,
+            "mean": 540.4437276651151,
+            "median": 513.4602079633623,
+            "p95": 977.3097920115106
+          },
+          "generation_time_ms": {
+            "count": 15,
+            "mean": 98.25485813333519,
+            "median": 98.22646599999985,
+            "p95": 98.59630299999367
+          },
+          "input_tokens": {
+            "count": 15,
+            "mean": 3673.0,
+            "median": 3673.0,
+            "p95": 3673.0
+          },
+          "outcomes": {
+            "completed_rate": 1.0,
+            "evaluated_count": 15,
+            "status_counts": {
+              "completed": 15
+            },
+            "task_success_rate": 1.0
+          },
+          "output_tokens": {
+            "count": 15,
+            "mean": 14.0,
+            "median": 14.0,
+            "p95": 14.0
+          },
+          "predicted_eligible_cached_tokens": {
+            "count": 15,
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0
+          },
+          "server_queue_ms": {
+            "count": 15,
+            "mean": 0.06317679999483516,
+            "median": 0.0642509999977392,
+            "p95": 0.0829619999933584
+          },
+          "server_ttft_ms": {
+            "count": 15,
+            "mean": 237.91795286666684,
+            "median": 237.86862900001893,
+            "p95": 238.90108099999452
+          },
+          "task_success": {
+            "count": 15,
+            "mean": 1.0,
+            "median": 1.0,
+            "p95": 1.0
+          },
+          "total_latency_ms": {
+            "count": 15,
+            "mean": 644.37798600023,
+            "median": 616.5796240093186,
+            "p95": 1069.8930000071414
+          }
+        }
+      }
+    }
+  }
+}

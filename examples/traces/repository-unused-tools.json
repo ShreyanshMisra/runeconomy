@@ -1,0 +1,56 @@
+{
+  "schema_version": "0.1",
+  "trace_id": "repository-agent-unused-tools-demo",
+  "workload": "repository-analysis-agent",
+  "success": true,
+  "spans": [
+    {"span_id": "locate-source", "kind": "inference", "start_ms": 0, "end_ms": 260, "request_id": "repo-req-1", "depends_on": []},
+    {"span_id": "read-source", "kind": "tool", "start_ms": 260, "end_ms": 300, "request_id": null, "depends_on": ["locate-source"]},
+    {"span_id": "answer-question", "kind": "inference", "start_ms": 300, "end_ms": 610, "request_id": "repo-req-2", "depends_on": ["read-source"]}
+  ],
+  "requests": [
+    {
+      "request_id": "repo-req-1",
+      "sequence": 1,
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "model_revision": "demo-pinned-revision",
+      "backend": "vllm",
+      "backend_version": "0.33.0",
+      "tokenizer": "Qwen/Qwen2.5-1.5B-Instruct",
+      "tokenizer_revision": "demo-pinned-revision",
+      "chat_template_digest": "sha256:demo-template",
+      "prompt_token_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64],
+      "segments": [
+        {"kind": "system", "label": "repository agent instructions", "start_token": 0, "end_token": 8},
+        {"kind": "tools", "label": "broad coding tool catalog", "start_token": 8, "end_token": 48},
+        {"kind": "input", "label": "repository question", "start_token": 48, "end_token": 64}
+      ],
+      "available_tools": ["apply_patch", "create_branch", "fetch_dependency_documentation", "inspect_git_history", "list_repository", "read_file", "run_command", "run_tests", "search_repository", "summarize_diff", "write_file", "write_pull_request_description"],
+      "invoked_tools": ["read_file"],
+      "cache": {"enabled": true, "block_size": 16, "cache_salt_digest": null},
+      "metrics": {"input_tokens": 64, "output_tokens": 8, "cached_input_tokens": 0, "ttft_ms": 90, "total_latency_ms": 260}
+    },
+    {
+      "request_id": "repo-req-2",
+      "sequence": 2,
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "model_revision": "demo-pinned-revision",
+      "backend": "vllm",
+      "backend_version": "0.33.0",
+      "tokenizer": "Qwen/Qwen2.5-1.5B-Instruct",
+      "tokenizer_revision": "demo-pinned-revision",
+      "chat_template_digest": "sha256:demo-template",
+      "prompt_token_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124],
+      "segments": [
+        {"kind": "system", "label": "repository agent instructions", "start_token": 0, "end_token": 8},
+        {"kind": "tools", "label": "broad coding tool catalog", "start_token": 8, "end_token": 48},
+        {"kind": "history", "label": "file-read result", "start_token": 48, "end_token": 72},
+        {"kind": "input", "label": "final answer request", "start_token": 72, "end_token": 80}
+      ],
+      "available_tools": ["apply_patch", "create_branch", "fetch_dependency_documentation", "inspect_git_history", "list_repository", "read_file", "run_command", "run_tests", "search_repository", "summarize_diff", "write_file", "write_pull_request_description"],
+      "invoked_tools": [],
+      "cache": {"enabled": true, "block_size": 16, "cache_salt_digest": null},
+      "metrics": {"input_tokens": 80, "output_tokens": 6, "cached_input_tokens": 48, "ttft_ms": 75, "total_latency_ms": 310}
+    }
+  ]
+}
