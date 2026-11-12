@@ -11,25 +11,21 @@ The current implementation analyzes exact prompt token sequences, models vLLM's 
 
 ## Installation
 
-RunEconomy 0.1.0 has not been published to PyPI yet. Until the first release,
-install it from a repository checkout:
+Install RunEconomy from PyPI:
 
 ```bash
-git clone https://github.com/ShreyanshMisra/runeconomy.git
-cd runeconomy
-uv sync --locked
+pip install runeconomy
 ```
 
-After the package is published, the supported installation command will be
-`pip install runeconomy`. RunEconomy requires Python 3.11 or newer. Trace
-analysis and the bundled demo run locally without a GPU or network connection.
+RunEconomy requires Python 3.11 or newer. Trace analysis and the bundled demo
+run locally without a GPU or network connection.
 
 ## Run the CPU-only demo
 
 The bundled demo uses sanitized aggregate evidence from the measured repository-agent experiment. It makes no network or GPU calls.
 
 ```bash
-uv run runeconomy demo
+runeconomy demo
 ```
 
 This writes `runeconomy-demo.html`, a self-contained NegativeSplit report with the diagnosis, baseline/candidate comparison, confidence interval, quality gates, provenance, and claim boundary. Generated output and raw trials are not embedded.
