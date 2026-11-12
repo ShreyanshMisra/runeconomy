@@ -61,7 +61,7 @@ jobs:
           uvx --from "$wheel" runeconomy demo --output /tmp/runeconomy-demo.html
           test -s /tmp/runeconomy-demo.html
       - name: Upload distributions
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: python-distributions
           path: dist/
