@@ -1,5 +1,9 @@
 # Real-agent compatibility trial
 
+This is the historical Phase 5 integration fixture. It validates the
+`runeconomy compare` contract; it is separate from the later reliable-agent
+calibration and frozen 40-task proof.
+
 This fixture is a methodology and integration-contract trial, not a public
 performance benchmark. A minimal agent makes one real planning inference,
 reads a real repository excerpt, and makes a second inference that consumes the

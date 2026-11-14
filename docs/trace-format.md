@@ -4,6 +4,11 @@ The trace format is local-first JSON. Raw prompt text is optional and is not
 part of the initial schema. Token IDs can often be decoded and must still be
 treated as sensitive data.
 
+Normalized traces are evidence for `analyze`, structured findings, and
+`experiment init`. Importing a trace does not replay the original agent.
+`runeconomy compare` separately executes complete baseline and candidate agent
+processes, then imports each attempt's trace under the closed-loop contract.
+
 ```json
 {
   "schema_version": "0.2",

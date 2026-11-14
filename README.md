@@ -1,17 +1,45 @@
 # RunEconomy
 
-RunEconomy finds inference waste in multi-step agent workflows and verifies whether proposed changes improve successful-task performance. Its controlled before-and-after experiment workflow is called NegativeSplit.
+RunEconomy identifies inference waste on the critical path of an agent workflow
+and tests whether a change improves successful-task performance. Its controlled
+before-and-after methodology and report are called NegativeSplit.
 
-So far, measurements are limited to pinned, narrow workloads. The bundled demo
-is intentionally classified as inconclusive after a methodology review: its
-latency and token effects are measured, but its tool allowlist was not selected
-on a held-out workload and fifteen agreeing task-outcome pairs cannot prove a
-zero-regression margin. Treat it as an auditable example, not a general
-benchmark or verified product claim.
+The latest frozen real-agent proof is **invalid**, not verified. The candidate
+increased cache reuse, reduced TTFT, and had a favorable latency interval among
+task pairs where both variants succeeded. However, the baseline's absolute
+task-success lower bound and the paired task-success non-inferiority bound
+missed their predeclared gates. RunEconomy therefore declined to verify the
+change. The 40-task workload has been consumed and cannot be rerun or retuned
+as fresh held-out evidence.
 
-The project focuses on critical-path workflow experiments rather than trying to replace prompt-cache collectors or general observability systems. It can consume normalized evidence from those layers and test whether an application or serving intervention improves successful-workflow performance.
+The bundled CPU-only demo currently remains a separate, historical static
+request experiment. It is intentionally `inconclusive` after methodology
+review. Treat both results as narrow, pinned evidence—not general benchmarks.
 
-The current implementation analyzes exact prompt token sequences, models vLLM's full-block prefix-cache eligibility, attributes divergence only where segment evidence supports it, and separates potential reuse from observed cached tokens. It also imports structural OpenInference traces and Prefixwise ledger findings without inventing missing prompt tokens, captures server-rendered prompts, and runs controlled paired A/B replays against a trusted vLLM benchmark server.
+The project focuses on critical-path workflow experiments rather than trying to
+replace prompt-cache collectors or general observability systems. It consumes
+normalized evidence from those layers and tests application or serving
+interventions under explicit quality and performance gates.
+
+The current implementation analyzes exact prompt token sequences, models
+vLLM's full-block prefix-cache eligibility, attributes divergence only where
+segment evidence supports it, and separates potential reuse from observed
+cached tokens. It imports structural OpenInference traces and Prefixwise ledger
+findings without inventing missing evidence, captures server-rendered prompts,
+and runs controlled paired comparisons.
+
+## Choose the right workflow
+
+- `runeconomy experiment` runs static request-level baseline/candidate
+  manifests against vLLM. `negative-split` is its backward-compatible alias.
+- `runeconomy compare` executes complete baseline and candidate agent
+  processes with variant-local state, real tools, an evaluator, and imported
+  OpenTelemetry/OpenInference traces.
+- Compatibility trials validate the integration contract. Calibration tasks
+  are used for development. Neither is held-out performance evidence.
+- A frozen held-out proof is executed once after the agent, evaluator, gates,
+  workload, environment, and sample size are fixed. Failed gates remain failed;
+  observed tasks are never recycled as fresh evidence.
 
 ## Installation
 
@@ -64,7 +92,7 @@ runeconomy capture-vllm chat-request.json \
   --api-key-env VLLM_API_KEY
 ```
 
-## Run the current proof from a checkout
+## Validate static experiments from a checkout
 
 The commands below use repository fixtures and tests; they are not included in
 an installed wheel.
