@@ -44,6 +44,28 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(report["critical_path"]["duration_ms"], 390)
         rules = [finding["rule_id"] for finding in report["findings"]]
         self.assertIn("prefix_divergence.dynamic_metadata", rules)
+        finding = next(
+            item
+            for item in report["findings"]
+            if item["rule_id"] == "prefix_divergence.dynamic_metadata"
+        )
+        self.assertTrue(finding["finding_id"].startswith("finding-"))
+        self.assertEqual(
+            finding["affected_request_ids"], ("req-1", "req-2")
+        )
+        self.assertEqual(
+            finding["experiment_template_id"], "prompt.move_dynamic_metadata"
+        )
+        self.assertEqual(finding["predicted_direction"], "increase")
+        self.assertIsNone(finding["estimated_reducible_ms"])
+
+    def test_finding_ids_are_stable(self):
+        first = analyze_trace(self.load_demo())
+        second = analyze_trace(self.load_demo())
+        self.assertEqual(
+            [item["finding_id"] for item in first["findings"]],
+            [item["finding_id"] for item in second["findings"]],
+        )
 
     def test_missing_cache_telemetry_is_not_treated_as_zero(self):
         payload = json.loads(

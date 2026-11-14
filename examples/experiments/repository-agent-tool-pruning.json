@@ -54,7 +54,7 @@
     {
       "name": "VLLM_SOURCE",
       "path": "../../src/runeconomy/vllm.py",
-      "sha256": "sha256:2ea709867d77210e1b41b1e383569b2d9e826a3f45864aa03742f9a0e330d457"
+      "sha256": "sha256:c653b365981cf0ef9eb5d1bb7c12a6d7c6b3965eff40f1ecd22f26290ce3915a"
     }
   ],
   "json_fixtures": [

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -43,6 +44,7 @@ def _manifest() -> dict:
             "arrival_pattern": "sequential",
             "require_evaluation": True,
         },
+        "acceptance": {"task_success_method": "point_estimate"},
         "cases": [
             {
                 "case_id": "case-1",
@@ -98,6 +100,11 @@ class _FakeClient:
         )
 
 
+class _NoResetClient(_FakeClient):
+    def reset_prefix_cache(self, *, reset_external: bool = False) -> None:
+        raise AssertionError("salt-isolated execution must not call cache reset")
+
+
 class _TokenReductionClient(_FakeClient):
     def capture(self, request_body: dict) -> CapturedResponse:
         captured = super().capture(request_body)
@@ -114,6 +121,12 @@ class _TokenReductionClient(_FakeClient):
         )
 
 
+class _FailingTaskClient(_FakeClient):
+    def capture(self, request_body: dict) -> CapturedResponse:
+        captured = super().capture(request_body)
+        return CapturedResponse(**{**captured.__dict__, "output_text": "FAIL"})
+
+
 class _InterruptedClient(_FakeClient):
     def capture(self, request_body: dict) -> CapturedResponse:
         if len(self.requests) == 2:
@@ -121,7 +134,128 @@ class _InterruptedClient(_FakeClient):
         return super().capture(request_body)
 
 
+class _IdentityClient(_FakeClient):
+    def __init__(self, identities: list[dict]) -> None:
+        super().__init__()
+        self.identities = identities
+        self.identity_reads = 0
+
+    def environment_identity(self) -> dict:
+        identity = self.identities[min(self.identity_reads, len(self.identities) - 1)]
+        self.identity_reads += 1
+        return identity
+
+
 class ExperimentTests(unittest.TestCase):
+    def test_schema_03_defaults_absolute_success_floor(self) -> None:
+        payload = _manifest()
+        payload["schema_version"] = "0.3"
+
+        manifest = ExperimentManifest.from_dict(payload)
+
+        self.assertEqual(manifest.acceptance.min_task_success_rate, 0.80)
+
+    def test_paired_success_gate_is_not_degenerate_when_all_pairs_pass(self) -> None:
+        payload = _manifest()
+        payload["execution"].update(
+            {"repetitions": 15, "warmup_repetitions": 0}
+        )
+        payload["acceptance"].update(
+            {
+                "task_success_method": "paired_exact",
+                "max_task_success_regression": 0.0,
+            }
+        )
+
+        result = run_experiment(ExperimentManifest.from_dict(payload), _FakeClient())
+
+        self.assertEqual(result["result_schema_version"], "0.3")
+        outcomes = result["summary"]["variants"]["candidate"]["outcomes"]
+        paired = result["summary"]["effects"]["task_success"]
+        self.assertEqual(outcomes["task_success_rate"], 1.0)
+        self.assertLess(outcomes["task_success_95_ci"][0], 1.0)
+        self.assertLess(paired["one_sided_lower_bound"], 0.0)
+        self.assertEqual(paired["outcome_counts"]["both_success"], 15)
+        self.assertEqual(result["decision"]["status"], "inconclusive")
+
+    def test_paired_success_gate_can_verify_a_predeclared_margin(self) -> None:
+        payload = _manifest()
+        payload["execution"].update(
+            {"repetitions": 40, "warmup_repetitions": 0}
+        )
+        payload["acceptance"].update(
+            {
+                "task_success_method": "paired_exact",
+                "max_task_success_regression": 0.10,
+                "min_task_success_rate": 0.80,
+            }
+        )
+
+        result = run_experiment(ExperimentManifest.from_dict(payload), _FakeClient())
+
+        lower = result["summary"]["effects"]["task_success"][
+            "one_sided_lower_bound"
+        ]
+        self.assertGreater(lower, -0.10)
+        self.assertEqual(result["decision"]["status"], "verified")
+
+    def test_absolute_success_floor_invalidates_weak_baseline(self) -> None:
+        payload = _manifest()
+        payload["execution"].update(
+            {"repetitions": 40, "warmup_repetitions": 0}
+        )
+        payload["acceptance"].update(
+            {
+                "task_success_method": "paired_exact",
+                "max_task_success_regression": 0.10,
+                "min_task_success_rate": 0.80,
+            }
+        )
+
+        result = run_experiment(
+            ExperimentManifest.from_dict(payload), _FailingTaskClient()
+        )
+
+        self.assertEqual(result["decision"]["status"], "invalid")
+        self.assertIn("baseline", result["decision"]["reason"])
+        absolute = result["decision"]["checks"][0]
+        self.assertEqual(absolute["name"], "minimum_task_success_rate")
+        self.assertFalse(absolute["passed"])
+
+    def test_required_environment_identity_invalidates_drift(self) -> None:
+        payload = _manifest()
+        payload["acceptance"].update(
+            {
+                "task_success_method": "point_estimate",
+                "require_environment_identity": True,
+            }
+        )
+        expected = {
+            "model": "example/model",
+            "model_revision": "model-sha",
+            "tokenizer_revision": "tokenizer-sha",
+            "chat_template_digest": "sha256:template",
+            "backend_version": "0.12.0",
+            "engine_config": {
+                "enable_prefix_caching": True,
+                "tensor_parallel_size": 1,
+                "dtype": "bfloat16",
+            },
+        }
+        changed = {**expected, "model_revision": "different-model-sha"}
+
+        result = run_experiment(
+            ExperimentManifest.from_dict(payload),
+            _IdentityClient([expected, changed]),
+        )
+
+        self.assertEqual(result["decision"]["status"], "invalid")
+        self.assertEqual(result["decision"]["checks"][0]["name"], "environment_identity")
+        self.assertIn(
+            "model_revision",
+            result["provenance"]["environment_identity"]["drift"],
+        )
+
     def test_warm_experiment_alternates_and_builds_paired_effects(self) -> None:
         manifest = ExperimentManifest.from_dict(_manifest())
         client = _FakeClient()
@@ -168,6 +302,43 @@ class ExperimentTests(unittest.TestCase):
         client = _FakeClient()
         result = run_experiment(manifest, client)
         self.assertEqual(client.resets, len(result["trials"]))
+
+    def test_predeclared_prediction_is_compared_with_paired_interval(self) -> None:
+        payload = _manifest()
+        payload["design"] = {
+            "hypothesis": {
+                "causal_mechanism": "candidate reduces prefill work",
+                "prediction": {
+                    "metric": "client_ttft_ms",
+                    "direction": "decrease",
+                },
+            }
+        }
+        result = run_experiment(ExperimentManifest.from_dict(payload), _FakeClient())
+        assessment = result["summary"]["predeclared_prediction"]
+        self.assertEqual(assessment["status"], "supported")
+        self.assertEqual(assessment["confidence_interval"], [-20.0, -20.0])
+
+    def test_salt_isolation_uses_unique_salts_without_claiming_reset(self) -> None:
+        payload = _manifest()
+        payload["execution"].update(
+            {"cache_treatment": "cold", "cache_isolation": "salt_isolated"}
+        )
+        manifest = ExperimentManifest.from_dict(payload)
+        client = _NoResetClient()
+        result = run_experiment(manifest, client)
+
+        salts = [request["cache_salt"] for request in client.requests]
+        self.assertEqual(len(salts), len(set(salts)))
+        self.assertTrue(all(len(salt) >= 43 for salt in salts))
+        self.assertNotIn("cache_salt", json.dumps(result))
+        self.assertEqual(result["provenance"]["cache_isolation"], "salt_isolated")
+
+    def test_cache_isolation_semantics_are_validated(self) -> None:
+        payload = _manifest()
+        payload["execution"]["cache_isolation"] = "salt_isolated"
+        with self.assertRaisesRegex(ExperimentValidationError, "warm cache treatment"):
+            ExperimentManifest.from_dict(payload)
 
     def test_stateful_responses_requests_are_rejected(self) -> None:
         payload = _manifest()
@@ -285,6 +456,7 @@ class ExperimentTests(unittest.TestCase):
             "optimization_target": "input_tokens",
             "min_input_token_reduction": 90,
             "require_latency_improvement": True,
+            "task_success_method": "point_estimate",
         }
         second_case = {
             **payload["cases"][0],
@@ -311,6 +483,68 @@ class ExperimentTests(unittest.TestCase):
             -50.0,
         )
         self.assertEqual(result["decision"]["status"], "verified")
+
+    def test_distinct_workflow_units_are_paired_independently(self) -> None:
+        payload = _manifest()
+        payload["execution"].update(
+            {
+                "warmup_repetitions": 0,
+                "cache_treatment": "cold",
+                "cases_form_workflow": True,
+            }
+        )
+        template = payload["cases"][0]
+        payload["cases"] = []
+        for workflow_id in ("task-a", "task-b"):
+            for step in (1, 2):
+                payload["cases"].append(
+                    {
+                        "case_id": f"{workflow_id}-step-{step}",
+                        "workflow_id": workflow_id,
+                        "evaluator": template["evaluator"],
+                        "variants": {
+                            "baseline": {
+                                "request": {
+                                    "input": f"baseline {workflow_id} step {step}"
+                                }
+                            },
+                            "candidate": {
+                                "request": {
+                                    "input": f"candidate {workflow_id} step {step}"
+                                }
+                            },
+                        },
+                    }
+                )
+
+        manifest = ExperimentManifest.from_dict(payload)
+        result = run_experiment(manifest, _FakeClient())
+
+        workflow = result["summary"]["workflow"]
+        self.assertEqual(workflow["workflow_count"], 2)
+        self.assertEqual(workflow["step_count"], 2)
+        self.assertEqual(workflow["step_counts"], {"task-a": 2, "task-b": 2})
+        self.assertEqual(
+            workflow["effects"]["total_latency_ms"]["paired_count"], 4
+        )
+        self.assertEqual(
+            workflow["effects"]["task_success"]["outcome_counts"]["both_success"],
+            4,
+        )
+
+    def test_partial_workflow_grouping_is_rejected(self) -> None:
+        payload = _manifest()
+        payload["execution"]["cases_form_workflow"] = True
+        payload["cases"][0]["workflow_id"] = "task-a"
+        second = {
+            **payload["cases"][0],
+            "case_id": "case-2",
+        }
+        second.pop("workflow_id")
+        payload["cases"].append(second)
+
+        with self.assertRaisesRegex(ExperimentValidationError, "every case"):
+            ExperimentManifest.from_dict(payload)
 
 
 if __name__ == "__main__":

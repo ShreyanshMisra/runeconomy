@@ -8,9 +8,10 @@ import math
 import os
 import random
 import re
+import secrets
 import statistics
 from copy import deepcopy
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Mapping, Protocol
@@ -55,6 +56,7 @@ class BackendConfig:
     hardware: str
     block_size: int
     engine_config: dict[str, Any]
+    api_dialect: str = "responses"
 
 
 @dataclass(frozen=True)
@@ -68,6 +70,7 @@ class ExecutionConfig:
     reset_external: bool
     require_evaluation: bool
     cases_form_workflow: bool
+    cache_isolation: str = "shared"
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,9 @@ class AcceptanceConfig:
     min_cached_token_gain: float
     min_input_token_reduction: float
     require_latency_improvement: bool
+    min_task_success_rate: float = 0.0
+    task_success_method: str = "paired_exact"
+    require_environment_identity: bool = False
 
 
 @dataclass(frozen=True)
@@ -89,6 +95,7 @@ class ExperimentCase:
     evaluator: dict[str, Any] | None
     baseline_transform: dict[str, Any] | None
     candidate_transform: dict[str, Any] | None
+    workflow_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -101,14 +108,16 @@ class ExperimentManifest:
     acceptance: AcceptanceConfig
     constants: dict[str, Any]
     cases: tuple[ExperimentCase, ...]
+    design: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, payload: Any) -> "ExperimentManifest":
         root = _object(payload, "manifest")
         version = _string(root.get("schema_version"), "schema_version")
-        if version != "0.1":
+        if version not in {"0.1", "0.2", "0.3"}:
             raise ExperimentValidationError(
-                f"unsupported schema_version {version!r}; expected '0.1'"
+                f"unsupported schema_version {version!r}; expected '0.1', '0.2', "
+                "or '0.3'"
             )
         experiment_id = _string(root.get("experiment_id"), "experiment_id")
 
@@ -143,7 +152,12 @@ class ExperimentManifest:
             engine_config=_object(
                 backend_data.get("engine_config"), "backend.engine_config"
             ),
+            api_dialect=backend_data.get("api_dialect", "responses"),
         )
+        if backend.api_dialect not in {"responses", "chat_completions"}:
+            raise ExperimentValidationError(
+                "backend.api_dialect must be 'responses' or 'chat_completions'"
+            )
         if not backend.engine_config:
             raise ExperimentValidationError(
                 "backend.engine_config must pin the serving configuration"
@@ -185,6 +199,23 @@ class ExperimentManifest:
             raise ExperimentValidationError(
                 "execution.cases_form_workflow must be boolean"
             )
+        cache_isolation = execution_data.get(
+            "cache_isolation",
+            "physical_reset" if cache_treatment == "cold" else "shared",
+        )
+        if cache_isolation not in {"shared", "salt_isolated", "physical_reset"}:
+            raise ExperimentValidationError(
+                "execution.cache_isolation must be shared, salt_isolated, or "
+                "physical_reset"
+            )
+        if cache_treatment == "warm" and cache_isolation != "shared":
+            raise ExperimentValidationError(
+                "warm cache treatment requires execution.cache_isolation='shared'"
+            )
+        if cache_treatment == "cold" and cache_isolation == "shared":
+            raise ExperimentValidationError(
+                "cold cache treatment requires salt_isolated or physical_reset isolation"
+            )
         execution = ExecutionConfig(
             repetitions=_positive_int(
                 execution_data.get("repetitions"), "execution.repetitions"
@@ -201,6 +232,7 @@ class ExperimentManifest:
             reset_external=reset_external,
             require_evaluation=require_evaluation,
             cases_form_workflow=cases_form_workflow,
+            cache_isolation=cache_isolation,
         )
 
         acceptance_data = _object(root.get("acceptance", {}), "acceptance")
@@ -255,16 +287,35 @@ class ExperimentManifest:
             raise ExperimentValidationError(
                 "acceptance.require_latency_improvement must be boolean"
             )
+        require_environment_identity = acceptance_data.get(
+            "require_environment_identity", False
+        )
+        if not isinstance(require_environment_identity, bool):
+            raise ExperimentValidationError(
+                "acceptance.require_environment_identity must be boolean"
+            )
         acceptance = AcceptanceConfig(
             primary_metric=primary_metric,
             optimization_target=optimization_target,
             max_task_success_regression=probability("max_task_success_regression", 0.0),
+            min_task_success_rate=probability(
+                "min_task_success_rate", 0.80 if version == "0.3" else 0.0
+            ),
+            task_success_method=str(
+                acceptance_data.get("task_success_method", "paired_exact")
+            ),
             min_completed_rate=probability("min_completed_rate", 1.0),
             min_cached_token_gain=float(min_cached_token_gain),
             min_input_token_reduction=float(min_input_token_reduction),
             require_latency_improvement=require_latency,
+            require_environment_identity=require_environment_identity,
         )
+        if acceptance.task_success_method not in {"paired_exact", "point_estimate"}:
+            raise ExperimentValidationError(
+                "acceptance.task_success_method must be paired_exact or point_estimate"
+            )
 
+        design = _object(root.get("design", {}), "design")
         constants_data = _object(root.get("constants", {}), "constants")
         constants: dict[str, Any] = {}
         for name, value in constants_data.items():
@@ -281,8 +332,10 @@ class ExperimentManifest:
         if not sampling:
             raise ExperimentValidationError("sampling must pin at least one setting")
         unsafe_sampling_keys = {
+            "cache_salt",
             "input",
             "instructions",
+            "messages",
             "model",
             "stream",
             "tools",
@@ -299,10 +352,17 @@ class ExperimentManifest:
             raise ExperimentValidationError("cases must be a non-empty array")
         cases: list[ExperimentCase] = []
         seen_ids: set[str] = set()
-        forbidden = {"stream", "previous_response_id", "background"}
+        forbidden = {"stream", "previous_response_id", "background", "cache_salt"}
         for index, raw_case in enumerate(cases_data):
             case_data = _object(raw_case, f"cases[{index}]")
             case_id = _string(case_data.get("case_id"), f"cases[{index}].case_id")
+            workflow_id = (
+                None
+                if case_data.get("workflow_id") is None
+                else _string(
+                    case_data.get("workflow_id"), f"cases[{index}].workflow_id"
+                )
+            )
             if case_id in seen_ids:
                 raise ExperimentValidationError(f"duplicate case_id {case_id!r}")
             seen_ids.add(case_id)
@@ -379,31 +439,134 @@ class ExperimentManifest:
                     transforms[variant] = dict(transform)
             cases.append(
                 ExperimentCase(
-                    case_id,
-                    requests["baseline"],
-                    requests["candidate"],
-                    evaluator,
-                    transforms["baseline"],
-                    transforms["candidate"],
+                    case_id=case_id,
+                    baseline=requests["baseline"],
+                    candidate=requests["candidate"],
+                    evaluator=evaluator,
+                    baseline_transform=transforms["baseline"],
+                    candidate_transform=transforms["candidate"],
+                    workflow_id=workflow_id,
                 )
             )
 
         manifest = cls(
-            version,
-            experiment_id,
-            backend,
-            dict(sampling),
-            execution,
-            acceptance,
-            constants,
-            tuple(cases),
+            schema_version=version,
+            experiment_id=experiment_id,
+            backend=backend,
+            sampling=dict(sampling),
+            execution=execution,
+            acceptance=acceptance,
+            constants=constants,
+            cases=tuple(cases),
+            design=deepcopy(design),
         )
         _validate_manifest_placeholders(manifest)
+        workflow_ids = [case.workflow_id for case in manifest.cases]
+        if any(workflow_id is not None for workflow_id in workflow_ids):
+            if not manifest.execution.cases_form_workflow:
+                raise ExperimentValidationError(
+                    "case workflow_id requires execution.cases_form_workflow=true"
+                )
+            if any(workflow_id is None for workflow_id in workflow_ids):
+                raise ExperimentValidationError(
+                    "every case must define workflow_id when workflow grouping is used"
+                )
         return manifest
 
+    def to_resolved_dict(self) -> dict[str, Any]:
+        """Return a fixture-resolved payload in the public manifest shape."""
+
+        cases: list[dict[str, Any]] = []
+        for case in self.cases:
+            variants: dict[str, Any] = {}
+            for variant, request, transform in (
+                ("baseline", case.baseline, case.baseline_transform),
+                ("candidate", case.candidate, case.candidate_transform),
+            ):
+                variant_payload: dict[str, Any] = {"request": deepcopy(request)}
+                if transform is not None:
+                    variant_payload["request_transform"] = deepcopy(transform)
+                variants[variant] = variant_payload
+            case_payload: dict[str, Any] = {
+                "case_id": case.case_id,
+                "variants": variants,
+            }
+            if case.workflow_id is not None:
+                case_payload["workflow_id"] = case.workflow_id
+            if case.evaluator is not None:
+                case_payload["evaluator"] = deepcopy(case.evaluator)
+            cases.append(case_payload)
+
+        backend = asdict(self.backend)
+        execution = asdict(self.execution)
+        if backend.get("api_dialect") == "responses":
+            backend.pop("api_dialect")
+        legacy_isolation = (
+            "physical_reset"
+            if execution.get("cache_treatment") == "cold"
+            else "shared"
+        )
+        if execution.get("cache_isolation") == legacy_isolation:
+            execution.pop("cache_isolation")
+        return {
+            "schema_version": self.schema_version,
+            "experiment_id": self.experiment_id,
+            "backend": {"kind": "vllm", **backend},
+            "sampling": deepcopy(self.sampling),
+            "execution": execution,
+            "acceptance": asdict(self.acceptance),
+            "design": deepcopy(self.design),
+            "constants": deepcopy(self.constants),
+            "cases": cases,
+        }
+
+    def _fingerprint_payload(self) -> dict[str, Any]:
+        payload = asdict(self)
+        # Preserve hashes for manifests recorded before workflow grouping was
+        # introduced. An absent optional field is not a semantic change.
+        for case in payload["cases"]:
+            if case.get("workflow_id") is None:
+                case.pop("workflow_id", None)
+        if not payload.get("design"):
+            payload.pop("design", None)
+        if payload["acceptance"].get("min_task_success_rate") == 0.0:
+            payload["acceptance"].pop("min_task_success_rate", None)
+        if self.schema_version == "0.1":
+            payload["acceptance"].pop("task_success_method", None)
+            payload["acceptance"].pop("require_environment_identity", None)
+        # Defaults introduced after the recorded 0.1-0.3 manifests are omitted
+        # so parsing an old manifest does not alter its historical fingerprint.
+        if payload["backend"].get("api_dialect") == "responses":
+            payload["backend"].pop("api_dialect", None)
+        legacy_isolation = (
+            "physical_reset"
+            if payload["execution"].get("cache_treatment") == "cold"
+            else "shared"
+        )
+        if payload["execution"].get("cache_isolation") == legacy_isolation:
+            payload["execution"].pop("cache_isolation", None)
+        return payload
+
     def fingerprint(self) -> str:
+        payload = self._fingerprint_payload()
         canonical = json.dumps(
-            asdict(self), sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    def reproducibility_fingerprint(self) -> str:
+        """Hash experiment semantics without endpoint or credential locations.
+
+        ``base_url`` and ``api_key_env`` affect transport, not the workload. They
+        are deliberately excluded so a sanitized public manifest can be checked
+        against a private measured manifest without publishing its endpoint.
+        """
+
+        payload = self._fingerprint_payload()
+        payload["backend"].pop("base_url", None)
+        payload["backend"].pop("api_key_env", None)
+        canonical = json.dumps(
+            payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
         )
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -506,6 +669,66 @@ class CaptureClient(Protocol):
     def capture(self, request_body: Mapping[str, Any]) -> CapturedResponse: ...
 
     def reset_prefix_cache(self, *, reset_external: bool = False) -> None: ...
+
+
+def _expected_environment_identity(manifest: ExperimentManifest) -> dict[str, Any]:
+    return {
+        "model": manifest.backend.model,
+        "model_revision": manifest.backend.model_revision,
+        "tokenizer_revision": manifest.backend.tokenizer_revision,
+        "chat_template_digest": manifest.backend.chat_template_digest,
+        "backend_version": manifest.backend.backend_version,
+        "engine_config": manifest.backend.engine_config,
+    }
+
+
+def _read_environment_identity(client: CaptureClient) -> dict[str, Any] | None:
+    provider = getattr(client, "environment_identity", None)
+    if not callable(provider):
+        return None
+    identity = provider()
+    if identity is None:
+        return None
+    if not isinstance(identity, Mapping):
+        raise ExperimentValidationError(
+            "environment identity provider returned a non-object value"
+        )
+    return dict(identity)
+
+
+def _environment_identity_check(
+    expected: Mapping[str, Any],
+    before: Mapping[str, Any] | None,
+    after: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    fields = tuple(expected)
+    missing_before = [field for field in fields if before is None or field not in before]
+    missing_after = [field for field in fields if after is None or field not in after]
+    expected_mismatches = {
+        field: {"expected": expected[field], "observed": before[field]}
+        for field in fields
+        if before is not None and field in before and before[field] != expected[field]
+    }
+    drift = {
+        field: {"before": before[field], "after": after[field]}
+        for field in fields
+        if before is not None
+        and after is not None
+        and field in before
+        and field in after
+        and before[field] != after[field]
+    }
+    verified = not missing_before and not missing_after and not expected_mismatches and not drift
+    return {
+        "verified": verified,
+        "expected": dict(expected),
+        "before": None if before is None else dict(before),
+        "after": None if after is None else dict(after),
+        "missing_before": missing_before,
+        "missing_after": missing_after,
+        "expected_mismatches": expected_mismatches,
+        "drift": drift,
+    }
 
 
 def _materialize_trial(value: Any, replacements: Mapping[str, Any]) -> Any:
@@ -636,12 +859,166 @@ def _bootstrap_interval(
     ]
 
 
+def _binomial_cdf(successes: int, trials: int, probability: float) -> float:
+    if successes < 0:
+        return 0.0
+    if successes >= trials:
+        return 1.0
+    return sum(
+        math.comb(trials, count)
+        * probability**count
+        * (1.0 - probability) ** (trials - count)
+        for count in range(successes + 1)
+    )
+
+
+def _inverse_binomial_cdf(successes: int, trials: int, target: float) -> float:
+    """Invert the binomial CDF in p using monotone bisection."""
+
+    lower = 0.0
+    upper = 1.0
+    for _ in range(80):
+        midpoint = (lower + upper) / 2.0
+        if _binomial_cdf(successes, trials, midpoint) > target:
+            lower = midpoint
+        else:
+            upper = midpoint
+    return (lower + upper) / 2.0
+
+
+def _clopper_pearson_interval(
+    successes: int, trials: int, *, confidence: float = 0.95
+) -> list[float] | None:
+    """Return an exact two-sided binomial confidence interval."""
+
+    if trials <= 0:
+        return None
+    alpha = 1.0 - confidence
+    tail = alpha / 2.0
+    lower = (
+        0.0
+        if successes == 0
+        else _inverse_binomial_cdf(successes - 1, trials, 1.0 - tail)
+    )
+    upper = (
+        1.0
+        if successes == trials
+        else _inverse_binomial_cdf(successes, trials, tail)
+    )
+    return [lower, upper]
+
+
+def _one_sided_binomial_lower(
+    successes: int, trials: int, *, alpha: float
+) -> float:
+    if successes == 0:
+        return 0.0
+    return _inverse_binomial_cdf(successes - 1, trials, 1.0 - alpha)
+
+
+def _one_sided_binomial_upper(
+    successes: int, trials: int, *, alpha: float
+) -> float:
+    if successes == trials:
+        return 1.0
+    return _inverse_binomial_cdf(successes, trials, alpha)
+
+
+def _paired_success_statistics(
+    pairs: list[tuple[bool, bool]], *, confidence: float = 0.95
+) -> dict[str, Any]:
+    """Bound a paired success-rate difference without a degenerate bootstrap.
+
+    The difference is p(candidate-only) - p(baseline-only). Exact binomial
+    bounds are computed for both marginal discordance probabilities and joined
+    with Bonferroni coverage. This is conservative but valid for small samples,
+    including the all-agreement case.
+    """
+
+    count = len(pairs)
+    both_success = sum(baseline and candidate for baseline, candidate in pairs)
+    both_failure = sum(not baseline and not candidate for baseline, candidate in pairs)
+    candidate_only = sum(not baseline and candidate for baseline, candidate in pairs)
+    baseline_only = sum(baseline and not candidate for baseline, candidate in pairs)
+    if not count:
+        return {
+            "paired_count": 0,
+            "candidate_minus_baseline_mean": None,
+            "confidence_interval": None,
+            "one_sided_lower_bound": None,
+            "outcome_counts": {
+                "both_success": 0,
+                "both_failure": 0,
+                "candidate_only": 0,
+                "baseline_only": 0,
+            },
+            "method": "exact marginal binomial bounds with Bonferroni coverage",
+        }
+
+    alpha = 1.0 - confidence
+    marginal_confidence = 1.0 - alpha / 2.0
+    candidate_only_interval = _clopper_pearson_interval(
+        candidate_only, count, confidence=marginal_confidence
+    )
+    baseline_only_interval = _clopper_pearson_interval(
+        baseline_only, count, confidence=marginal_confidence
+    )
+    assert candidate_only_interval is not None
+    assert baseline_only_interval is not None
+    simultaneous_interval = [
+        candidate_only_interval[0] - baseline_only_interval[1],
+        candidate_only_interval[1] - baseline_only_interval[0],
+    ]
+    one_sided_lower = _one_sided_binomial_lower(
+        candidate_only, count, alpha=alpha / 2.0
+    ) - _one_sided_binomial_upper(
+        baseline_only, count, alpha=alpha / 2.0
+    )
+    return {
+        "paired_count": count,
+        "candidate_minus_baseline_mean": (candidate_only - baseline_only) / count,
+        "confidence_interval": simultaneous_interval,
+        "confidence_level": confidence,
+        "one_sided_lower_bound": one_sided_lower,
+        "outcome_counts": {
+            "both_success": both_success,
+            "both_failure": both_failure,
+            "candidate_only": candidate_only,
+            "baseline_only": baseline_only,
+        },
+        "method": "exact marginal binomial bounds with Bonferroni coverage",
+    }
+
+
 def _schedule(
     manifest: ExperimentManifest, repetitions: int, *, warmup: bool
 ) -> list[tuple[int, ExperimentCase, str, bool]]:
     rng = random.Random(manifest.execution.seed + (1 if warmup else 0))
     schedule: list[tuple[int, ExperimentCase, str, bool]] = []
+    grouped_workflows = (
+        manifest.execution.cases_form_workflow
+        and all(case.workflow_id is not None for case in manifest.cases)
+    )
     for repetition in range(repetitions):
+        if grouped_workflows:
+            workflow_order = list(
+                dict.fromkeys(case.workflow_id for case in manifest.cases)
+            )
+            for workflow_id in workflow_order:
+                variants = ["baseline", "candidate"]
+                if manifest.execution.order == "randomized":
+                    rng.shuffle(variants)
+                elif repetition % 2:
+                    variants.reverse()
+                workflow_cases = [
+                    case for case in manifest.cases if case.workflow_id == workflow_id
+                ]
+                for variant in variants:
+                    schedule.extend(
+                        (repetition, case, variant, warmup)
+                        for case in workflow_cases
+                    )
+            continue
         for case in manifest.cases:
             variants = ["baseline", "candidate"]
             if manifest.execution.order == "randomized":
@@ -658,6 +1035,7 @@ def _build_summary(trials: list[dict[str, Any]], seed: int) -> dict[str, Any]:
         "client_ttft_ms",
         "total_latency_ms",
         "server_ttft_ms",
+        "client_server_ttft_gap_ms",
         "server_queue_ms",
         "generation_time_ms",
         "cached_tokens",
@@ -670,6 +1048,12 @@ def _build_summary(trials: list[dict[str, Any]], seed: int) -> dict[str, Any]:
     variants: dict[str, Any] = {}
     for variant in ("baseline", "candidate"):
         subset = [trial for trial in measured if trial["variant"] == variant]
+        evaluated_successes = [
+            bool(trial["task_success"])
+            for trial in subset
+            if trial.get("task_success") is not None
+        ]
+        success_count = sum(evaluated_successes)
         variants[variant] = {
             metric: _metric_summary(
                 [
@@ -692,15 +1076,16 @@ def _build_summary(trials: list[dict[str, Any]], seed: int) -> dict[str, Any]:
             "evaluated_count": sum(
                 trial.get("task_success") is not None for trial in subset
             ),
+            "task_success_count": success_count,
             "task_success_rate": (
                 None
-                if not any(trial.get("task_success") is not None for trial in subset)
-                else statistics.fmean(
-                    float(trial["task_success"])
-                    for trial in subset
-                    if trial.get("task_success") is not None
-                )
+                if not evaluated_successes
+                else success_count / len(evaluated_successes)
             ),
+            "task_success_95_ci": _clopper_pearson_interval(
+                success_count, len(evaluated_successes)
+            ),
+            "task_success_interval_method": "Clopper-Pearson exact binomial",
         }
 
     by_pair = {
@@ -710,8 +1095,8 @@ def _build_summary(trials: list[dict[str, Any]], seed: int) -> dict[str, Any]:
     effects: dict[str, Any] = {}
     for metric in metric_names:
         differences: list[float] = []
-        for case in {trial["case_id"] for trial in measured}:
-            for repetition in {trial["repetition"] for trial in measured}:
+        for case in sorted({trial["case_id"] for trial in measured}):
+            for repetition in sorted({trial["repetition"] for trial in measured}):
                 baseline = by_pair.get((case, repetition, "baseline"))
                 candidate = by_pair.get((case, repetition, "candidate"))
                 if (
@@ -737,10 +1122,25 @@ def _build_summary(trials: list[dict[str, Any]], seed: int) -> dict[str, Any]:
                 differences, seed=seed + sum(ord(char) for char in metric)
             ),
         }
+    success_pairs: list[tuple[bool, bool]] = []
+    for case in sorted({trial["case_id"] for trial in measured}):
+        for repetition in sorted({trial["repetition"] for trial in measured}):
+            baseline = by_pair.get((case, repetition, "baseline"))
+            candidate = by_pair.get((case, repetition, "candidate"))
+            if (
+                baseline is not None
+                and candidate is not None
+                and baseline.get("task_success") is not None
+                and candidate.get("task_success") is not None
+            ):
+                success_pairs.append(
+                    (bool(baseline["task_success"]), bool(candidate["task_success"]))
+                )
+    effects["task_success"].update(_paired_success_statistics(success_pairs))
     digest_pairs = 0
     digest_matches = 0
-    for case in {trial["case_id"] for trial in measured}:
-        for repetition in {trial["repetition"] for trial in measured}:
+    for case in sorted({trial["case_id"] for trial in measured}):
+        for repetition in sorted({trial["repetition"] for trial in measured}):
             baseline = by_pair.get((case, repetition, "baseline"))
             candidate = by_pair.get((case, repetition, "candidate"))
             if (
@@ -789,19 +1189,32 @@ def _build_summary(trials: list[dict[str, Any]], seed: int) -> dict[str, Any]:
 
 
 def _build_workflow_summary(
-    trials: list[dict[str, Any]], seed: int, expected_case_count: int
+    trials: list[dict[str, Any]], seed: int, cases: tuple[ExperimentCase, ...]
 ) -> dict[str, Any]:
-    """Aggregate sequential cases into one critical-path workflow trial."""
+    """Aggregate sequential cases into critical-path workflow trials."""
 
     measured = [trial for trial in trials if not trial["warmup"]]
-    groups: dict[tuple[int, str], list[dict[str, Any]]] = {}
+    explicit_groups = all(case.workflow_id is not None for case in cases)
+    expected_counts: dict[str, int] = {}
+    for case in cases:
+        workflow_id = case.workflow_id if explicit_groups else "workflow"
+        assert workflow_id is not None
+        expected_counts[workflow_id] = expected_counts.get(workflow_id, 0) + 1
+
+    groups: dict[tuple[str, int, str], list[dict[str, Any]]] = {}
     for trial in measured:
-        groups.setdefault((trial["repetition"], trial["variant"]), []).append(trial)
+        workflow_id = (
+            str(trial["workflow_id"]) if explicit_groups else "workflow"
+        )
+        groups.setdefault(
+            (workflow_id, trial["repetition"], trial["variant"]), []
+        ).append(trial)
 
     additive_metrics = (
         "client_ttft_ms",
         "total_latency_ms",
         "server_ttft_ms",
+        "client_server_ttft_gap_ms",
         "server_queue_ms",
         "generation_time_ms",
         "cached_tokens",
@@ -810,14 +1223,16 @@ def _build_workflow_summary(
         "predicted_eligible_cached_tokens",
     )
     aggregate_trials: list[dict[str, Any]] = []
-    for (repetition, variant), steps in sorted(groups.items()):
+    for (workflow_id, repetition, variant), steps in sorted(groups.items()):
+        expected_case_count = expected_counts[workflow_id]
         if len(steps) != expected_case_count:
             raise ExperimentValidationError(
-                f"workflow repetition {repetition}/{variant} has {len(steps)} "
+                f"workflow {workflow_id}/{repetition}/{variant} has {len(steps)} "
                 f"steps; expected {expected_case_count}"
             )
         aggregate: dict[str, Any] = {
-            "case_id": "workflow",
+            "case_id": workflow_id,
+            "workflow_id": workflow_id,
             "repetition": repetition,
             "variant": variant,
             "warmup": False,
@@ -856,8 +1271,77 @@ def _build_workflow_summary(
         "cases are treated as sequential critical-path inference steps; "
         "reported workflow latency is their sum and excludes tool runtime"
     )
-    summary["step_count"] = expected_case_count
+    step_counts = sorted(expected_counts.values())
+    summary["workflow_count"] = len(expected_counts)
+    summary["step_count"] = (
+        step_counts[0]
+        if step_counts and all(count == step_counts[0] for count in step_counts)
+        else None
+    )
+    summary["step_counts"] = dict(sorted(expected_counts.items()))
     return summary
+
+
+def _assess_predeclared_prediction(
+    summary: Mapping[str, Any], design: Mapping[str, Any]
+) -> dict[str, Any] | None:
+    hypothesis = design.get("hypothesis")
+    if not isinstance(hypothesis, Mapping):
+        return None
+    prediction = hypothesis.get("prediction")
+    if not isinstance(prediction, Mapping):
+        return None
+    metric = prediction.get("metric")
+    direction = prediction.get("direction")
+    if not isinstance(metric, str) or direction not in {
+        "increase",
+        "decrease",
+        "no_change",
+    }:
+        return {
+            "status": "invalid_prediction",
+            "metric": metric,
+            "direction": direction,
+            "causal_mechanism": hypothesis.get("causal_mechanism"),
+            "reason": "prediction requires a known metric and direction",
+        }
+    effects = summary.get("effects")
+    effect = effects.get(metric) if isinstance(effects, Mapping) else None
+    if not isinstance(effect, Mapping):
+        return {
+            "status": "unavailable",
+            "metric": metric,
+            "direction": direction,
+            "causal_mechanism": hypothesis.get("causal_mechanism"),
+            "reason": "the predicted metric was not measured",
+        }
+    mean = effect.get("candidate_minus_baseline_mean")
+    interval = effect.get("bootstrap_95_ci")
+    status = "not_established"
+    if (
+        isinstance(interval, list)
+        and len(interval) == 2
+        and all(isinstance(value, (int, float)) for value in interval)
+    ):
+        lower, upper = float(interval[0]), float(interval[1])
+        if direction == "decrease":
+            status = "supported" if upper < 0 else "contradicted" if lower > 0 else status
+        elif direction == "increase":
+            status = "supported" if lower > 0 else "contradicted" if upper < 0 else status
+        else:
+            status = "compatible" if lower <= 0 <= upper else "contradicted"
+    return {
+        "status": status,
+        "metric": metric,
+        "direction": direction,
+        "causal_mechanism": hypothesis.get("causal_mechanism"),
+        "candidate_minus_baseline_mean": mean,
+        "confidence_interval": interval,
+        "assessment_rule": (
+            "direction is supported only when the paired 95% interval lies wholly "
+            "in the predicted direction"
+        ),
+    }
 
 
 def _build_decision(
@@ -875,10 +1359,32 @@ def _build_decision(
     prediction = summary["prediction_vs_observation"]
 
     quality_available = baseline_success is not None and candidate_success is not None
-    quality_noninferior = (
+    baseline_success_interval = baseline_outcomes.get("task_success_95_ci")
+    candidate_success_interval = candidate_outcomes.get("task_success_95_ci")
+    baseline_absolute_quality_ok = bool(
+        baseline_success_interval is not None
+        and baseline_success_interval[0] >= acceptance.min_task_success_rate
+    )
+    candidate_absolute_quality_ok = bool(
+        candidate_success_interval is not None
+        and candidate_success_interval[0] >= acceptance.min_task_success_rate
+    )
+    success_effect = summary["effects"]["task_success"]
+    point_quality_noninferior = (
         quality_available
         and candidate_success
         >= baseline_success - acceptance.max_task_success_regression
+    )
+    success_lower_bound = success_effect.get("one_sided_lower_bound")
+    quality_noninferior = bool(
+        point_quality_noninferior
+        and (
+            acceptance.task_success_method == "point_estimate"
+            or (
+                success_lower_bound is not None
+                and success_lower_bound >= -acceptance.max_task_success_regression
+            )
+        )
     )
     completion_ok = (
         baseline_completed is not None
@@ -914,13 +1420,33 @@ def _build_decision(
 
     checks = [
         {
+            "name": "minimum_task_success_rate",
+            "passed": baseline_absolute_quality_ok and candidate_absolute_quality_ok,
+            "observed": {
+                "baseline": baseline_success,
+                "candidate": candidate_success,
+                "baseline_95_ci": baseline_success_interval,
+                "candidate_95_ci": candidate_success_interval,
+            },
+            "threshold": {
+                "minimum_95_ci_lower_bound": acceptance.min_task_success_rate,
+                "method": "Clopper-Pearson exact binomial",
+            },
+        },
+        {
             "name": "task_success_noninferior",
             "passed": quality_noninferior,
             "observed": {
                 "baseline": baseline_success,
                 "candidate": candidate_success,
+                "baseline_95_ci": baseline_outcomes.get("task_success_95_ci"),
+                "candidate_95_ci": candidate_outcomes.get("task_success_95_ci"),
+                "paired_difference": success_effect,
             },
-            "threshold": {"max_regression": acceptance.max_task_success_regression},
+            "threshold": {
+                "max_regression": acceptance.max_task_success_regression,
+                "method": acceptance.task_success_method,
+            },
         },
         {
             "name": "completion_rate",
@@ -963,9 +1489,24 @@ def _build_decision(
     if not quality_available:
         status = "invalid"
         reason = "task success was not evaluated for both variants"
-    elif not quality_noninferior or not completion_ok:
+    elif not baseline_absolute_quality_ok:
+        status = "invalid"
+        reason = (
+            "the baseline did not establish the configured minimum absolute "
+            "task-success rate, so this workload cannot verify an optimization"
+        )
+    elif not candidate_absolute_quality_ok:
+        status = "regression"
+        reason = "the candidate failed the minimum absolute task-success rate"
+    elif not point_quality_noninferior or not completion_ok:
         status = "regression"
         reason = "candidate failed a task-quality or completion guardrail"
+    elif not quality_noninferior:
+        status = "inconclusive"
+        reason = (
+            "observed task success did not regress, but the paired confidence "
+            "bound did not establish the configured non-inferiority margin"
+        )
     elif optimization_ok and required_latency_ok:
         status = "verified"
         reason = (
@@ -1104,6 +1645,8 @@ def run_experiment(
     resume: bool = False,
 ) -> dict[str, Any]:
     execution = manifest.execution
+    expected_identity = _expected_environment_identity(manifest)
+    identity_before = _read_environment_identity(client)
     schedule = _schedule(
         manifest, execution.warmup_repetitions, warmup=True
     ) + _schedule(manifest, execution.repetitions, warmup=False)
@@ -1120,12 +1663,15 @@ def run_experiment(
         client.reset_prefix_cache(reset_external=execution.reset_external)
 
     for sequence, (repetition, case, variant, warmup) in enumerate(schedule):
-        if execution.cache_treatment == "cold":
+        if execution.cache_treatment == "cold" and execution.cache_isolation == "physical_reset":
             client.reset_prefix_cache(reset_external=execution.reset_external)
             prior_prompts.clear()
         trial_id, request, transform = _prepared_request(
             manifest, repetition, case, variant, warmup
         )
+        if execution.cache_isolation == "salt_isolated":
+            request["cache_salt"] = secrets.token_urlsafe(32)
+            prior_prompts.clear()
         if sequence < len(trials):
             if execution.cache_treatment == "warm":
                 replayed = client.capture(request)
@@ -1173,6 +1719,7 @@ def run_experiment(
             {
                 "sequence": sequence,
                 "case_id": case.case_id,
+                "workflow_id": case.workflow_id,
                 "variant": variant,
                 "repetition": repetition,
                 "trial_id": trial_id,
@@ -1194,9 +1741,14 @@ def run_experiment(
     summary = _build_summary(trials, execution.seed)
     if execution.cases_form_workflow:
         summary["workflow"] = _build_workflow_summary(
-            trials, execution.seed, len(manifest.cases)
+            trials, execution.seed, manifest.cases
         )
     decision_basis = summary.get("workflow", summary)
+    prediction_assessment = _assess_predeclared_prediction(
+        decision_basis, manifest.design
+    )
+    if prediction_assessment is not None:
+        summary["predeclared_prediction"] = prediction_assessment
     evaluator_errors = [
         {
             "sequence": trial["sequence"],
@@ -1208,6 +1760,32 @@ def run_experiment(
         if trial.get("evaluation_error") is not None
     ]
     decision = _build_decision(decision_basis, manifest.acceptance)
+    identity_after = _read_environment_identity(client)
+    identity_check = _environment_identity_check(
+        expected_identity, identity_before, identity_after
+    )
+    if (
+        manifest.acceptance.require_environment_identity
+        and not identity_check["verified"]
+    ):
+        decision = {
+            **decision,
+            "status": "invalid",
+            "reason": (
+                "the live environment identity was missing, mismatched, or changed "
+                "during the experiment"
+            ),
+            "checks": [
+                {
+                    "name": "environment_identity",
+                    "passed": False,
+                    "required": True,
+                    "observed": identity_check,
+                    "threshold": "all pinned fields observed before and after without drift",
+                },
+                *decision["checks"],
+            ],
+        }
     if evaluator_errors:
         decision = {
             **decision,
@@ -1228,11 +1806,12 @@ def run_experiment(
             ],
         }
     return {
-        "result_schema_version": "0.2",
+        "result_schema_version": "0.3",
         "experiment_id": manifest.experiment_id,
         "created_at": datetime.now(UTC).isoformat(),
         "provenance": {
             "backend_kind": "vllm",
+            "api_dialect": manifest.backend.api_dialect,
             "model": manifest.backend.model,
             "model_revision": manifest.backend.model_revision,
             "tokenizer_revision": manifest.backend.tokenizer_revision,
@@ -1243,12 +1822,18 @@ def run_experiment(
             "engine_config": manifest.backend.engine_config,
             "sampling": manifest.sampling,
             "cache_treatment": execution.cache_treatment,
+            "cache_isolation": execution.cache_isolation,
             "arrival_pattern": execution.arrival_pattern,
             "cases_form_workflow": execution.cases_form_workflow,
             "order": execution.order,
             "seed": execution.seed,
             "acceptance": asdict(manifest.acceptance),
+            "design": deepcopy(manifest.design),
             "manifest_sha256": manifest.fingerprint(),
+            "reproducibility_manifest_sha256": (
+                manifest.reproducibility_fingerprint()
+            ),
+            "environment_identity": identity_check,
         },
         "trials": trials,
         "evaluator_errors": evaluator_errors,

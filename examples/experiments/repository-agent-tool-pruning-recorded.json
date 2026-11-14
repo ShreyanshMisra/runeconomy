@@ -1,0 +1,142 @@
+{
+  "schema_version": "0.1",
+  "experiment_id": "repository-agent-tool-pruning-v1",
+  "backend": {
+    "kind": "vllm",
+    "base_url": "https://vllm.example.invalid",
+    "api_key_env": "VLLM_API_KEY",
+    "model": "Qwen/Qwen2.5-1.5B-Instruct",
+    "model_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+    "tokenizer_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+    "chat_template_digest": "sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+    "backend_version": "0.33.0",
+    "hardware": "1x NVIDIA A10 24GB on Modal",
+    "block_size": 16,
+    "engine_config": {
+      "enable_prefix_caching": true,
+      "tensor_parallel_size": 1,
+      "dtype": "bfloat16",
+      "max_model_len": 8192,
+      "gpu_memory_utilization": 0.85,
+      "max_num_seqs": 8
+    }
+  },
+  "sampling": {
+    "temperature": 0.0,
+    "max_output_tokens": 64,
+    "seed": 404
+  },
+  "execution": {
+    "repetitions": 15,
+    "warmup_repetitions": 2,
+    "order": "alternating",
+    "seed": 404,
+    "cache_treatment": "cold",
+    "arrival_pattern": "sequential",
+    "reset_external": false,
+    "require_evaluation": true,
+    "cases_form_workflow": true
+  },
+  "acceptance": {
+    "primary_metric": "total_latency_ms",
+    "optimization_target": "input_tokens",
+    "max_task_success_regression": 0,
+    "min_completed_rate": 1,
+    "min_input_token_reduction": 1000,
+    "require_latency_improvement": true
+  },
+  "text_fixtures": [
+    {
+      "name": "REPOSITORY_MAP",
+      "path": "../fixtures/recorded-inference-doctor-repo-map.txt",
+      "sha256": "sha256:a4dd0ad7bcc2285c2969ad25bedb11ca71c2962e53a46cc025fb00e75acce80a"
+    },
+    {
+      "name": "VLLM_SOURCE",
+      "path": "../fixtures/recorded-vllm.py.txt",
+      "sha256": "sha256:2ea709867d77210e1b41b1e383569b2d9e826a3f45864aa03742f9a0e330d457"
+    }
+  ],
+  "json_fixtures": [
+    {
+      "name": "BROAD_CODING_TOOLS",
+      "path": "../fixtures/coding-tools-broad.json",
+      "sha256": "sha256:2e65258d9d25214f2e16815eab808565b09b9e6d170507ab16b771c111715f99"
+    },
+    {
+      "name": "SCOPED_CODING_TOOLS",
+      "path": "../fixtures/coding-tools-scoped.json",
+      "sha256": "sha256:06b77b0f7549eba1258ae3437896ab396573757e21ec553258bca807841b1f2c"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "locate-vllm-adapter",
+      "evaluator": {
+        "kind": "regex",
+        "pattern": "src/inference_doctor/vllm\\.py",
+        "flags": [
+          "IGNORECASE"
+        ],
+        "full_match": false
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "instructions": "You are a read-only coding agent examining a real repository snapshot. Answer the question from the supplied repository map. Do not call a tool. Your entire answer must be only the bare repository-relative path: no markdown, punctuation, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "input": "Which source file implements exact vLLM prompt rendering, streamed response capture, inference telemetry extraction, and prefix-cache reset?",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            },
+            "tool_choice": "none"
+          }
+        },
+        "candidate": {
+          "request": {
+            "instructions": "You are a read-only coding agent examining a real repository snapshot. Answer the question from the supplied repository map. Do not call a tool. Your entire answer must be only the bare repository-relative path: no markdown, punctuation, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "input": "Which source file implements exact vLLM prompt rendering, streamed response capture, inference telemetry extraction, and prefix-cache reset?",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            },
+            "tool_choice": "none"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "inspect-capture-privacy-boundary",
+      "evaluator": {
+        "kind": "regex",
+        "pattern": "output_text",
+        "full_match": false
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "instructions": "You are a read-only coding agent. The repository tool has returned the current contents of src/inference_doctor/vllm.py below. Inspect the actual source and answer without calling another tool. Your entire answer must be only the bare Python field identifier: no markdown, punctuation, or explanation.\n\n--- src/inference_doctor/vllm.py ---\n{{VLLM_SOURCE}}",
+            "input": "Which CapturedResponse field does to_dict deliberately remove so generated content remains available for local evaluation but is not persisted in raw experiment trials?",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            },
+            "tool_choice": "none"
+          }
+        },
+        "candidate": {
+          "request": {
+            "instructions": "You are a read-only coding agent. The repository tool has returned the current contents of src/inference_doctor/vllm.py below. Inspect the actual source and answer without calling another tool. Your entire answer must be only the bare Python field identifier: no markdown, punctuation, or explanation.\n\n--- src/inference_doctor/vllm.py ---\n{{VLLM_SOURCE}}",
+            "input": "Which CapturedResponse field does to_dict deliberately remove so generated content remains available for local evaluation but is not persisted in raw experiment trials?",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            },
+            "tool_choice": "none"
+          }
+        }
+      }
+    }
+  ],
+  "evidence_review": {
+    "candidate_selection": "post_hoc_same_workload",
+    "held_out_evaluation": false,
+    "limitation": "The three-tool allowlist and final answer contract were calibrated on the evaluated workload; this historical result is not eligible for a verified task-success verdict."
+  }
+}

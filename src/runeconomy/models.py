@@ -42,23 +42,60 @@ def _string_tuple(value: Any, path: str) -> tuple[str, ...]:
 class PromptSegment:
     kind: str
     label: str
-    start_token: int
-    end_token: int
+    start_token: int | None
+    end_token: int | None
+    attribution_quality: str = "exact_token_boundary"
+    source: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], path: str) -> "PromptSegment":
         try:
             kind = str(_required(data, "kind", path))
             label = str(data.get("label", kind))
-            start = int(_required(data, "start_token", path))
-            end = int(_required(data, "end_token", path))
+            quality = str(data.get("attribution_quality", "exact_token_boundary"))
+            raw_start = data.get("start_token")
+            raw_end = data.get("end_token")
+            start = None if raw_start is None else int(raw_start)
+            end = None if raw_end is None else int(raw_end)
         except (TypeError, ValueError) as exc:
             raise TraceValidationError(f"{path}: invalid segment field: {exc}") from exc
-        if start < 0 or end <= start:
+        allowed = {
+            "exact_token_boundary",
+            "block_level",
+            "structural",
+            "unknown",
+        }
+        if quality not in allowed:
+            raise TraceValidationError(
+                f"{path}.attribution_quality: expected one of {sorted(allowed)}"
+            )
+        if quality in {"exact_token_boundary", "block_level"} and (
+            start is None or end is None
+        ):
+            raise TraceValidationError(
+                f"{path}: {quality} attribution requires token boundaries"
+            )
+        if quality in {"structural", "unknown"} and (
+            start is not None or end is not None
+        ):
+            raise TraceValidationError(
+                f"{path}: {quality} attribution cannot claim token boundaries"
+            )
+        if start is not None and end is not None and (start < 0 or end <= start):
             raise TraceValidationError(
                 f"{path}: expected 0 <= start_token < end_token"
             )
-        return cls(kind=kind, label=label, start_token=start, end_token=end)
+        source = data.get("source")
+        if source is not None and not isinstance(source, str):
+            raise TraceValidationError(f"{path}.source: expected a string or null")
+        return cls(
+            kind=kind,
+            label=label,
+            start_token=start,
+            end_token=end,
+            attribution_quality=quality,
+            source=source,
+        )
 
 
 @dataclass(frozen=True)
@@ -94,6 +131,10 @@ class RequestMetrics:
     ttft_ms: float | None = None
     queue_ms: float | None = None
     total_latency_ms: float | None = None
+    prefill_ms: float | None = None
+    decode_ms: float | None = None
+    cost_usd: float | None = None
+    gpu_time_ms: float | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], path: str) -> "RequestMetrics":
@@ -115,6 +156,12 @@ class RequestMetrics:
             total_latency_ms=_optional_number(
                 data.get("total_latency_ms"), f"{path}.total_latency_ms"
             ),
+            prefill_ms=_optional_number(data.get("prefill_ms"), f"{path}.prefill_ms"),
+            decode_ms=_optional_number(data.get("decode_ms"), f"{path}.decode_ms"),
+            cost_usd=_optional_number(data.get("cost_usd"), f"{path}.cost_usd"),
+            gpu_time_ms=_optional_number(
+                data.get("gpu_time_ms"), f"{path}.gpu_time_ms"
+            ),
         )
 
 
@@ -124,7 +171,7 @@ class InferenceRequest:
     sequence: int
     model: str
     backend: str
-    prompt_token_ids: tuple[int, ...]
+    prompt_token_ids: tuple[int, ...] | None
     model_revision: str | None = None
     backend_version: str | None = None
     tokenizer: str | None = None
@@ -135,6 +182,10 @@ class InferenceRequest:
     invoked_tools: tuple[str, ...] = field(default_factory=tuple)
     cache: CacheConfig = field(default_factory=CacheConfig)
     metrics: RequestMetrics = field(default_factory=RequestMetrics)
+    # Keep fields added after 0.1 at the end so legacy positional construction
+    # retains its original argument order.
+    prompt_token_count: int | None = None
+    token_evidence_quality: str = "exact"
 
     @property
     def cache_identity(self) -> tuple[Any, ...]:
@@ -160,13 +211,49 @@ class InferenceRequest:
         if sequence < 0:
             raise TraceValidationError(f"{path}.sequence: must be non-negative")
 
-        raw_tokens = _required(data, "prompt_token_ids", path)
-        if not isinstance(raw_tokens, list) or any(
-            isinstance(token, bool) or not isinstance(token, int) or token < 0
-            for token in raw_tokens
+        raw_tokens = data.get("prompt_token_ids")
+        if raw_tokens is not None and (
+            not isinstance(raw_tokens, list)
+            or any(
+                isinstance(token, bool) or not isinstance(token, int) or token < 0
+                for token in raw_tokens
+            )
         ):
             raise TraceValidationError(
-                f"{path}.prompt_token_ids: expected a list of non-negative integers"
+                f"{path}.prompt_token_ids: expected a list of non-negative integers or null"
+            )
+        quality = data.get(
+            "token_evidence_quality", "exact" if raw_tokens is not None else "unknown"
+        )
+        if quality not in {"exact", "count_only", "unknown"}:
+            raise TraceValidationError(
+                f"{path}.token_evidence_quality: expected exact, count_only, or unknown"
+            )
+        if quality == "exact" and raw_tokens is None:
+            raise TraceValidationError(
+                f"{path}.token_evidence_quality: exact evidence requires prompt_token_ids"
+            )
+        if quality != "exact" and raw_tokens is not None:
+            raise TraceValidationError(
+                f"{path}.prompt_token_ids: must be null unless token evidence is exact"
+            )
+        raw_count = data.get("prompt_token_count")
+        if raw_count is not None and (
+            isinstance(raw_count, bool)
+            or not isinstance(raw_count, int)
+            or raw_count < 0
+        ):
+            raise TraceValidationError(
+                f"{path}.prompt_token_count: expected a non-negative integer or null"
+            )
+        prompt_token_count = len(raw_tokens) if raw_tokens is not None else raw_count
+        if raw_tokens is not None and raw_count is not None and raw_count != len(raw_tokens):
+            raise TraceValidationError(
+                f"{path}.prompt_token_count: does not match prompt_token_ids length"
+            )
+        if quality == "count_only" and prompt_token_count is None:
+            raise TraceValidationError(
+                f"{path}.prompt_token_count: count_only evidence requires a count"
             )
 
         raw_segments = data.get("segments", [])
@@ -176,22 +263,36 @@ class InferenceRequest:
             PromptSegment.from_dict(item, f"{path}.segments[{index}]")
             for index, item in enumerate(raw_segments)
         )
+        bounded_segments = [
+            (index, segment)
+            for index, segment in enumerate(segments)
+            if segment.start_token is not None and segment.end_token is not None
+        ]
         previous_end = 0
-        for index, segment in enumerate(segments):
+        for bounded_index, (index, segment) in enumerate(bounded_segments):
+            assert segment.start_token is not None and segment.end_token is not None
+            if raw_tokens is None:
+                raise TraceValidationError(
+                    f"{path}.segments[{index}]: token boundaries require exact prompt tokens"
+                )
             if segment.end_token > len(raw_tokens):
                 raise TraceValidationError(
                     f"{path}.segments[{index}]: range exceeds prompt token length"
                 )
-            if index and segment.start_token < previous_end:
+            if bounded_index and segment.start_token < previous_end:
                 raise TraceValidationError(
                     f"{path}.segments[{index}]: segments must be ordered and non-overlapping"
                 )
             previous_end = segment.end_token
 
         metrics = RequestMetrics.from_dict(data.get("metrics", {}), f"{path}.metrics")
-        if metrics.input_tokens is not None and metrics.input_tokens != len(raw_tokens):
+        if (
+            metrics.input_tokens is not None
+            and prompt_token_count is not None
+            and metrics.input_tokens != prompt_token_count
+        ):
             raise TraceValidationError(
-                f"{path}.metrics.input_tokens: does not match prompt_token_ids length"
+                f"{path}.metrics.input_tokens: does not match prompt token count"
             )
         available_tools = _string_tuple(
             data.get("available_tools"), f"{path}.available_tools"
@@ -211,7 +312,9 @@ class InferenceRequest:
             sequence=sequence,
             model=str(_required(data, "model", path)),
             backend=str(_required(data, "backend", path)).lower(),
-            prompt_token_ids=tuple(raw_tokens),
+            prompt_token_ids=tuple(raw_tokens) if raw_tokens is not None else None,
+            prompt_token_count=prompt_token_count,
+            token_evidence_quality=str(quality),
             model_revision=data.get("model_revision"),
             backend_version=data.get("backend_version"),
             tokenizer=data.get("tokenizer"),
@@ -281,7 +384,7 @@ class Trace:
         if not isinstance(data, dict):
             raise TraceValidationError("trace: expected a JSON object")
         schema_version = str(_required(data, "schema_version", "trace"))
-        if schema_version != "0.1":
+        if schema_version not in {"0.1", "0.2"}:
             raise TraceValidationError(
                 f"trace.schema_version: unsupported version {schema_version!r}"
             )

@@ -1,0 +1,225 @@
+{
+  "acceptance": {
+    "max_task_success_regression": 0.1,
+    "min_completed_rate": 1.0,
+    "min_input_token_reduction": 500,
+    "optimization_target": "input_tokens",
+    "primary_metric": "total_latency_ms",
+    "require_environment_identity": true,
+    "require_latency_improvement": true,
+    "task_success_method": "paired_exact"
+  },
+  "backend": {
+    "api_key_env": "VLLM_API_KEY",
+    "backend_version": "0.33.0",
+    "base_url": "https://vllm.example.invalid",
+    "block_size": 16,
+    "chat_template_digest": "sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+    "engine_config": {
+      "dtype": "bfloat16",
+      "enable_prefix_caching": true,
+      "gpu_memory_utilization": 0.85,
+      "max_model_len": 8192,
+      "max_num_seqs": 8,
+      "tensor_parallel_size": 1
+    },
+    "hardware": "1x NVIDIA A10 24GB on Modal",
+    "kind": "vllm",
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "model_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+    "tokenizer_revision": "a09a35458c702b33eeacc393d103063234e8bc28"
+  },
+  "cases": [
+    {
+      "case_id": "heldout-01-locate",
+      "evaluator": {
+        "expected": "analysis.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol RequestAnalysis, which stores per-request cache-analysis evidence?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol RequestAnalysis, which stores per-request cache-analysis evidence?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-01"
+    },
+    {
+      "case_id": "heldout-01-inspect",
+      "evaluator": {
+        "expected": "RequestAnalysis",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol stores per-request cache-analysis evidence?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_01}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol stores per-request cache-analysis evidence?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_01}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-01"
+    },
+    {
+      "case_id": "heldout-02-locate",
+      "evaluator": {
+        "expected": "analysis.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol Finding, which stores one structured diagnostic finding?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol Finding, which stores one structured diagnostic finding?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-02"
+    },
+    {
+      "case_id": "heldout-02-inspect",
+      "evaluator": {
+        "expected": "Finding",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol stores one structured diagnostic finding?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_02}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol stores one structured diagnostic finding?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_02}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-02"
+    }
+  ],
+  "constants": {
+    "REPOSITORY_MAP": "- src/runeconomy/analysis.py: trace-level diagnosis and finding generation; top-level symbols: RequestAnalysis, Finding",
+    "SOURCE_CONTEXT_01": "class RequestAnalysis:\n    request_id: str\n    baseline_request_id: str | None\n    shared_prefix_tokens: int\n    eligible_prefix_tokens: int\n    actual_cached_tokens: int | None\n    unrealized_eligible_tokens: int | None\n    divergence_token: int | None\n    divergence_segment_kind: str | None\n    divergence_segment_label: str | None\n    eligibility_model: str\n    on_critical_path: bool | None",
+    "SOURCE_CONTEXT_02": "class Finding:\n    rule_id: str\n    request_id: str\n    title: str\n    evidence_level: str\n    confidence: str\n    summary: str\n    suggested_experiment: str\n    supporting_metrics: dict[str, Any]\n    on_critical_path: bool | None"
+  },
+  "design": {
+    "candidate_selection": {
+      "calibration_id": "repository-readonly-tools-v1",
+      "calibration_sha256": "sha256:aa3a2480a41ff12dc6d64aeb9d8851d9ab805254c967772ffb0f18f2616d32be",
+      "evaluation_data_used": false,
+      "selected_tools": [
+        "list_repository",
+        "read_file",
+        "search_repository"
+      ],
+      "selection_rule": "Take the union of required capabilities across calibration tasks, map each capability to the single matching tool in the broad catalog, and exclude every tool that is not required."
+    },
+    "claim_boundary": "2 distinct fixture-backed, two-step repository-analysis units; no live tool execution or candidate-local state propagation.",
+    "eligible_for_final_claim": false,
+    "evaluation_split": "prompt_format_calibration_only",
+    "mechanism_metrics": [
+      "input_tokens",
+      "server_ttft_ms",
+      "client_ttft_ms",
+      "client_server_ttft_gap_ms",
+      "server_queue_ms",
+      "cached_tokens"
+    ],
+    "predeclared_primary_outcome": "summed total_latency_ms per workflow",
+    "prediction": "The scoped tool catalog will reduce input tokens and cold-cache workflow latency without reducing paired workflow success by more than 10 percentage points.",
+    "prompt_format_calibration": {
+      "change": "Repository maps now expose top-level symbol inventories and location questions name the target symbol explicitly. Because filenames are unique in this benchmark, both the requested filename and inspected identifier are exact-match outputs.",
+      "excluded_from_heldout_evaluation": true,
+      "excluded_symbols": [
+        "RequestAnalysis",
+        "Finding"
+      ]
+    },
+    "steps_per_workflow": 2,
+    "workflow_unit_count": 2
+  },
+  "execution": {
+    "arrival_pattern": "sequential",
+    "cache_treatment": "cold",
+    "cases_form_workflow": true,
+    "order": "randomized",
+    "repetitions": 1,
+    "require_evaluation": true,
+    "reset_external": false,
+    "seed": 404,
+    "warmup_repetitions": 0
+  },
+  "experiment_id": "repository-agent-tool-pruning-prompt-calibration-v1",
+  "json_fixtures": [
+    {
+      "name": "BROAD_CODING_TOOLS",
+      "path": "../fixtures/coding-tools-broad.json",
+      "sha256": "sha256:2e65258d9d25214f2e16815eab808565b09b9e6d170507ab16b771c111715f99"
+    },
+    {
+      "name": "SCOPED_CODING_TOOLS",
+      "path": "../fixtures/coding-tools-scoped.json",
+      "sha256": "sha256:06b77b0f7549eba1258ae3437896ab396573757e21ec553258bca807841b1f2c"
+    }
+  ],
+  "sampling": {
+    "max_output_tokens": 48,
+    "seed": 404,
+    "temperature": 0.0
+  },
+  "schema_version": "0.2"
+}

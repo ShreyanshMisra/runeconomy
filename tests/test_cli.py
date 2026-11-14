@@ -80,6 +80,84 @@ class CLITests(unittest.TestCase):
                 json.loads(output.read_text())["decision"]["status"], "inconclusive"
             )
 
+    def test_demo_open_uses_local_file_uri(self) -> None:
+        with TemporaryDirectory() as directory:
+            output = Path(directory) / "demo.html"
+            with patch("runeconomy.cli.webbrowser.open") as opened:
+                self.assertEqual(
+                    main(["demo", "--output", str(output), "--open"]), 0
+                )
+            opened.assert_called_once_with(output.resolve().as_uri())
+
+    def test_doctor_json_does_not_echo_base_url_or_api_key(self) -> None:
+        capabilities = {
+            "backend": "vllm",
+            "backend_version": "0.33.0",
+            "model_ids": [],
+            "experiment_modes": [],
+        }
+        with (
+            patch.dict("os.environ", {"SECRET_TEST_KEY": "do-not-print"}),
+            patch("runeconomy.cli.discover_vllm_capabilities") as discover,
+            patch("builtins.print") as output,
+        ):
+            discover.return_value.to_dict.return_value = capabilities
+            self.assertEqual(
+                main(
+                    [
+                        "doctor",
+                        "--base-url",
+                        "https://private.example/path?token=secret",
+                        "--api-key-env",
+                        "SECRET_TEST_KEY",
+                        "--format",
+                        "json",
+                    ]
+                ),
+                0,
+            )
+        discover.assert_called_once_with(
+            "https://private.example/path?token=secret",
+            api_key="do-not-print",
+            timeout_seconds=10.0,
+        )
+        rendered = output.call_args.args[0]
+        self.assertNotIn("do-not-print", rendered)
+        self.assertNotIn("private.example", rendered)
+
+    def test_compare_writes_result_and_honors_require_verified(self) -> None:
+        result = {"decision": {"status": "inconclusive"}}
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            dataset = root / "tasks.json"
+            evaluator = root / "evaluator.py"
+            output = root / "result.json"
+            dataset.write_text('{"tasks": [{"task_id": "one"}]}', encoding="utf-8")
+            evaluator.write_text("# fixture\n", encoding="utf-8")
+            with patch("runeconomy.cli.run_comparison", return_value=result) as run:
+                exit_code = main(
+                    [
+                        "compare",
+                        "--baseline",
+                        "python baseline.py",
+                        "--candidate",
+                        "python candidate.py",
+                        "--dataset",
+                        str(dataset),
+                        "--evaluator",
+                        str(evaluator),
+                        "--output",
+                        str(output),
+                        "--require-verified",
+                    ]
+                )
+            self.assertEqual(exit_code, 3)
+            self.assertEqual(json.loads(output.read_text()), result)
+            self.assertEqual(run.call_args.kwargs["order"], "randomized")
+            self.assertEqual(
+                run.call_args.kwargs["artifacts_dir"], root / "result-artifacts"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
