@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 import json
+import io
+import socket
 import threading
 import unittest
+import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest.mock import patch
 
-from runeconomy.backends import discover_vllm_capabilities, sanitized_target
+from runeconomy.backends import (
+    BackendCapabilities,
+    BackendProbeError,
+    Capability,
+    discover_vllm_capabilities,
+    sanitized_target,
+)
 
 
 class _DoctorHandler(BaseHTTPRequestHandler):
@@ -79,6 +89,7 @@ class BackendCapabilityTests(unittest.TestCase):
         salt_mode = next(m for m in result["experiment_modes"] if m["mode"] == "salt-isolated")
         self.assertTrue(salt_mode["supported"])
         self.assertEqual(salt_mode["physical_cache_state"], "unchanged")
+        self.assertEqual(result["readiness"]["status"], "ready")
 
     def test_sanitized_target_removes_credentials_path_and_query(self) -> None:
         display = sanitized_target(self.url)
@@ -110,3 +121,79 @@ class BackendCapabilityTests(unittest.TestCase):
         self.assertEqual(result["chat_completions_render"]["status"], "unsupported")
         salt_mode = next(m for m in result["experiment_modes"] if m["mode"] == "salt-isolated")
         self.assertTrue(salt_mode["supported"])
+
+    def test_authentication_failure_has_safe_category_and_action(self) -> None:
+        error = urllib.error.HTTPError(
+            "https://private.example/openapi.json", 401, "unauthorized", {}, None
+        )
+        with patch("urllib.request.urlopen", side_effect=error):
+            with self.assertRaises(BackendProbeError) as caught:
+                discover_vllm_capabilities("https://private.example")
+        self.assertEqual(caught.exception.category, "authentication")
+        self.assertIn("--api-key-env", caught.exception.next_action)
+        self.assertNotIn("private.example", str(caught.exception))
+
+    def test_invalid_base_url_is_configuration_failure(self) -> None:
+        with self.assertRaises(BackendProbeError) as caught:
+            discover_vllm_capabilities("localhost:8000")
+        self.assertEqual(caught.exception.category, "configuration")
+        self.assertIn("--base-url", caught.exception.next_action)
+
+    def test_server_error_is_not_downgraded_to_unknown(self) -> None:
+        error = urllib.error.HTTPError(
+            "https://private.example/openapi.json", 503, "unavailable", {}, None
+        )
+        with patch("urllib.request.urlopen", side_effect=error):
+            with self.assertRaises(BackendProbeError) as caught:
+                discover_vllm_capabilities("https://private.example")
+        self.assertEqual(caught.exception.category, "server_error")
+        self.assertIn("server error", caught.exception.next_action)
+
+    def test_connection_and_timeout_failures_are_distinct(self) -> None:
+        cases = (
+            (urllib.error.URLError("refused"), "connection"),
+            (urllib.error.URLError(socket.timeout("slow")), "timeout"),
+        )
+        for error, category in cases:
+            with self.subTest(category=category):
+                with patch("urllib.request.urlopen", side_effect=error):
+                    with self.assertRaises(BackendProbeError) as caught:
+                        discover_vllm_capabilities("https://private.example")
+                self.assertEqual(caught.exception.category, category)
+                self.assertNotIn("private.example", str(caught.exception))
+
+    def test_malformed_openapi_response_is_actionable(self) -> None:
+        class Response(io.BytesIO):
+            status = 200
+
+            def __enter__(self) -> "Response":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                self.close()
+
+        with patch("urllib.request.urlopen", return_value=Response(b"not-json")):
+            with self.assertRaises(BackendProbeError) as caught:
+                discover_vllm_capabilities("https://private.example")
+        self.assertEqual(caught.exception.category, "malformed_response")
+        self.assertIn("OpenAI-compatible", caught.exception.next_action)
+
+    def test_incompatible_dialect_is_a_completed_blocked_diagnosis(self) -> None:
+        absent = Capability("unsupported", "absent from /openapi.json")
+        result = BackendCapabilities(
+            backend="vllm",
+            backend_version="0.33.0",
+            model_ids=(),
+            responses=absent,
+            chat_completions=absent,
+            responses_render=absent,
+            chat_completions_render=absent,
+            tokenize=absent,
+            cache_telemetry=Capability("unknown", "requires generation"),
+            per_request_timing=Capability("unknown", "requires generation"),
+            cache_reset=absent,
+            cache_salt=absent,
+        ).to_dict()
+        self.assertEqual(result["readiness"]["status"], "blocked")
+        self.assertIn("No supported Responses", result["readiness"]["blockers"][0])
+        self.assertTrue(result["readiness"]["next_actions"])
