@@ -23,11 +23,14 @@ class ReleaseHygieneTests(unittest.TestCase):
 
     def test_public_sources_contain_no_private_modal_endpoint_or_local_path(self) -> None:
         roots = [
+            ROOT / ".env.example",
+            ROOT / ".github",
             ROOT / "README.md",
             ROOT / "deploy",
-            ROOT / "docs" / "experiment-format.md",
-            ROOT / "docs" / "trace-format.md",
+            ROOT / "docs",
             ROOT / "examples",
+            ROOT / "pyproject.toml",
+            ROOT / "scripts",
             ROOT / "src",
             ROOT / "tests",
         ]
@@ -38,7 +41,11 @@ class ReleaseHygieneTests(unittest.TestCase):
         local_home_prefix = "/" + "Users/"
         modal_proxy_variable = "MODAL_" + "PROXY_TOKEN"
         for path in files:
-            if not path.is_file() or "__pycache__" in path.parts:
+            if (
+                not path.is_file()
+                or "__pycache__" in path.parts
+                or (ROOT / "docs" / "internal") in path.parents
+            ):
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
             self.assertNotIn(private_modal_suffix, text, path)
@@ -60,6 +67,13 @@ class ReleaseHygieneTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(completed.returncode, 0)
+
+    def test_distribution_configuration_excludes_private_material(self) -> None:
+        with (ROOT / "pyproject.toml").open("rb") as handle:
+            configuration = tomllib.load(handle)
+        sdist = configuration["tool"]["hatch"]["build"]["targets"]["sdist"]
+        self.assertIn("/docs/internal", sdist["exclude"])
+        self.assertNotIn("/.env.local", sdist["include"])
 
     def test_public_governance_documents_are_not_prematurely_published(self) -> None:
         for name in ("CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md"):

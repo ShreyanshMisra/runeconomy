@@ -6,16 +6,24 @@ import argparse
 import json
 import os
 import sys
+import webbrowser
 from pathlib import Path
 from typing import Any, Mapping
 
 from .analysis import analyze_trace
+from .backends import BackendProbeError, discover_vllm_capabilities, sanitized_target
+from .comparison import run_comparison
 from .experiments import (
     ExperimentManifest,
     ExperimentValidationError,
     run_experiment,
 )
-from .importers import import_vllm_jsonl
+from .experiment_init import initialize_experiment, select_finding
+from .importers import (
+    import_openinference,
+    import_prefixwise_jsonl,
+    import_vllm_jsonl,
+)
 from .models import Trace, TraceValidationError
 from .reports import (
     load_demo_result,
@@ -63,7 +71,7 @@ def _format_human(report: dict[str, Any]) -> str:
             [
                 "",
                 f"[{finding['evidence_level']}/{finding['confidence']}] "
-                f"{finding['title']} ({finding['request_id']})",
+                f"{finding['title']} ({finding.get('finding_id', finding['request_id'])})",
                 "Critical path: "
                 + (
                     "unknown"
@@ -73,6 +81,7 @@ def _format_human(report: dict[str, Any]) -> str:
                     else "no"
                 ),
                 finding["summary"],
+                f"Target: {finding.get('optimization_target', 'unknown')}",
                 f"Experiment: {finding['suggested_experiment']}",
             ]
         )
@@ -107,12 +116,35 @@ def _build_parser() -> argparse.ArgumentParser:
     success.add_argument("--failure", dest="success", action="store_false")
     import_vllm.set_defaults(success=None)
 
+    import_oi = subparsers.add_parser(
+        "import-openinference",
+        help="convert one OpenInference/OpenTelemetry OTLP JSON trace",
+    )
+    import_oi.add_argument("trace", type=Path)
+    import_oi.add_argument("--output", type=Path, required=True)
+    import_oi.add_argument("--trace-id")
+    import_oi.add_argument("--workload", default="unknown")
+    import_oi.add_argument("--backend", default="unknown")
+    import_oi.add_argument("--block-size", type=int, default=16)
+
+    import_prefixwise = subparsers.add_parser(
+        "import-prefixwise-jsonl",
+        help="convert Prefixwise ledger exports into structured findings",
+    )
+    import_prefixwise.add_argument("export", type=Path)
+    import_prefixwise.add_argument("--output", type=Path, required=True)
+
     capture = subparsers.add_parser(
-        "capture-vllm", help="render and execute one vLLM Responses request"
+        "capture-vllm", help="render and execute one vLLM request"
     )
     capture.add_argument("request", type=Path)
     capture.add_argument("--base-url", required=True)
     capture.add_argument("--api-key-env")
+    capture.add_argument(
+        "--api-dialect",
+        choices=("responses", "chat_completions"),
+        default="responses",
+    )
     capture.add_argument("--timeout", type=float, default=300.0)
     capture.add_argument("--startup-timeout", type=float, default=600.0)
     capture.add_argument("--output", type=Path)
@@ -128,15 +160,56 @@ def _build_parser() -> argparse.ArgumentParser:
         "demo", help="render the bundled CPU-only NegativeSplit demonstration"
     )
     demo.add_argument("--output", type=Path, default=Path("runeconomy-demo.html"))
+    demo.add_argument("--open", action="store_true", help="open the report in a browser")
+
+    doctor = subparsers.add_parser(
+        "doctor", help="inspect a vLLM server without running inference"
+    )
+    doctor.add_argument("--base-url", required=True)
+    doctor.add_argument("--api-key-env")
+    doctor.add_argument("--timeout", type=float, default=10.0)
+    doctor.add_argument("--format", choices=("human", "json"), default="human")
+
+    compare = subparsers.add_parser(
+        "compare", help="execute and compare real baseline and candidate agents"
+    )
+    compare.add_argument("--baseline", required=True, help="baseline agent command")
+    compare.add_argument("--candidate", required=True, help="candidate agent command")
+    compare.add_argument("--dataset", type=Path, required=True)
+    compare.add_argument("--evaluator", type=Path, required=True)
+    compare.add_argument("--output", type=Path, required=True)
+    compare.add_argument("--artifacts-dir", type=Path)
+    compare.add_argument("--workdir", type=Path, default=Path.cwd())
+    compare.add_argument("--repetitions", type=int, default=1)
+    compare.add_argument(
+        "--order", choices=("randomized", "alternating"), default="randomized"
+    )
+    compare.add_argument("--seed", type=int, default=0)
+    compare.add_argument("--timeout", type=float, default=300.0)
+    compare.add_argument("--evaluator-timeout", type=float, default=30.0)
+    compare.add_argument("--max-task-success-regression", type=float, default=0.05)
+    compare.add_argument("--min-task-success-rate", type=float, default=0.8)
+    compare.add_argument("--min-completed-rate", type=float, default=1.0)
+    compare.add_argument(
+        "--require-verified",
+        action="store_true",
+        help="return exit code 3 unless the closed-loop verdict is verified",
+    )
 
     experiment = subparsers.add_parser(
-        "negative-split",
-        aliases=["experiment"],
+        "experiment",
+        aliases=["negative-split"],
         help="run a controlled baseline-versus-candidate comparison",
     )
     experiment_commands = experiment.add_subparsers(
         dest="experiment_command", required=True
     )
+    initialize = experiment_commands.add_parser(
+        "init", help="create a manifest or skeleton from a structured finding"
+    )
+    initialize.add_argument("--from-finding", type=Path, required=True)
+    initialize.add_argument("--finding-id")
+    initialize.add_argument("--output", type=Path, required=True)
     validate = experiment_commands.add_parser("validate", help="validate a manifest")
     validate.add_argument("manifest", type=Path)
     validate.add_argument(
@@ -240,6 +313,35 @@ def _require_trusted_evaluators(
         )
 
 
+def _format_capabilities(base_url: str, capabilities: Mapping[str, Any]) -> str:
+    def line(label: str, key: str) -> str:
+        value = capabilities[key]
+        return f"{label}: {value['status']} ({value['evidence']})"
+
+    models = capabilities.get("model_ids") or []
+    lines = [
+        f"Target: {sanitized_target(base_url)}",
+        f"Backend: vLLM {capabilities.get('backend_version') or 'unknown version'}",
+        f"Models: {', '.join(models) if models else 'unknown'}",
+        line("Responses API", "responses"),
+        line("Chat Completions API", "chat_completions"),
+        line("Responses render", "responses_render"),
+        line("Chat Completions render", "chat_completions_render"),
+        line("Tokenize", "tokenize"),
+        line("Cache telemetry", "cache_telemetry"),
+        line("Per-request timing", "per_request_timing"),
+        line("Cache reset", "cache_reset"),
+        line("Cache salt", "cache_salt"),
+        "Identity: model revision, tokenizer/template identity, and engine config "
+        "are unknown unless pinned separately in the experiment manifest.",
+        "Experiment modes:",
+    ]
+    for mode in capabilities["experiment_modes"]:
+        support = "supported" if mode["supported"] else "unsupported"
+        lines.append(f"  {mode['mode']}: {support}; {mode['note']}")
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
@@ -278,6 +380,29 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
 
+        if args.command == "import-openinference":
+            payload = import_openinference(
+                args.trace,
+                trace_id=args.trace_id,
+                workload=args.workload,
+                backend=args.backend,
+                block_size=args.block_size,
+            )
+            _write_json(args.output, payload)
+            print(
+                f"wrote normalized trace with {len(payload['requests'])} requests "
+                f"to {args.output}"
+            )
+            return 0
+
+        if args.command == "import-prefixwise-jsonl":
+            payload = import_prefixwise_jsonl(args.export)
+            _write_json(args.output, payload)
+            print(
+                f"wrote {len(payload['findings'])} imported findings to {args.output}"
+            )
+            return 0
+
         if args.command == "capture-vllm":
             request = _load_json_object(args.request)
             client = VLLMClient(
@@ -285,6 +410,7 @@ def main(argv: list[str] | None = None) -> int:
                 api_key=_api_key(args.api_key_env),
                 timeout_seconds=args.timeout,
                 startup_retry_seconds=args.startup_timeout,
+                api_dialect=args.api_dialect,
             )
             capture_result = client.capture(request).to_dict()
             rendered = json.dumps(capture_result, indent=2)
@@ -307,6 +433,52 @@ def main(argv: list[str] | None = None) -> int:
             rendered = render_demo_html(load_demo_result())
             args.output.write_text(rendered, encoding="utf-8")
             print(f"wrote RunEconomy demo to {args.output}")
+            if args.open:
+                webbrowser.open(args.output.resolve().as_uri())
+            return 0
+
+        if args.command == "doctor":
+            capabilities = discover_vllm_capabilities(
+                args.base_url,
+                api_key=_api_key(args.api_key_env),
+                timeout_seconds=args.timeout,
+            ).to_dict()
+            print(
+                json.dumps(capabilities, indent=2, sort_keys=True)
+                if args.format == "json"
+                else _format_capabilities(args.base_url, capabilities)
+            )
+            return 0
+
+        if args.command == "compare":
+            artifacts_dir = args.artifacts_dir or args.output.with_name(
+                args.output.stem + "-artifacts"
+            )
+            result = run_comparison(
+                baseline_command=args.baseline,
+                candidate_command=args.candidate,
+                dataset_path=args.dataset,
+                evaluator_path=args.evaluator,
+                output_path=args.output,
+                artifacts_dir=artifacts_dir,
+                workdir=args.workdir,
+                repetitions=args.repetitions,
+                order=args.order,
+                seed=args.seed,
+                timeout_seconds=args.timeout,
+                evaluator_timeout_seconds=args.evaluator_timeout,
+                max_task_success_regression=args.max_task_success_regression,
+                min_task_success_rate=args.min_task_success_rate,
+                min_completed_rate=args.min_completed_rate,
+            )
+            _write_json(args.output, result)
+            print(
+                f"wrote closed-loop comparison ({result['decision']['status']}) "
+                f"to {args.output}"
+            )
+            if args.require_verified and result["decision"]["status"] != "verified":
+                print("error: comparison did not reach a verified decision", file=sys.stderr)
+                return 3
             return 0
 
         if args.experiment_command == "report":
@@ -328,6 +500,21 @@ def main(argv: list[str] | None = None) -> int:
             print(f"wrote NegativeSplit report to {args.output}")
             return 0
 
+        if args.experiment_command == "init":
+            source = _load_json_object(args.from_finding)
+            finding = select_finding(source, args.finding_id)
+            artifact = initialize_experiment(finding)
+            _write_json(args.output, artifact)
+            status = artifact.get("generation_status", "runnable")
+            if status == "unresolved":
+                print(
+                    "wrote unresolved experiment skeleton to "
+                    f"{args.output}; resolve every listed field before validation"
+                )
+            else:
+                print(f"wrote runnable experiment manifest to {args.output}")
+            return 0
+
         manifest = ExperimentManifest.from_path(args.manifest)
         _require_trusted_evaluators(manifest, args.allow_exec_evaluators)
         if args.experiment_command == "validate":
@@ -339,6 +526,7 @@ def main(argv: list[str] | None = None) -> int:
             api_key=_api_key(manifest.backend.api_key_env),
             timeout_seconds=args.timeout,
             startup_retry_seconds=args.startup_timeout,
+            api_dialect=manifest.backend.api_dialect,
         )
         checkpoint = args.checkpoint or args.output.with_name(
             args.output.name + ".trials.jsonl"
@@ -358,7 +546,12 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 3
         return 0
-    except (TraceValidationError, ExperimentValidationError, VLLMError) as exc:
+    except (
+        TraceValidationError,
+        ExperimentValidationError,
+        VLLMError,
+        BackendProbeError,
+    ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
