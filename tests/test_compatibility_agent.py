@@ -82,7 +82,11 @@ class _CompatibilityHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Content-Length", str(len(encoded)))
             self.end_headers()
-            self.wfile.write(encoded)
+            try:
+                self.wfile.write(encoded)
+            except (BrokenPipeError, ConnectionResetError):
+                if not self.answer_delay_seconds:
+                    raise
             return
         self.send_error(404)
 
