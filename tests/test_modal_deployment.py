@@ -28,6 +28,10 @@ class ModalDeploymentTests(unittest.TestCase):
         self.assertIn("--enable-scale-out", command)
         self.assertEqual(command[command.index("--block-size") + 1], "16")
         self.assertEqual(deployment.VLLM_VERSION, "0.33.0")
+        self.assertGreaterEqual(
+            tuple(map(int, deployment.HUGGINGFACE_HUB_VERSION.split("."))),
+            (1, 5, 0),
+        )
 
     def test_development_server_never_disables_modal_authentication(self) -> None:
         source = (Path(__file__).parents[1] / "deploy" / "modal_vllm.py").read_text(

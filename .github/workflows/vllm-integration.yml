@@ -1,0 +1,29 @@
+name: Real vLLM integration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-vllm:
+    environment: vllm-integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VLLM_BASE_URL: ${{ secrets.VLLM_BASE_URL }}
+      VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
+      VLLM_EXPECTED_VERSION: "0.33.0"
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          version: "0.13.7"
+          enable-cache: true
+      - name: Require an explicitly configured live backend
+        run: test -n "$VLLM_BASE_URL"
+      - name: Run real-backend integration test
+        run: uv run python -m unittest tests.test_vllm_live -v

@@ -1,8 +1,8 @@
-"""Small, dependency-free adapter for vLLM's Responses API.
+"""Small, dependency-free adapter for vLLM's OpenAI-compatible APIs.
 
-The adapter deliberately uses ``/v1/responses/render`` before generation so
-the analyzer records the token sequence produced by the serving tokenizer and
-chat template, rather than attempting to reproduce it locally.
+The adapter asks the serving backend to render or tokenize each request before
+generation so the analyzer records the token sequence produced by the server's
+tokenizer and chat template rather than reproducing it locally.
 """
 
 from __future__ import annotations
@@ -18,6 +18,19 @@ from typing import Any, Callable, Iterator, Mapping
 
 class VLLMError(RuntimeError):
     """An actionable error returned by, or while contacting, vLLM."""
+
+
+class VLLMHTTPError(VLLMError):
+    """An HTTP response from vLLM with a non-success status."""
+
+    def __init__(self, path: str, status: int, body: str) -> None:
+        super().__init__(f"vLLM {path} returned HTTP {status}: {body}")
+        self.path = path
+        self.status = status
+        self.body = body
+
+    def __reduce__(self) -> tuple[Any, tuple[str, int, str]]:
+        return (type(self), (self.path, self.status, self.body))
 
 
 @dataclass(frozen=True)
@@ -44,6 +57,12 @@ class CapturedResponse:
             return None
         return self.cached_tokens / self.input_tokens
 
+    @property
+    def client_server_ttft_gap_ms(self) -> float | None:
+        if self.client_ttft_ms is None or self.server_ttft_ms is None:
+            return None
+        return self.client_ttft_ms - self.server_ttft_ms
+
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
         # Generated content is available in memory for local evaluation but is
@@ -51,6 +70,7 @@ class CapturedResponse:
         result.pop("output_text", None)
         result["prompt_token_ids"] = list(self.prompt_token_ids)
         result["cache_coverage"] = self.cache_coverage
+        result["client_server_ttft_gap_ms"] = self.client_server_ttft_gap_ms
         return result
 
 
@@ -131,12 +151,16 @@ class VLLMClient:
         api_key: str | None = None,
         timeout_seconds: float = 300.0,
         startup_retry_seconds: float = 0.0,
+        api_dialect: str = "responses",
         clock: Callable[[], float] = time.perf_counter,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
         self.startup_retry_seconds = startup_retry_seconds
+        if api_dialect not in {"responses", "chat_completions"}:
+            raise ValueError("api_dialect must be 'responses' or 'chat_completions'")
+        self.api_dialect = api_dialect
         self._clock = clock
 
     def _headers(self) -> dict[str, str]:
@@ -162,9 +186,7 @@ class VLLMClient:
                     time.sleep(2)
                     continue
                 body = exc.read(2048).decode("utf-8", errors="replace")
-                raise VLLMError(
-                    f"vLLM {path} returned HTTP {exc.code}: {body}"
-                ) from exc
+                raise VLLMHTTPError(path, exc.code, body) from exc
             except urllib.error.URLError as exc:
                 if time.monotonic() < retry_deadline:
                     time.sleep(2)
@@ -186,8 +208,18 @@ class VLLMClient:
     def render(self, request_body: Mapping[str, Any]) -> tuple[int, ...]:
         payload = dict(request_body)
         payload.pop("stream", None)
-        result = self._post_json("/v1/responses/render", payload)
-        token_ids = result.get("token_ids")
+        path = (
+            "/v1/responses/render"
+            if self.api_dialect == "responses"
+            else "/v1/chat/completions/render"
+        )
+        result = self._post_json(path, payload)
+        token_ids = result.get("token_ids", result.get("prompt_token_ids"))
+        if (
+            token_ids is None
+            and isinstance(result.get("engine_input"), Mapping)
+        ):
+            token_ids = result["engine_input"].get("prompt_token_ids")
         if not isinstance(token_ids, list) or any(
             not isinstance(token, int) or isinstance(token, bool) for token in token_ids
         ):
@@ -197,8 +229,48 @@ class VLLMClient:
             )
         return tuple(token_ids)
 
+    def tokenize_chat(self, request_body: Mapping[str, Any]) -> tuple[int, ...]:
+        """Render a chat request through vLLM's standard tokenizer endpoint."""
+
+        allowed = {
+            "model",
+            "messages",
+            "tools",
+            "add_generation_prompt",
+            "continue_final_message",
+            "add_special_tokens",
+            "chat_template",
+            "chat_template_kwargs",
+            "mm_processor_kwargs",
+        }
+        payload = {key: value for key, value in request_body.items() if key in allowed}
+        result = self._post_json("/tokenize", payload)
+        token_ids = result.get("tokens")
+        if not isinstance(token_ids, list) or any(
+            not isinstance(token, int) or isinstance(token, bool) for token in token_ids
+        ):
+            raise VLLMError("vLLM tokenize response did not include integer tokens")
+        return tuple(token_ids)
+
+    def prompt_token_ids(self, request_body: Mapping[str, Any]) -> tuple[int, ...]:
+        """Prefer exact render APIs, falling back to chat-form /tokenize on 404."""
+
+        try:
+            return self.render(request_body)
+        except VLLMHTTPError as exc:
+            scale_out_disabled = (
+                exc.status == 403 and "scale-out endpoints are disabled" in exc.body.lower()
+            )
+            if self.api_dialect != "chat_completions" or not (
+                exc.status == 404 or scale_out_disabled
+            ):
+                raise
+            return self.tokenize_chat(request_body)
+
     def capture(self, request_body: Mapping[str, Any]) -> CapturedResponse:
-        token_ids = self.render(request_body)
+        if self.api_dialect == "chat_completions":
+            return self._capture_chat_completions(request_body)
+        token_ids = self.prompt_token_ids(request_body)
         payload = dict(request_body)
         payload["stream"] = True
 
@@ -267,6 +339,101 @@ class VLLMClient:
             ),
             output_digest=output_digest,
             output_text=_extract_output_text(output),
+        )
+
+    def _capture_chat_completions(
+        self, request_body: Mapping[str, Any]
+    ) -> CapturedResponse:
+        token_ids = self.prompt_token_ids(request_body)
+        payload = dict(request_body)
+        payload["stream"] = True
+        stream_options = payload.get("stream_options")
+        stream_options = (
+            dict(stream_options) if isinstance(stream_options, Mapping) else {}
+        )
+        stream_options["include_usage"] = True
+        payload["stream_options"] = stream_options
+
+        started = self._clock()
+        first_output_at: float | None = None
+        ended_at: float | None = None
+        usage: dict[str, Any] = {}
+        metrics: dict[str, Any] = {}
+        response_id: str | None = None
+        output_pieces: list[str] = []
+        output_deltas: list[dict[str, Any]] = []
+        terminal_reason: str | None = None
+        with self._open("/v1/chat/completions", payload) as response:
+            for event in _iter_sse_json(response):
+                now = self._clock()
+                if isinstance(event.get("id"), str):
+                    response_id = event["id"]
+                event_usage = event.get("usage")
+                if isinstance(event_usage, dict):
+                    usage = event_usage
+                event_metrics = event.get("metrics")
+                if isinstance(event_metrics, dict):
+                    metrics = event_metrics
+                choices = event.get("choices")
+                if not isinstance(choices, list):
+                    continue
+                for choice in choices:
+                    if not isinstance(choice, dict):
+                        continue
+                    delta = choice.get("delta")
+                    if isinstance(delta, dict):
+                        if delta:
+                            output_deltas.append(dict(delta))
+                        content = delta.get("content")
+                        has_tool_delta = delta.get("tool_calls") not in (None, [], {})
+                        if isinstance(content, str) and content:
+                            output_pieces.append(content)
+                        if first_output_at is None and (
+                            (isinstance(content, str) and content) or has_tool_delta
+                        ):
+                            first_output_at = now
+                    finish_reason = choice.get("finish_reason")
+                    if isinstance(finish_reason, str):
+                        terminal_reason = finish_reason
+                        ended_at = now
+
+        ended = ended_at if ended_at is not None else self._clock()
+        if terminal_reason is None:
+            raise VLLMError(
+                "vLLM Chat Completions stream ended without a finish_reason"
+            )
+        details = usage.get("prompt_tokens_details")
+        details = details if isinstance(details, dict) else {}
+        text = "".join(output_pieces) or None
+        canonical_output = json.dumps(
+            output_deltas, sort_keys=True, separators=(",", ":")
+        )
+        output_digest = (
+            hashlib.sha256(canonical_output.encode("utf-8")).hexdigest()
+            if output_deltas
+            else None
+        )
+        completed_reasons = {"stop", "tool_calls", "function_call"}
+        return CapturedResponse(
+            prompt_token_ids=token_ids,
+            input_tokens=_as_int(usage.get("prompt_tokens")),
+            output_tokens=_as_int(usage.get("completion_tokens")),
+            cached_tokens=_as_int(details.get("cached_tokens")),
+            client_ttft_ms=(
+                None if first_output_at is None else (first_output_at - started) * 1000
+            ),
+            total_latency_ms=(ended - started) * 1000,
+            server_ttft_ms=_as_number(metrics.get("time_to_first_token_ms")),
+            server_queue_ms=_as_number(metrics.get("queue_time_ms")),
+            generation_time_ms=_as_number(metrics.get("generation_time_ms")),
+            mean_itl_ms=_as_number(metrics.get("mean_itl_ms")),
+            tokens_per_second=_as_number(metrics.get("tokens_per_second")),
+            response_id=response_id,
+            status=(
+                "completed" if terminal_reason in completed_reasons else "incomplete"
+            ),
+            output_digest=output_digest,
+            output_text=text,
         )
 
     def reset_prefix_cache(self, *, reset_external: bool = False) -> None:

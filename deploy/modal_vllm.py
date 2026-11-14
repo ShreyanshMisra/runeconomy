@@ -12,11 +12,14 @@ import urllib.request
 
 import modal
 
+from runeconomy.backends import DEFAULT_BENCHMARK_FLAGS, missing_vllm_flags
+
 APP_NAME = "runeconomy-vllm"
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 MODEL_REVISION = "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
 VLLM_VERSION = "0.33.0"
 TRANSFORMERS_VERSION = "5.16.1"
+HUGGINGFACE_HUB_VERSION = "1.31.0"
 
 GPU = "A10"
 PORT = 8000
@@ -46,7 +49,7 @@ flashinfer_cache = modal.Volume.from_name(
 
 download_image = (
     modal.Image.debian_slim(python_version="3.12")
-    .uv_pip_install("huggingface_hub[hf_xet]==1.3.4")
+    .uv_pip_install(f"huggingface_hub[hf_xet]=={HUGGINGFACE_HUB_VERSION}")
     .env({"HF_XET_HIGH_PERFORMANCE": "1"})
 )
 
@@ -56,7 +59,9 @@ vllm_image = (
     )
     .entrypoint([])
     .uv_pip_install(
-        f"vllm=={VLLM_VERSION}", f"transformers=={TRANSFORMERS_VERSION}"
+        f"vllm=={VLLM_VERSION}",
+        f"transformers=={TRANSFORMERS_VERSION}",
+        f"huggingface_hub[hf_xet]=={HUGGINGFACE_HUB_VERSION}",
     )
     .env(
         {
@@ -104,13 +109,7 @@ def verify_vllm_image() -> str:
         for path in package_files
         if path.suffix == ".py" and path.locate().is_file()
     )
-    required_flags = (
-        "--enable-prefix-caching",
-        "--enable-prompt-tokens-details",
-        "--enable-per-request-metrics",
-        "--enable-scale-out",
-    )
-    missing = [flag for flag in required_flags if flag not in source_text]
+    missing = missing_vllm_flags(source_text, DEFAULT_BENCHMARK_FLAGS)
     if missing:
         raise RuntimeError(
             f"{version} lacks required flags: {', '.join(missing)}"
