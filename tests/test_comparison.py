@@ -8,7 +8,12 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from runeconomy.comparison import _workdir_identity, run_comparison
+from runeconomy.comparison import (
+    _decision,
+    _summarize,
+    _workdir_identity,
+    run_comparison,
+)
 
 
 AGENT = r'''
@@ -17,6 +22,8 @@ import os
 import sys
 import time
 from pathlib import Path
+
+from runeconomy.attempt_status import write_attempt_status
 
 task = json.loads(Path(os.environ["RUNECONOMY_TASK_PATH"]).read_text())
 variant = os.environ["RUNECONOMY_VARIANT"]
@@ -83,6 +90,31 @@ Path(os.environ["RUNECONOMY_TRACE_PATH"]).write_text(
     json.dumps({"resourceSpans": [{"scopeSpans": [{"spans": spans}]}]}),
     encoding="utf-8",
 )
+if behavior == "model_output_failure":
+    write_attempt_status(
+        os.environ["RUNECONOMY_STATUS_PATH"],
+        "model_output_failure",
+        component="model_output",
+        stage="planning",
+        code="invalid_structured_output",
+    )
+    raise SystemExit(9)
+if behavior == "application_failure":
+    write_attempt_status(
+        os.environ["RUNECONOMY_STATUS_PATH"],
+        "application_failure",
+        component="application",
+        stage="tool_dispatch",
+        code="tool_contract_failed",
+    )
+    raise SystemExit(8)
+if behavior == "invalid_status":
+    Path(os.environ["RUNECONOMY_STATUS_PATH"]).write_text(
+        json.dumps({"schema_version": "0.1", "status": "completed", "secret": output}),
+        encoding="utf-8",
+    )
+    raise SystemExit(6)
+write_attempt_status(os.environ["RUNECONOMY_STATUS_PATH"], "completed")
 '''
 
 
@@ -224,6 +256,148 @@ class ComparisonTests(unittest.TestCase):
                     self.assertNotIn(raw_directory, attempt["failure_reason"])
                     self.assertIsNotNone(attempt["failure_details_digest"])
                     self.assertIsNotNone(attempt["artifacts"]["failure"])
+
+    def test_status_protocol_classifies_failures_and_preserves_trace(self) -> None:
+        with TemporaryDirectory() as raw_directory:
+            directory = Path(raw_directory)
+            agent, evaluator, dataset = self._files(
+                directory,
+                [
+                    {
+                        "task_id": "model-output",
+                        "expected": "ok",
+                        "candidate_behavior": "model_output_failure",
+                    },
+                    {
+                        "task_id": "application",
+                        "expected": "ok",
+                        "candidate_behavior": "application_failure",
+                    },
+                    {
+                        "task_id": "malformed-status",
+                        "expected": "do-not-publish",
+                        "candidate_behavior": "invalid_status",
+                    },
+                ],
+            )
+            result = run_comparison(
+                baseline_command=f"{sys.executable} {agent}",
+                candidate_command=f"{sys.executable} {agent}",
+                dataset_path=dataset,
+                evaluator_path=evaluator,
+                output_path=directory / "result.json",
+                artifacts_dir=directory / "artifacts",
+                workdir=directory,
+                order="alternating",
+                min_task_success_rate=0.0,
+            )
+
+            candidates = {
+                item["status"]: item
+                for item in result["attempts"]
+                if item["variant"] == "candidate"
+            }
+            self.assertEqual(
+                set(candidates),
+                {"model_output_failure", "application_failure", "invalid_status"},
+            )
+            for name in ("model_output_failure", "application_failure"):
+                attempt = candidates[name]
+                self.assertFalse(attempt["task_success"])
+                self.assertEqual(
+                    attempt["metrics"]["dependency_evidence"],
+                    "complete_explicit",
+                )
+                self.assertIsNotNone(attempt["trace_digest"])
+                self.assertIsNotNone(attempt["agent_status"])
+            serialized = json.dumps(result)
+            self.assertNotIn("do-not-publish", serialized)
+            self.assertNotIn("secret", serialized)
+            self.assertEqual(result["decision"]["status"], "invalid")
+
+    def test_partial_trace_request_count_is_not_identity_drift(self) -> None:
+        identity = {
+            "backend": "vllm",
+            "backend_version": "0.33.0",
+            "model": "fixture/model",
+            "model_revision": "model-revision",
+            "tokenizer": "fixture/tokenizer",
+            "tokenizer_revision": "tokenizer-revision",
+            "chat_template_digest": "sha256:template",
+        }
+
+        def attempt(variant: str, repetition: int, request_count: int) -> dict:
+            return {
+                "variant": variant,
+                "task_id": "sha256:task",
+                "repetition": repetition,
+                "status": "completed",
+                "task_success": True,
+                "workflow_latency_ms": 10.0,
+                "metrics": {
+                    "dependency_evidence": "complete_explicit",
+                    "environment_identity": [identity] * request_count,
+                    "environment_identity_complete": True,
+                },
+            }
+
+        summary = _summarize(
+            [
+                attempt("baseline", 0, 1),
+                attempt("candidate", 0, 1),
+                attempt("baseline", 1, 2),
+                attempt("candidate", 1, 2),
+            ]
+        )
+        for variant in ("baseline", "candidate"):
+            evidence = summary["variants"][variant]["trace_evidence"]
+            self.assertTrue(evidence["environment_identity_stable"])
+            self.assertEqual(len(evidence["environment_identity_signatures"]), 1)
+
+    def test_clear_successful_workflow_slowdown_is_a_regression(self) -> None:
+        trace_evidence = {
+            "complete_dag_rate": 1.0,
+            "environment_identity_complete": True,
+            "environment_identity_stable": True,
+        }
+        variant = {
+            "task_success_95_ci": [0.9, 1.0],
+            "task_success_rate": 1.0,
+            "completed_rate": 1.0,
+            "evaluated_count": 40,
+            "status_counts": {"completed": 40},
+            "trace_evidence": trace_evidence,
+        }
+        summary = {
+            "variants": {"baseline": variant, "candidate": variant},
+            "effects": {
+                "task_success": {
+                    "one_sided_lower_bound": -0.05,
+                    "paired_count": 40,
+                },
+                "workflow_latency_ms": {
+                    "paired_count": 40,
+                    "candidate_minus_baseline_mean": 15.0,
+                    "confidence_interval": [5.0, 25.0],
+                },
+            },
+        }
+        decision = _decision(
+            summary,
+            max_task_success_regression=0.1,
+            min_task_success_rate=0.8,
+            min_completed_rate=1.0,
+        )
+
+        self.assertEqual(decision["status"], "regression")
+        self.assertIn("successful tasks were slower", decision["reason"])
+        guardrail = next(
+            check
+            for check in decision["checks"]
+            if check["name"]
+            == "successful_task_workflow_latency_non_regression"
+        )
+        self.assertFalse(guardrail["passed"])
 
     def test_identity_drift_within_a_variant_invalidates_comparison(self) -> None:
         with TemporaryDirectory() as raw_directory:

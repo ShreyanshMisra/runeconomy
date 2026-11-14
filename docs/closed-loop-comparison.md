@@ -53,6 +53,49 @@ RunEconomy sets these variables for each isolated attempt:
   does not, captured standard output becomes the final output.
 - `RUNECONOMY_TRACE_PATH`: where the agent must write one OpenTelemetry OTLP
   JSON trace after the workflow ends.
+- `RUNECONOMY_STATUS_PATH`: where a status-aware agent atomically writes the
+  versioned attempt-status record described below.
+
+### Attempt status protocol
+
+Status schema `0.1` distinguishes `completed`, `task_failure`,
+`model_output_failure`, `application_failure`, `infrastructure_failure`, and
+`timeout`. Agents predating the protocol remain supported: a zero exit follows
+the evaluator path and a nonzero exit remains an infrastructure failure.
+
+A completed record is:
+
+```json
+{"schema_version":"0.1","status":"completed"}
+```
+
+Every failure record must include content-free provenance:
+
+```json
+{
+  "schema_version": "0.1",
+  "status": "model_output_failure",
+  "provenance": {
+    "component": "model_output",
+    "stage": "planning",
+    "code": "invalid_structured_output"
+  }
+}
+```
+
+`component`, `stage`, and `code` are bounded stable labels. Free-form messages,
+prompts, generated text, exception strings, URLs, and credentials are not part
+of the schema. `runeconomy.attempt_status.write_attempt_status` validates and
+atomically writes the record. RunEconomy retains the private file and exposes
+only its validated labels and digest in the comparison result.
+
+An external runner timeout overrides any status file. A nonzero exit with a
+declared failure preserves that classification; a nonzero exit declaring
+`completed`, or a malformed status record, becomes `invalid_status`. Valid
+partial traces are imported for failed attempts when present. Model-output,
+application, and task failures count as unsuccessful tasks, while true
+infrastructure failures and timeouts remain unevaluable and invalidate the
+relevant completion gate.
 
 The agent runs once for the whole task. RunEconomy does not emulate steps or
 copy baseline state into the candidate. Tools, retrieval, retries, subagents,
@@ -120,14 +163,17 @@ Verdicts are:
 
 - `verified`: successful-task latency improved and task success was
   non-inferior.
-- `regression`: candidate completion or task quality failed a guardrail.
+- `regression`: candidate completion or task quality failed a guardrail, or
+  the paired workflow-latency interval establishes that successful tasks are
+  slower.
 - `inconclusive`: quality passed but uncertainty did not establish both
   non-inferiority and a latency improvement.
 - `invalid`: baseline execution, trace evidence, or evaluator evidence could
   not support the comparison.
 
-Statuses remain separate per attempt: `completed`, `task_failure`, `timeout`,
-`infrastructure_failure`, `invalid_trace`, and
+Statuses remain separate per attempt: `completed`, `task_failure`,
+`model_output_failure`, `application_failure`, `timeout`,
+`infrastructure_failure`, `invalid_status`, `invalid_trace`, and
 `evaluator_infrastructure_error`.
 
 ## Evidence and sensitive data

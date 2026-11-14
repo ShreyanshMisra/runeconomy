@@ -19,6 +19,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Mapping
 
+from .attempt_status import AttemptStatus, AttemptStatusError
 from .critical_path import calculate_critical_path
 from .evaluators import (
     EvaluatorError,
@@ -408,6 +409,7 @@ def _trace_metrics(payload: Mapping[str, Any], trace: Trace) -> dict[str, Any]:
         "cost_usd": _sum_metric(trace, "cost_usd"),
         "gpu_time_ms": _sum_metric(trace, "gpu_time_ms"),
         "server_ttft_ms": _sum_metric(trace, "ttft_ms"),
+        "client_ttft_ms": _sum_metric(trace, "client_ttft_ms"),
         "request_latency_ms": _sum_metric(trace, "total_latency_ms"),
         "request_count": len(trace.requests),
         "span_count": len(trace.spans),
@@ -459,6 +461,7 @@ def _run_attempt(
     stdout_path = attempt_dir / "stdout.txt"
     stderr_path = attempt_dir / "stderr.txt"
     trace_path = attempt_dir / "trace.json"
+    status_path = attempt_dir / "status.json"
     normalized_trace_path = attempt_dir / "normalized-trace.json"
     _write_json(task_path, task)
     environment = os.environ.copy()
@@ -472,6 +475,7 @@ def _run_attempt(
             "RUNECONOMY_ATTEMPT_DIR": str(attempt_dir.resolve()),
             "RUNECONOMY_OUTPUT_PATH": str(output_path.resolve()),
             "RUNECONOMY_TRACE_PATH": str(trace_path.resolve()),
+            "RUNECONOMY_STATUS_PATH": str(status_path.resolve()),
         }
     )
     started = time.perf_counter_ns()
@@ -480,6 +484,8 @@ def _run_attempt(
     failure_reason: str | None = None
     stdout = ""
     stderr = ""
+    timed_out = False
+    execution_error = False
     try:
         process_returncode, stdout, stderr, timed_out = _execute_agent(
             argv,
@@ -490,9 +496,8 @@ def _run_attempt(
         if timed_out:
             status = "timeout"
             failure_reason = f"agent exceeded {timeout_seconds:g} seconds"
-        elif process_returncode != 0:
-            failure_reason = f"agent exited with code {process_returncode}"
     except OSError as exc:
+        execution_error = True
         failure_reason = f"cannot execute agent: {exc}"
     workflow_latency_ms = (time.perf_counter_ns() - started) / 1_000_000
     stdout_path.write_text(stdout, encoding="utf-8")
@@ -505,56 +510,107 @@ def _run_attempt(
     if not output_path.exists():
         output_path.write_text(output_text, encoding="utf-8")
 
+    agent_status: AttemptStatus | None = None
+    agent_status_digest: str | None = None
+    agent_status_error: str | None = None
+    if status_path.is_file():
+        agent_status_digest = _digest_path(status_path)
+        try:
+            agent_status = AttemptStatus.from_path(status_path)
+        except AttemptStatusError as exc:
+            agent_status_error = str(exc)
+
+    if not timed_out and not execution_error:
+        if agent_status_error is not None:
+            status = "invalid_status"
+            failure_reason = agent_status_error
+        elif agent_status is not None:
+            if process_returncode != 0 and agent_status.status == "completed":
+                status = "invalid_status"
+                failure_reason = (
+                    "agent declared completed but exited with code "
+                    f"{process_returncode}"
+                )
+            else:
+                status = agent_status.status
+                if status != "completed":
+                    failure_reason = f"agent declared {status}"
+        elif process_returncode != 0:
+            status = "infrastructure_failure"
+            failure_reason = f"agent exited with code {process_returncode}"
+        else:
+            # Backward-compatible path for agents that predate status schema 0.1.
+            status = "completed"
+
     trace_metrics: dict[str, Any] = {}
     trace_digest: str | None = None
     evaluator_result: dict[str, Any] | None = None
-    if process_returncode == 0:
-        if not trace_path.is_file():
-            status = "invalid_trace"
-            failure_reason = "agent did not write RUNECONOMY_TRACE_PATH"
-        else:
-            trace_digest = _digest_path(trace_path)
-            try:
-                normalized = import_openinference(
-                    trace_path,
-                    workload=str(task["task_id"]),
-                )
-                trace = Trace.from_dict(normalized)
-                _write_json(normalized_trace_path, normalized)
-                trace_metrics = _trace_metrics(normalized, trace)
-            except TraceValidationError as exc:
+    if trace_path.is_file():
+        trace_digest = _digest_path(trace_path)
+        try:
+            normalized = import_openinference(
+                trace_path,
+                workload=str(task["task_id"]),
+            )
+            trace = Trace.from_dict(normalized)
+            _write_json(normalized_trace_path, normalized)
+            trace_metrics = _trace_metrics(normalized, trace)
+        except TraceValidationError as exc:
+            if status == "completed":
                 status = "invalid_trace"
                 failure_reason = str(exc)
+    elif status == "completed":
+        status = "invalid_trace"
+        failure_reason = "agent did not write RUNECONOMY_TRACE_PATH"
+
+    if status == "completed":
+        if process_returncode != 0:
+            status = "invalid_status"
+            failure_reason = "completed status requires a zero process exit code"
+        elif not trace_metrics:
+            status = "invalid_trace"
+            failure_reason = "agent trace did not produce usable evidence"
+        else:
+            context = {
+                "task": task,
+                "task_id": task["task_id"],
+                "variant": variant,
+                "repetition": repetition,
+                "attempt_id": attempt_id,
+            }
+            try:
+                evaluator_result = _evaluate(
+                    evaluator,
+                    output_text,
+                    context,
+                    timeout_seconds=evaluator_timeout_seconds,
+                    artifacts_dir=attempt_dir,
+                )
+            except EvaluatorInfrastructureError as exc:
+                status = "evaluator_infrastructure_error"
+                failure_reason = str(exc)
             else:
-                context = {
-                    "task": task,
-                    "task_id": task["task_id"],
-                    "variant": variant,
-                    "repetition": repetition,
-                    "attempt_id": attempt_id,
-                }
-                try:
-                    evaluator_result = _evaluate(
-                        evaluator,
-                        output_text,
-                        context,
-                        timeout_seconds=evaluator_timeout_seconds,
-                        artifacts_dir=attempt_dir,
-                    )
-                except EvaluatorInfrastructureError as exc:
-                    status = "evaluator_infrastructure_error"
-                    failure_reason = str(exc)
-                else:
-                    _write_json(attempt_dir / "evaluation.json", evaluator_result)
-                    status = (
-                        "completed" if evaluator_result["success"] else "task_failure"
-                    )
+                _write_json(attempt_dir / "evaluation.json", evaluator_result)
+                status = (
+                    "completed" if evaluator_result["success"] else "task_failure"
+                )
+
+    declared_task_failure = status in {
+        "task_failure",
+        "model_output_failure",
+        "application_failure",
+    }
 
     failure_detail = failure_reason
     failure_artifact: str | None = None
     failure_details_digest: str | None = None
     if failure_detail is not None:
-        failure_payload = {"status": status, "detail": failure_detail}
+        failure_payload: dict[str, Any] = {
+            "status": status,
+            "detail": failure_detail,
+        }
+        if agent_status is not None:
+            failure_payload["agent_status"] = agent_status.to_dict()
         failure_path = attempt_dir / "failure.json"
         _write_json(failure_path, failure_payload)
         failure_artifact = failure_path.name
@@ -566,6 +622,9 @@ def _run_attempt(
     public_failure_reasons = {
         "timeout": "agent exceeded the configured timeout",
         "infrastructure_failure": "agent process failed",
+        "model_output_failure": "agent could not interpret model output",
+        "application_failure": "agent application failed",
+        "invalid_status": "agent status evidence was missing or contradictory",
         "invalid_trace": "trace was missing or failed validation",
         "evaluator_infrastructure_error": "evaluator failed",
     }
@@ -581,7 +640,19 @@ def _run_attempt(
         "failure_details_digest": failure_details_digest,
         "process_returncode": process_returncode,
         "task_success": (
-            evaluator_result["success"] if evaluator_result is not None else None
+            evaluator_result["success"]
+            if evaluator_result is not None
+            else False
+            if declared_task_failure
+            else None
+        ),
+        "agent_status": (
+            {
+                **agent_status.to_dict(),
+                "digest": agent_status_digest,
+            }
+            if agent_status is not None
+            else None
         ),
         "evaluation": (
             {
@@ -610,6 +681,7 @@ def _run_attempt(
             "stdout": "stdout.txt",
             "stderr": "stderr.txt",
             "trace": "trace.json" if trace_path.exists() else None,
+            "status": "status.json" if status_path.exists() else None,
             "normalized_trace": (
                 "normalized-trace.json" if normalized_trace_path.exists() else None
             ),
@@ -677,14 +749,17 @@ def _summarize(attempts: list[dict[str, Any]]) -> dict[str, Any]:
         traced = [item for item in subset if item["metrics"]]
         identity_signatures_by_task: dict[str, set[str]] = {}
         for item in traced:
-            signature = json.dumps(
-                item["metrics"].get("environment_identity"),
-                sort_keys=True,
-                separators=(",", ":"),
+            task_signatures = identity_signatures_by_task.setdefault(
+                item["task_id"], set()
             )
-            identity_signatures_by_task.setdefault(item["task_id"], set()).add(
-                signature
-            )
+            for identity in item["metrics"].get("environment_identity", []):
+                task_signatures.add(
+                    json.dumps(
+                        identity,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                )
         identity_signatures = {
             signature
             for signatures in identity_signatures_by_task.values()
@@ -761,6 +836,7 @@ def _summarize(attempts: list[dict[str, Any]]) -> dict[str, Any]:
                         "cost_usd",
                         "gpu_time_ms",
                         "server_ttft_ms",
+                        "client_ttft_ms",
                         "inference_span_ms",
                         "tool_span_ms",
                         "retrieval_span_ms",
@@ -788,6 +864,7 @@ def _summarize(attempts: list[dict[str, Any]]) -> dict[str, Any]:
             "cost_usd",
             "gpu_time_ms",
             "server_ttft_ms",
+            "client_ttft_ms",
             "inference_span_ms",
             "tool_span_ms",
             "retrieval_span_ms",
@@ -859,6 +936,7 @@ def _decision(
     )
     latency_ci = latency["confidence_interval"]
     faster = bool(latency_ci and latency_ci[1] < 0)
+    slower = bool(latency_ci and latency_ci[0] > 0)
     baseline_trace_evidence = baseline["trace_evidence"]
     candidate_trace_evidence = candidate["trace_evidence"]
     trace_evidence_valid = all(
@@ -916,10 +994,20 @@ def _decision(
             "observed": latency,
             "threshold": "upper bound of paired 95% Student-t interval < 0",
         },
+        {
+            "name": "successful_task_workflow_latency_non_regression",
+            "passed": not slower,
+            "observed": latency,
+            "threshold": "lower bound of paired 95% Student-t interval <= 0",
+        },
     ]
     baseline_eval = baseline["evaluated_count"] > 0
     candidate_eval = candidate["evaluated_count"] > 0
-    invalid_evidence_statuses = {"invalid_trace", "evaluator_infrastructure_error"}
+    invalid_evidence_statuses = {
+        "invalid_status",
+        "invalid_trace",
+        "evaluator_infrastructure_error",
+    }
     baseline_invalid_evidence = any(
         baseline["status_counts"].get(name, 0) for name in invalid_evidence_statuses
     )
@@ -932,7 +1020,7 @@ def _decision(
     )
     if baseline_invalid_evidence or candidate_invalid_evidence:
         status = "invalid"
-        reason = "one or more attempts had invalid trace or evaluator evidence"
+        reason = "one or more attempts had invalid status, trace, or evaluator evidence"
     elif not trace_evidence_valid:
         status = "invalid"
         reason = "trace DAG or environment identity evidence was incomplete or unstable"
@@ -960,6 +1048,9 @@ def _decision(
     elif faster:
         status = "verified"
         reason = "task success was non-inferior and successful tasks were faster"
+    elif slower:
+        status = "regression"
+        reason = "task success passed but successful tasks were slower"
     else:
         status = "inconclusive"
         reason = "quality passed but successful-task latency improvement was not established"

@@ -31,6 +31,7 @@ class ImporterTests(unittest.TestCase):
                     "output_tokens": 2,
                     "cached_tokens": 0,
                     "server_ttft_ms": 20.0,
+                    "client_ttft_ms": 24.0,
                     "total_latency_ms": 40.0,
                 },
                 "invoked_tools": ["read"],
@@ -71,6 +72,8 @@ class ImporterTests(unittest.TestCase):
         report = analyze_trace(trace)
         self.assertEqual(len(trace.requests), 2)
         self.assertEqual(trace.requests[1].metrics.cached_input_tokens, 32)
+        self.assertEqual(trace.requests[0].metrics.ttft_ms, 20.0)
+        self.assertEqual(trace.requests[0].metrics.client_ttft_ms, 24.0)
         self.assertEqual(report["summary"]["request_count"], 2)
         self.assertEqual(trace.spans[1].depends_on, ("inference-1",))
         self.assertEqual(trace.schema_version, "0.2")
@@ -78,6 +81,27 @@ class ImporterTests(unittest.TestCase):
             trace.requests[0].segments[0].attribution_quality, "structural"
         )
         self.assertIsNone(trace.requests[0].segments[0].start_token)
+
+    def test_vllm_import_does_not_relabel_client_ttft_as_server_ttft(self) -> None:
+        record = {
+            "request": {"model": "example/model"},
+            "capture": {
+                "prompt_token_ids": [1, 2, 3],
+                "client_ttft_ms": 18.5,
+                "total_latency_ms": 25.0,
+            },
+        }
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "captures.jsonl"
+            path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            trace = Trace.from_dict(
+                import_vllm_jsonl(
+                    path, trace_id="client-only", workload="test", model="example/model"
+                )
+            )
+
+        self.assertIsNone(trace.requests[0].metrics.ttft_ms)
+        self.assertEqual(trace.requests[0].metrics.client_ttft_ms, 18.5)
 
     def test_verified_rendered_segments_produce_exact_boundaries(self) -> None:
         record = {
@@ -125,6 +149,7 @@ class ImporterTests(unittest.TestCase):
             "llm.token_count.prompt": 123,
             "llm.token_count.completion": 7,
             "llm.token_count.prompt_details.cache_read": 64,
+            "runeconomy.client_ttft_ms": 18.5,
             "llm.input_messages.0.message.role": "system",
             "llm.input_messages.1.message.role": "user",
             "llm.tools.0.tool.name": "search",
@@ -169,6 +194,7 @@ class ImporterTests(unittest.TestCase):
         self.assertEqual(request.prompt_token_count, 123)
         self.assertEqual(request.token_evidence_quality, "count_only")
         self.assertEqual(request.metrics.cached_input_tokens, 64)
+        self.assertEqual(request.metrics.client_ttft_ms, 18.5)
         self.assertEqual(request.available_tools, ("search",))
         self.assertEqual(request.invoked_tools, ("search",))
         self.assertEqual(request.segments[0].attribution_quality, "structural")

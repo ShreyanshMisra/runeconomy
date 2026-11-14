@@ -1,0 +1,22 @@
+{
+  "tasks": [
+    {
+      "task_id": "calibration-report-renderer",
+      "question": "Which Python function has the docstring phrase 'Render a generic report using only fields recorded in an experiment result'?",
+      "candidate_paths": [
+        "src/runeconomy/reports.py",
+        "src/runeconomy/privacy.py",
+        "src/runeconomy/cache.py"
+      ]
+    },
+    {
+      "task_id": "calibration-vllm-client",
+      "question": "Which Python class has the docstring phrase 'Capture exact prompts and timing from a vLLM OpenAI-compatible server'?",
+      "candidate_paths": [
+        "src/runeconomy/vllm.py",
+        "src/runeconomy/backends.py",
+        "src/runeconomy/cache.py"
+      ]
+    }
+  ]
+}
