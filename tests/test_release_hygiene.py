@@ -31,8 +31,11 @@ class ReleaseHygieneTests(unittest.TestCase):
             ROOT / "examples",
             ROOT / "pyproject.toml",
             ROOT / "scripts",
+            ROOT / "site",
+            ROOT / "skills",
             ROOT / "src",
             ROOT / "tests",
+            ROOT / "vercel.json",
         ]
         files: list[Path] = []
         for root in roots:
@@ -44,6 +47,8 @@ class ReleaseHygieneTests(unittest.TestCase):
             if (
                 not path.is_file()
                 or "__pycache__" in path.parts
+                or "node_modules" in path.parts
+                or (ROOT / "site" / "dist") in path.parents
                 or (ROOT / "docs" / "internal") in path.parents
             ):
                 continue
@@ -73,6 +78,7 @@ class ReleaseHygieneTests(unittest.TestCase):
             configuration = tomllib.load(handle)
         sdist = configuration["tool"]["hatch"]["build"]["targets"]["sdist"]
         self.assertIn("/docs/internal", sdist["exclude"])
+        self.assertIn("/skills", sdist["include"])
         self.assertNotIn("/.env.local", sdist["include"])
 
     def test_public_governance_documents_are_not_prematurely_published(self) -> None:
@@ -83,7 +89,7 @@ class ReleaseHygieneTests(unittest.TestCase):
         with (ROOT / "pyproject.toml").open("rb") as handle:
             project = tomllib.load(handle)["project"]
         self.assertEqual(project["name"], "runeconomy")
-        self.assertEqual(project["version"], "0.2.0a1")
+        self.assertEqual(project["version"], "0.2.0a2")
         self.assertEqual(
             project["urls"]["Repository"],
             "https://github.com/ShreyanshMisra/runeconomy",

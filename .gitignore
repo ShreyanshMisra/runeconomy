@@ -19,7 +19,8 @@ reports/
 .coverage.*
 coverage.xml
 htmlcov/
-site/
+site/dist/
+site/node_modules/
 *.log
 .DS_Store
 .idea/

@@ -1,6 +1,6 @@
-# RunEconomy 0.2.0a1 alpha guide
+# RunEconomy 0.2.0a2 alpha guide
 
-`0.2.0a1` is an invited-tester release. It is not a production service or a
+`0.2.0a2` is an invited-tester release. It is not a production service or a
 general benchmark suite. RunEconomy remains a local CLI and Python package.
 
 ## Install the prerelease
@@ -8,7 +8,7 @@ general benchmark suite. RunEconomy remains a local CLI and Python package.
 Install the published alpha:
 
 ```bash
-python -m pip install --pre runeconomy==0.2.0a1
+python -m pip install --pre runeconomy==0.2.0a2
 runeconomy --help
 runeconomy demo --open
 ```
@@ -23,7 +23,8 @@ gating order, evidence, limitations, and frozen hashes.
 - `doctor` performs a read-only capability probe against a vLLM server and
   reports API dialects, tokenization/render support, timing and cache
   telemetry, cache reset/salt support, identities that can be detected, and
-  safe experiment modes.
+  safe experiment modes. It gives exact next actions and stable exit codes:
+  `0` ready, `1` diagnosed but not ready, and `2` probe failure.
 - Chat Completions and Responses are both supported. Exact-token capture uses
   supported render or tokenize capabilities when available.
 - Static `experiment` manifests support observed, salted, and development-mode
@@ -48,6 +49,11 @@ gating order, evidence, limitations, and frozen hashes.
   classification evidence without putting generated content in status files.
 - The flagship demo shows why a candidate with favorable cache and latency
   measurements can still receive an `invalid` verdict.
+- The canonical coding-agent skill under `skills/runeconomy` preserves the same
+  experiment, privacy, and authorization boundaries for Codex and compatible
+  skill hosts.
+- A build-only static documentation site renders the repository Markdown
+  sources. It is not deployed by the package or CLI.
 
 ## Migration from 0.1.0
 
