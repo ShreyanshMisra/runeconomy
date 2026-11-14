@@ -5,21 +5,23 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import webbrowser
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from . import __version__
 from .analysis import analyze_trace
 from .backends import BackendProbeError, discover_vllm_capabilities
 from .comparison import run_comparison
+from .experiment_init import initialize_experiment, select_finding
 from .experiments import (
     ExperimentManifest,
     ExperimentValidationError,
     run_experiment,
 )
-from .experiment_init import initialize_experiment, select_finding
 from .importers import (
     import_openinference,
     import_prefixwise_jsonl,
@@ -32,7 +34,7 @@ from .reports import (
     render_experiment_html,
     render_experiment_markdown,
 )
-from .vllm import VLLMClient, VLLMError
+from .vllm import VLLMClient, VLLMError, VLLMHTTPError
 
 
 def _load_trace(path: Path) -> Trace:
@@ -462,11 +464,19 @@ def _next_action_for_error(args: argparse.Namespace) -> str:
 
 
 def _format_cli_error(exc: Exception, args: argparse.Namespace) -> str:
+    if isinstance(exc, VLLMHTTPError):
+        reason = (
+            f"vLLM {exc.path} returned HTTP {exc.status}; the response body was redacted"
+        )
+    elif isinstance(exc, VLLMError):
+        reason = re.sub(r"https?://\S+", "<redacted-endpoint>", str(exc))
+    else:
+        reason = str(exc)
     return "\n".join(
         [
             "RunEconomy · ERROR",
             f"What failed: {getattr(args, 'command', 'command')} did not complete.",
-            f"Why: {exc}",
+            f"Why: {reason}",
             "Evidence: output may be absent or incomplete; do not treat a partial artifact as a verdict.",
             f"What to do next: {_next_action_for_error(args)}",
         ]
@@ -567,9 +577,11 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "demo":
-            rendered = render_demo_html(load_demo_result(args.case))
+            demo_result = load_demo_result(args.case)
+            rendered = render_demo_html(demo_result)
             _write_text(args.output, rendered)
-            print(f"RunEconomy demo · INVALID proof written to {args.output}")
+            status = demo_result["decision"]["status"].upper()
+            print(f"RunEconomy demo · {status} proof written to {args.output}")
             print(
                 "What to do next: open the report and read the failed quality gates "
                 "before interpreting the conditional latency measurements."

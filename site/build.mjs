@@ -49,6 +49,13 @@ function layout(page, content) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="RunEconomy verifies whether inference optimizations improve successful agent workflows.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="RunEconomy">
+  <meta property="og:title" content="${page.title}">
+  <meta property="og:description" content="RunEconomy verifies whether inference optimizations improve successful agent workflows.">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="${page.title}">
+  <meta name="twitter:description" content="RunEconomy verifies whether inference optimizations improve successful agent workflows.">
   <title>${page.title} · RunEconomy</title>
   <link rel="canonical" href="${canonical}">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">

@@ -11,6 +11,7 @@ from unittest.mock import patch
 from runeconomy.backends import BackendProbeError
 from runeconomy.cli import main
 from runeconomy.reports import load_demo_result
+from runeconomy.vllm import VLLMError, VLLMHTTPError
 from tests.test_experiments import _manifest
 
 
@@ -26,6 +27,38 @@ class CLITests(unittest.TestCase):
             self.assertIn("What failed:", rendered)
             self.assertIn("Evidence:", rendered)
             self.assertIn("What to do next:", rendered)
+
+    def test_vllm_errors_redact_endpoint_and_response_body(self) -> None:
+        with TemporaryDirectory() as directory:
+            request = Path(directory) / "request.json"
+            request.write_text("{}", encoding="utf-8")
+            cases = (
+                VLLMError("cannot reach https://private.example/path?token=secret"),
+                VLLMHTTPError("/v1/responses", 500, "secret response material"),
+            )
+            for error in cases:
+                with self.subTest(error=type(error).__name__):
+                    stderr = StringIO()
+                    with (
+                        patch("runeconomy.cli.VLLMClient") as client,
+                        redirect_stderr(stderr),
+                    ):
+                        client.return_value.capture.side_effect = error
+                        self.assertEqual(
+                            main(
+                                [
+                                    "capture-vllm",
+                                    str(request),
+                                    "--base-url",
+                                    "https://private.example",
+                                ]
+                            ),
+                            2,
+                        )
+                    rendered = stderr.getvalue()
+                    self.assertNotIn("private.example", rendered)
+                    self.assertNotIn("secret", rendered)
+                    self.assertIn("What to do next:", rendered)
 
     def test_html_report_path_uses_generic_renderer(self) -> None:
         with TemporaryDirectory() as directory:
@@ -118,20 +151,24 @@ class CLITests(unittest.TestCase):
     def test_demo_can_render_historical_case_explicitly(self) -> None:
         with TemporaryDirectory() as directory:
             output = Path(directory) / "historical.html"
-            self.assertEqual(
-                main(
-                    [
-                        "demo",
-                        "--case",
-                        "historical",
-                        "--output",
-                        str(output),
-                    ]
-                ),
-                0,
-            )
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(
+                    main(
+                        [
+                            "demo",
+                            "--case",
+                            "historical",
+                            "--output",
+                            str(output),
+                        ]
+                    ),
+                    0,
+                )
             rendered = output.read_text(encoding="utf-8")
             self.assertIn("Runner decision:</strong> inconclusive", rendered)
+            self.assertIn("INCONCLUSIVE proof", stdout.getvalue())
+            self.assertNotIn("INVALID proof", stdout.getvalue())
 
     def test_doctor_json_does_not_echo_base_url_or_api_key(self) -> None:
         capabilities = {

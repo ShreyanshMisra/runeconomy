@@ -56,6 +56,7 @@ integrity fields.
 
 Human errors state what failed, why RunEconomy believes it failed, whether
 output may be incomplete, and the exact next action. `doctor --json` emits the
-same information as structured JSON and never includes the API-key value or
-configured endpoint. Partial checkpoints and private artifacts are evidence,
-not final verdicts.
+same information as structured JSON on stderr when the probe fails and never
+includes the API-key value or configured endpoint. Successful or partially
+supported diagnoses remain on stdout. Partial checkpoints and private
+artifacts are evidence, not final verdicts.

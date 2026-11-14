@@ -11,9 +11,10 @@ runeconomy doctor \
   --api-key-env VLLM_API_KEY
 ```
 
-Endpoint paths, query strings, embedded credentials, and API-key values are not
-included in the output. JSON output is available with `--format json` or the
-shorter `--json` alias.
+The configured URL's host, path prefix, query, fragment, embedded credentials,
+and API-key values are not included in output. Generic capability paths such as
+`/openapi.json` may appear as evidence. JSON output is available with
+`--format json` or the shorter `--json` alias.
 
 ## Capability states
 

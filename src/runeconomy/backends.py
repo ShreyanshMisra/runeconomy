@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
-import socket
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Any, Mapping
+from typing import Any
 
 
 class BackendProbeError(RuntimeError):
@@ -81,14 +81,22 @@ class BackendCapabilities:
             for mode in modes
             if mode["status"] == "supported" and mode["safe"]
         ]
-        generation = self.responses.status == "supported" or self.chat_completions.status == "supported"
-        exact_tokens = self.responses_render.status == "supported" or (
+        responses_path = (
+            self.responses.status == "supported"
+            and self.responses_render.status == "supported"
+        )
+        chat_path = (
             self.chat_completions.status == "supported"
             and (
                 self.chat_completions_render.status == "supported"
                 or self.tokenize.status == "supported"
             )
         )
+        generation = (
+            self.responses.status == "supported"
+            or self.chat_completions.status == "supported"
+        )
+        exact_tokens = responses_path or chat_path
         blockers: list[str] = []
         actions: list[str] = []
         if not generation:
@@ -126,20 +134,22 @@ class BackendCapabilities:
         }
 
     def experiment_modes(self) -> tuple[dict[str, Any], ...]:
+        responses_path = (
+            self.responses.status == "supported"
+            and self.responses_render.status == "supported"
+        )
+        chat_path = (
+            self.chat_completions.status == "supported"
+            and (
+                self.chat_completions_render.status == "supported"
+                or self.tokenize.status == "supported"
+            )
+        )
         generation = (
             self.responses.status == "supported"
             or self.chat_completions.status == "supported"
         )
-        exact_tokens = (
-            self.responses_render.status == "supported"
-            or (
-                self.chat_completions.status == "supported"
-                and (
-                    self.chat_completions_render.status == "supported"
-                    or self.tokenize.status == "supported"
-                )
-            )
-        )
+        exact_tokens = responses_path or chat_path
         modes = (
             {
                 "mode": "warm-cache",
@@ -257,7 +267,7 @@ def _with_guidance(
         evidence=capability.evidence,
         detail=capability.detail,
         required=required,
-        next_action=next_action,
+        next_action=capability.next_action or next_action,
     )
 
 
@@ -289,9 +299,9 @@ def _json_get(
                 ),
             ) from exc
         return exc.code, None
-    except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
+    except (urllib.error.URLError, TimeoutError) as exc:
         reason = getattr(exc, "reason", exc)
-        timed_out = isinstance(reason, (TimeoutError, socket.timeout))
+        timed_out = isinstance(reason, TimeoutError)
         raise BackendProbeError(
             "the vLLM endpoint did not respond before the timeout"
             if timed_out
@@ -320,7 +330,7 @@ def _post_probe(
     *,
     api_key: str | None,
     timeout_seconds: float,
-) -> tuple[int, str]:
+) -> tuple[int, Any]:
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -332,15 +342,38 @@ def _post_probe(
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            response.read(2048)
-            return response.status, ""
+            try:
+                payload = json.load(response)
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                raise BackendProbeError(
+                    f"the server returned malformed JSON for {path}",
+                    category="malformed_response",
+                    next_action=(
+                        "Confirm the endpoint is a vLLM render API and inspect the reverse-proxy response."
+                    ),
+                ) from exc
+            if not isinstance(payload, Mapping):
+                raise BackendProbeError(
+                    f"the server returned a non-object JSON value for {path}",
+                    category="malformed_response",
+                    next_action="Confirm the endpoint is a compatible vLLM render API.",
+                )
+            return response.status, payload
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read(2048).decode("utf-8", errors="replace")
-    except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
+    except (urllib.error.URLError, TimeoutError) as exc:
+        reason = getattr(exc, "reason", exc)
+        timed_out = isinstance(reason, TimeoutError)
         raise BackendProbeError(
-            f"the safe capability probe for {path} could not reach the server",
-            category="connection",
-            next_action="Verify network access and rerun `runeconomy doctor`.",
+            f"the safe capability probe for {path} timed out"
+            if timed_out
+            else f"the safe capability probe for {path} could not reach the server",
+            category="timeout" if timed_out else "connection",
+            next_action=(
+                "Increase `--timeout`, verify server health, and rerun `runeconomy doctor`."
+                if timed_out
+                else "Verify network access and rerun `runeconomy doctor`."
+            ),
         ) from exc
 
 
@@ -353,8 +386,14 @@ def _render_capability(
     api_key: str | None,
     timeout_seconds: float,
 ) -> Capability:
-    if advertised.status != "supported" or payload is None:
+    if advertised.status != "supported":
         return advertised
+    if payload is None:
+        return Capability(
+            "unknown",
+            "advertised but not probed because no model ID was available",
+            "A model ID is required for a safe render probe.",
+        )
     status, body = _post_probe(
         base_url,
         path,
@@ -363,14 +402,39 @@ def _render_capability(
         timeout_seconds=timeout_seconds,
     )
     if status == 200:
-        return Capability("supported", "successful non-inference render probe")
+        token_ids = body.get("token_ids", body.get("prompt_token_ids"))
+        if token_ids is None and isinstance(body.get("engine_input"), Mapping):
+            token_ids = body["engine_input"].get("prompt_token_ids")
+        if isinstance(token_ids, list) and token_ids and all(
+            isinstance(token, int) and not isinstance(token, bool)
+            for token in token_ids
+        ):
+            return Capability("supported", "successful non-inference render probe")
+        return Capability(
+            "unknown",
+            "render probe returned HTTP 200 without integer token IDs",
+            "The response shape was not compatible with RunEconomy's renderer.",
+        )
     if status in {403, 404} and (
-        status == 404 or "scale-out endpoints are disabled" in body.lower()
+        status == 404
+        or (
+            isinstance(body, str)
+            and "scale-out endpoints are disabled" in body.lower()
+        )
     ):
         return Capability(
             "unsupported",
             f"render probe returned HTTP {status}",
             "The route is advertised but scale-out rendering is unavailable.",
+        )
+    if status in {401, 403}:
+        return Capability(
+            "unknown",
+            f"render probe returned HTTP {status}",
+            "The render endpoint may require different authorization.",
+            next_action=(
+                "Verify the bearer key named by `--api-key-env` may call render endpoints, then rerun doctor."
+            ),
         )
     return Capability(
         "unknown",
@@ -393,6 +457,18 @@ def discover_vllm_capabilities(
             "the base URL must be an absolute HTTP or HTTPS URL",
             category="configuration",
             next_action="Rerun with `--base-url http://HOST:PORT` or an HTTPS equivalent.",
+        )
+    if parsed.username is not None or parsed.password is not None:
+        raise BackendProbeError(
+            "the base URL must not contain embedded credentials",
+            category="configuration",
+            next_action="Remove credentials from the URL and supply the bearer key with `--api-key-env NAME`.",
+        )
+    if parsed.query or parsed.fragment:
+        raise BackendProbeError(
+            "the base URL must not contain a query string or fragment",
+            category="configuration",
+            next_action="Pass the server root or reverse-proxy path without query parameters or a fragment.",
         )
 
     openapi_status, openapi = _json_get(

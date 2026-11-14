@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import json
 import io
-import socket
+import json
 import threading
 import unittest
 import urllib.error
@@ -13,6 +12,8 @@ from runeconomy.backends import (
     BackendCapabilities,
     BackendProbeError,
     Capability,
+    _post_probe,
+    _render_capability,
     discover_vllm_capabilities,
     sanitized_target,
 )
@@ -152,7 +153,7 @@ class BackendCapabilityTests(unittest.TestCase):
     def test_connection_and_timeout_failures_are_distinct(self) -> None:
         cases = (
             (urllib.error.URLError("refused"), "connection"),
-            (urllib.error.URLError(socket.timeout("slow")), "timeout"),
+            (urllib.error.URLError(TimeoutError("slow")), "timeout"),
         )
         for error, category in cases:
             with self.subTest(category=category):
@@ -197,3 +198,105 @@ class BackendCapabilityTests(unittest.TestCase):
         self.assertEqual(result["readiness"]["status"], "blocked")
         self.assertIn("No supported Responses", result["readiness"]["blockers"][0])
         self.assertTrue(result["readiness"]["next_actions"])
+
+    def test_render_path_must_match_the_supported_generation_dialect(self) -> None:
+        supported = Capability("supported", "advertised")
+        absent = Capability("unsupported", "absent")
+        result = BackendCapabilities(
+            backend="vllm",
+            backend_version="0.33.0",
+            model_ids=("example/model",),
+            responses=absent,
+            chat_completions=supported,
+            responses_render=supported,
+            chat_completions_render=absent,
+            tokenize=absent,
+            cache_telemetry=Capability("unknown", "requires generation"),
+            per_request_timing=Capability("unknown", "requires generation"),
+            cache_reset=absent,
+            cache_salt=absent,
+        ).to_dict()
+        self.assertEqual(result["readiness"]["status"], "blocked")
+        warm = next(
+            mode for mode in result["experiment_modes"] if mode["mode"] == "warm-cache"
+        )
+        self.assertFalse(warm["supported"])
+
+    def test_http_200_without_rendered_token_ids_is_unknown(self) -> None:
+        original = _DoctorHandler.do_POST
+
+        def incomplete(handler: _DoctorHandler) -> None:
+            length = int(handler.headers.get("Content-Length", "0"))
+            json.loads(handler.rfile.read(length) or b"{}")
+            handler._json({"token_ids": []})
+
+        _DoctorHandler.do_POST = incomplete
+        try:
+            base = f"http://127.0.0.1:{self.server.server_port}"
+            result = discover_vllm_capabilities(base).to_dict()
+        finally:
+            _DoctorHandler.do_POST = original
+        self.assertEqual(result["chat_completions_render"]["status"], "unknown")
+        self.assertIn(
+            "without integer token IDs",
+            result["chat_completions_render"]["evidence"],
+        )
+
+    def test_advertised_render_without_model_id_remains_unknown(self) -> None:
+        capability = _render_capability(
+            Capability("supported", "advertised"),
+            base_url="https://private.example",
+            path="/v1/chat/completions/render",
+            payload=None,
+            api_key=None,
+            timeout_seconds=0.1,
+        )
+        self.assertEqual(capability.status, "unknown")
+        self.assertIn("no model ID", capability.evidence)
+
+    def test_render_authentication_failure_has_specific_remediation(self) -> None:
+        original = _DoctorHandler.do_POST
+
+        def unauthorized(handler: _DoctorHandler) -> None:
+            length = int(handler.headers.get("Content-Length", "0"))
+            handler.rfile.read(length)
+            handler.send_error(401)
+
+        _DoctorHandler.do_POST = unauthorized
+        try:
+            base = f"http://127.0.0.1:{self.server.server_port}"
+            result = discover_vllm_capabilities(base).to_dict()
+        finally:
+            _DoctorHandler.do_POST = original
+        capability = result["chat_completions_render"]
+        self.assertEqual(capability["status"], "unknown")
+        self.assertIn("--api-key-env", capability["next_action"])
+
+    def test_render_probe_timeout_is_not_mislabeled_as_connection(self) -> None:
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=urllib.error.URLError(TimeoutError("slow")),
+        ):
+            with self.assertRaises(BackendProbeError) as caught:
+                _post_probe(
+                    "https://private.example",
+                    "/v1/chat/completions/render",
+                    {"model": "example/model", "messages": []},
+                    api_key=None,
+                    timeout_seconds=0.1,
+                )
+        self.assertEqual(caught.exception.category, "timeout")
+
+    def test_sensitive_or_ambiguous_url_components_are_rejected(self) -> None:
+        cases = (
+            "https://user:password@private.example",
+            "https://private.example?token=secret",
+            "https://private.example#fragment",
+        )
+        for url in cases:
+            with self.subTest(url=url):
+                with self.assertRaises(BackendProbeError) as caught:
+                    discover_vllm_capabilities(url)
+                self.assertEqual(caught.exception.category, "configuration")
+                self.assertNotIn("private.example", str(caught.exception))
+                self.assertNotIn("secret", str(caught.exception))
