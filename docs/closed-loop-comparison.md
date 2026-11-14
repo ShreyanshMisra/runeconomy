@@ -5,6 +5,10 @@ process receives one task and owns its complete workflow state, so later agent
 steps can consume earlier model outputs, tool results, retrieved documents, and
 files exactly as the agent normally implements them.
 
+This is distinct from `runeconomy experiment`, which replays static request
+manifests directly against vLLM. `compare` includes agent process and tool time,
+variant-local state, task evaluation, and imported workflow telemetry.
+
 ```bash
 runeconomy compare \
   --baseline "python agent_v1.py" \
@@ -21,6 +25,23 @@ This command executes local code. Review the agent and evaluator commands
 before running them. RunEconomy does not invoke a shell: command strings are
 split into argument arrays, so pipes, redirects, substitutions, and shell
 built-ins are not interpreted.
+
+## Experiment stages
+
+- A **compatibility trial** checks whether an agent can satisfy the process,
+  status, trace, dependency, identity, and evaluator contract. It is not a
+  benchmark.
+- A **calibration workload** is available for prompt, agent, evaluator, and
+  infrastructure development. It cannot later become held-out evidence.
+- A **frozen held-out proof** fixes code, workload, evaluator, gates, order,
+  environment, and sample size before one execution. Once observed, that
+  workload cannot be reused as fresh held-out evidence.
+
+The current frozen 40-task proof returned `invalid`. Cache reuse, TTFT, and
+successful-pair latency were favorable conditional observations, but the
+baseline absolute-success lower bound and paired task-success non-inferiority
+bound failed their predeclared gates. It is not a verified improvement and
+must not be presented as one.
 
 ## Dataset
 

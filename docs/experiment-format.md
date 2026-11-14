@@ -1,5 +1,11 @@
 # Experiment manifest and vLLM runner
 
+This document describes **static request experiments** run with
+`runeconomy experiment`. A manifest contains complete baseline and candidate
+requests and replays them directly against vLLM. It does not execute an agent,
+carry generated state into a later agent step, or include live tool time. Use
+[`runeconomy compare`](closed-loop-comparison.md) for complete agent processes.
+
 The `0.1`, `0.2`, and `0.3` experiment formats define a paired
 baseline/candidate replay against one vLLM backend. Versions `0.1` and `0.2`
 remain readable for legacy manifests; new experiments should use `0.3`, which
@@ -225,7 +231,10 @@ an acceptance gate.
 When `cases_form_workflow` is enabled, the decision uses aggregate workflow
 metrics. The current aggregation assumes sequential inference steps and
 excludes tool runtime. It is a fixture-backed replay claim, not a measurement
-of live tool execution.
+of live tool execution. Calling these cases a workflow does not make this a
+closed-loop agent replay: candidate step 2 cannot consume candidate step 1's
+newly generated output unless that state was already materialized in the
+manifest.
 
 Render a shareable Markdown report from a raw result:
 
