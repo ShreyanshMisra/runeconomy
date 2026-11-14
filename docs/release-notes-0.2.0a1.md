@@ -18,6 +18,9 @@ Highlights:
   successful-task latency improved, but RunEconomy returned `invalid` because
   the frozen task-quality gates failed.
 
+The canonical result and its claim boundary are documented in the
+[public proof case study](public-proof.md).
+
 This alpha does not include a hosted dashboard, OTLP collector, automatic
 resume, framework-specific SDK, or broad diagnosis expansion. Raw comparison
 artifacts may contain sensitive task and process data and should remain private

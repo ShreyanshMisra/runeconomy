@@ -88,6 +88,8 @@ class ReportTests(unittest.TestCase):
         self.assertIn("Conditional observations only", rendered)
         self.assertIn("not a positive benchmark claim", rendered)
         self.assertIn("36 task pairs where both variants succeeded", rendered)
+        self.assertIn("Intervention tested", rendered)
+        self.assertIn("Decision gates, in order", rendered)
         self.assertIn("No remote scripts", rendered)
         self.assertIn("background: #fff", rendered)
         self.assertNotIn("radial-gradient", rendered)

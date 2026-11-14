@@ -3,6 +3,6 @@
 from .analysis import analyze_trace
 from .models import Trace, TraceValidationError
 
-__version__ = "0.2.0a1"
+__version__ = "0.2.0a2"
 
 __all__ = ["Trace", "TraceValidationError", "__version__", "analyze_trace"]
