@@ -8,7 +8,12 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from runeconomy.comparison import _summarize, _workdir_identity, run_comparison
+from runeconomy.comparison import (
+    _decision,
+    _summarize,
+    _workdir_identity,
+    run_comparison,
+)
 
 
 AGENT = r'''
@@ -348,6 +353,51 @@ class ComparisonTests(unittest.TestCase):
             evidence = summary["variants"][variant]["trace_evidence"]
             self.assertTrue(evidence["environment_identity_stable"])
             self.assertEqual(len(evidence["environment_identity_signatures"]), 1)
+
+    def test_clear_successful_workflow_slowdown_is_a_regression(self) -> None:
+        trace_evidence = {
+            "complete_dag_rate": 1.0,
+            "environment_identity_complete": True,
+            "environment_identity_stable": True,
+        }
+        variant = {
+            "task_success_95_ci": [0.9, 1.0],
+            "task_success_rate": 1.0,
+            "completed_rate": 1.0,
+            "evaluated_count": 40,
+            "status_counts": {"completed": 40},
+            "trace_evidence": trace_evidence,
+        }
+        summary = {
+            "variants": {"baseline": variant, "candidate": variant},
+            "effects": {
+                "task_success": {
+                    "one_sided_lower_bound": -0.05,
+                    "paired_count": 40,
+                },
+                "workflow_latency_ms": {
+                    "paired_count": 40,
+                    "candidate_minus_baseline_mean": 15.0,
+                    "confidence_interval": [5.0, 25.0],
+                },
+            },
+        }
+        decision = _decision(
+            summary,
+            max_task_success_regression=0.1,
+            min_task_success_rate=0.8,
+            min_completed_rate=1.0,
+        )
+
+        self.assertEqual(decision["status"], "regression")
+        self.assertIn("successful tasks were slower", decision["reason"])
+        guardrail = next(
+            check
+            for check in decision["checks"]
+            if check["name"]
+            == "successful_task_workflow_latency_non_regression"
+        )
+        self.assertFalse(guardrail["passed"])
 
     def test_identity_drift_within_a_variant_invalidates_comparison(self) -> None:
         with TemporaryDirectory() as raw_directory:

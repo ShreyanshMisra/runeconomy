@@ -163,7 +163,9 @@ Verdicts are:
 
 - `verified`: successful-task latency improved and task success was
   non-inferior.
-- `regression`: candidate completion or task quality failed a guardrail.
+- `regression`: candidate completion or task quality failed a guardrail, or
+  the paired workflow-latency interval establishes that successful tasks are
+  slower.
 - `inconclusive`: quality passed but uncertainty did not establish both
   non-inferiority and a latency improvement.
 - `invalid`: baseline execution, trace evidence, or evaluator evidence could

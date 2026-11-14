@@ -936,6 +936,7 @@ def _decision(
     )
     latency_ci = latency["confidence_interval"]
     faster = bool(latency_ci and latency_ci[1] < 0)
+    slower = bool(latency_ci and latency_ci[0] > 0)
     baseline_trace_evidence = baseline["trace_evidence"]
     candidate_trace_evidence = candidate["trace_evidence"]
     trace_evidence_valid = all(
@@ -993,6 +994,12 @@ def _decision(
             "observed": latency,
             "threshold": "upper bound of paired 95% Student-t interval < 0",
         },
+        {
+            "name": "successful_task_workflow_latency_non_regression",
+            "passed": not slower,
+            "observed": latency,
+            "threshold": "lower bound of paired 95% Student-t interval <= 0",
+        },
     ]
     baseline_eval = baseline["evaluated_count"] > 0
     candidate_eval = candidate["evaluated_count"] > 0
@@ -1041,6 +1048,9 @@ def _decision(
     elif faster:
         status = "verified"
         reason = "task success was non-inferior and successful tasks were faster"
+    elif slower:
+        status = "regression"
+        reason = "task success passed but successful tasks were slower"
     else:
         status = "inconclusive"
         reason = "quality passed but successful-task latency improvement was not established"
