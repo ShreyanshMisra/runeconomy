@@ -135,6 +135,7 @@ class RequestMetrics:
     decode_ms: float | None = None
     cost_usd: float | None = None
     gpu_time_ms: float | None = None
+    client_ttft_ms: float | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], path: str) -> "RequestMetrics":
@@ -152,6 +153,9 @@ class RequestMetrics:
         return cls(
             **integer_fields,
             ttft_ms=_optional_number(data.get("ttft_ms"), f"{path}.ttft_ms"),
+            client_ttft_ms=_optional_number(
+                data.get("client_ttft_ms"), f"{path}.client_ttft_ms"
+            ),
             queue_ms=_optional_number(data.get("queue_ms"), f"{path}.queue_ms"),
             total_latency_ms=_optional_number(
                 data.get("total_latency_ms"), f"{path}.total_latency_ms"

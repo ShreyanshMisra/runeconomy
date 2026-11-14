@@ -1,0 +1,58 @@
+{
+  "tasks": [
+    {
+      "task_id": "heldout-critical-path",
+      "question": "Which Python function has the docstring phrase 'Return the longest duration-weighted path through an execution DAG'?",
+      "candidate_paths": [
+        "src/runeconomy/critical_path.py",
+        "src/runeconomy/privacy.py",
+        "src/runeconomy/evaluators.py"
+      ]
+    },
+    {
+      "task_id": "heldout-backend-discovery",
+      "question": "Which Python function has the docstring phrase 'Inspect public metadata endpoints; never generate text or clear caches'?",
+      "candidate_paths": [
+        "src/runeconomy/backends.py",
+        "src/runeconomy/reports.py",
+        "src/runeconomy/cache.py"
+      ]
+    },
+    {
+      "task_id": "heldout-openinference-import",
+      "question": "Which Python function has the docstring phrase 'Normalize one OpenInference/OpenTelemetry trace from OTLP JSON'?",
+      "candidate_paths": [
+        "src/runeconomy/importers.py",
+        "src/runeconomy/cache.py",
+        "src/runeconomy/evaluators.py"
+      ]
+    },
+    {
+      "task_id": "heldout-export-safety",
+      "question": "Which Python function calls sensitive_export_paths and raises when findings are present?",
+      "candidate_paths": [
+        "src/runeconomy/privacy.py",
+        "src/runeconomy/reports.py",
+        "src/runeconomy/critical_path.py"
+      ]
+    },
+    {
+      "task_id": "heldout-closed-loop",
+      "question": "Which Python function has the docstring phrase 'Execute and compare two real agent commands on paired tasks'?",
+      "candidate_paths": [
+        "src/runeconomy/comparison.py",
+        "src/runeconomy/privacy.py",
+        "src/runeconomy/cache.py"
+      ]
+    },
+    {
+      "task_id": "heldout-experiment-init",
+      "question": "Which Python function has the docstring phrase 'Return a validated manifest or an explicitly unresolved skeleton'?",
+      "candidate_paths": [
+        "src/runeconomy/experiment_init.py",
+        "src/runeconomy/reports.py",
+        "src/runeconomy/critical_path.py"
+      ]
+    }
+  ]
+}

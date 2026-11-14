@@ -256,7 +256,8 @@ def import_vllm_jsonl(
                 "input_tokens": len(token_ids),
                 "output_tokens": capture.get("output_tokens"),
                 "cached_input_tokens": capture.get("cached_tokens"),
-                "ttft_ms": capture.get("server_ttft_ms", capture.get("client_ttft_ms")),
+                "ttft_ms": capture.get("server_ttft_ms"),
+                "client_ttft_ms": capture.get("client_ttft_ms"),
                 "queue_ms": capture.get("server_queue_ms"),
                 "total_latency_ms": total_latency,
             },
@@ -602,6 +603,9 @@ def import_openinference(
                     ),
                     "ttft_ms": _float(
                         _first(attributes, "llm.time_to_first_token_ms", "gen_ai.ttft_ms")
+                    ),
+                    "client_ttft_ms": _float(
+                        attributes.get("runeconomy.client_ttft_ms")
                     ),
                     "queue_ms": _float(
                         _first(attributes, "llm.queue_time_ms", "gen_ai.queue_time_ms")

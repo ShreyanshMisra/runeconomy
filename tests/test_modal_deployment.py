@@ -42,6 +42,12 @@ class ModalDeploymentTests(unittest.TestCase):
             "unauthenticated=True", source.replace("``unauthenticated=True``", "")
         )
 
+    def test_modal_images_include_the_runeconomy_package(self) -> None:
+        source = (Path(__file__).parents[1] / "deploy" / "modal_vllm.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(source.count('.add_local_python_source("runeconomy")'), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

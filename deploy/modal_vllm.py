@@ -51,6 +51,7 @@ download_image = (
     modal.Image.debian_slim(python_version="3.12")
     .uv_pip_install(f"huggingface_hub[hf_xet]=={HUGGINGFACE_HUB_VERSION}")
     .env({"HF_XET_HIGH_PERFORMANCE": "1"})
+    .add_local_python_source("runeconomy")
 )
 
 vllm_image = (
@@ -72,6 +73,7 @@ vllm_image = (
             "TOKENIZERS_PARALLELISM": "false",
         }
     )
+    .add_local_python_source("runeconomy")
 )
 
 

@@ -56,6 +56,7 @@ treated as sensitive data.
         "output_tokens": 1,
         "cached_input_tokens": 0,
         "ttft_ms": 12.3,
+        "client_ttft_ms": 18.7,
         "queue_ms": null,
         "prefill_ms": null,
         "decode_ms": null,
@@ -77,6 +78,10 @@ Analysis reports expose per-request `token_evidence_quality`,
 `attribution_qualities`, and `prefix_analysis_supported`, plus summary counts by
 token-evidence quality, so unsupported prefix analysis is visible rather than
 silently reported as a zero-length match.
+
+`ttft_ms` is the server-reported time to first token. `client_ttft_ms` is the
+driver-observed time to the first non-empty output delta. Either may be null;
+their difference is meaningful only when both refer to the same request.
 
 Attribution quality is explicit:
 

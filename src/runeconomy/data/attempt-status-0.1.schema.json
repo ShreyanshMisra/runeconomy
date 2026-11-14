@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://runeconomy.dev/schemas/attempt-status-0.1.json",
+  "title": "RunEconomy attempt status 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "status": {
+      "enum": [
+        "completed",
+        "task_failure",
+        "model_output_failure",
+        "application_failure",
+        "infrastructure_failure",
+        "timeout"
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component", "stage", "code"],
+      "properties": {
+        "component": {
+          "enum": ["agent", "application", "infrastructure", "model_output", "tool"]
+        },
+        "stage": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "completed"}}},
+      "then": {"not": {"required": ["provenance"]}},
+      "else": {"required": ["provenance"]}
+    }
+  ]
+}
