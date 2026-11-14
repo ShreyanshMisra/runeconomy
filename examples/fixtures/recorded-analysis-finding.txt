@@ -1,0 +1,11 @@
+@dataclass(frozen=True)
+class Finding:
+    rule_id: str
+    request_id: str
+    title: str
+    evidence_level: str
+    confidence: str
+    summary: str
+    suggested_experiment: str
+    supporting_metrics: dict[str, Any]
+    on_critical_path: bool | None
