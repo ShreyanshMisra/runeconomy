@@ -16,6 +16,14 @@ def _percent(value: Any, digits: int = 1) -> str:
     return "unknown" if value is None else f"{float(value) * 100:.{digits}f}%"
 
 
+def _percentage_points(value: Any, digits: int = 1) -> str:
+    return (
+        "unknown"
+        if value is None
+        else f"{float(value) * 100:.{digits}f} percentage points"
+    )
+
+
 def _interval(effect: Mapping[str, Any], digits: int = 1) -> str:
     interval = effect.get("bootstrap_95_ci")
     if not isinstance(interval, list) or len(interval) != 2:
@@ -410,6 +418,8 @@ def _render_public_proof_html(result: Mapping[str, Any]) -> str:
     failures = result.get("failure_categories", {})
     claim = result.get("claim_boundary", {})
     paired_success = result.get("paired_success", {})
+    intervention = result.get("intervention", {})
+    limitations = result.get("limitations", [])
     if decision.get("status") != "invalid":
         raise ValueError("the flagship public proof must retain an invalid verdict")
 
@@ -467,6 +477,17 @@ def _render_public_proof_html(result: Mapping[str, Any]) -> str:
         f"<li>{html.escape(str(item))}</li>"
         for item in claim.get("not_supported", [])
     )
+    gate_order = "".join(
+        "<li>"
+        f"<code>{html.escape(str(item.get('stage', 'unknown')))}</code> — "
+        f"{html.escape(str(item.get('observed_result', 'unknown')))}"
+        f"{' <strong>(decisive)</strong>' if item.get('decisive') else ''}"
+        "</li>"
+        for item in decision.get("gating_order", [])
+    )
+    limitation_items = "".join(
+        f"<li>{html.escape(str(item))}</li>" for item in limitations
+    )
     hash_rows = "".join(
         "<tr>"
         f"<th>{html.escape(str(name).replace('_', ' ').title())}</th>"
@@ -476,6 +497,8 @@ def _render_public_proof_html(result: Mapping[str, Any]) -> str:
     )
     paired_interval = paired_success.get("confidence_interval") or [None, None]
     lower_bound = paired_success.get("one_sided_lower_bound")
+    acceptance = gates.get("predeclared", {})
+    noninferiority_margin = acceptance.get("max_task_success_regression")
 
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -508,12 +531,25 @@ footer {{ border-top: 1px solid #999; margin-top: 30px; padding-top: 10px; color
 <p>Failed predeclared gates: {failed_names or "unknown"}.</p>
 </section>
 
+<h2>Intervention tested</h2>
+<table><tbody>
+<tr><th>Baseline</th><td>{html.escape(str(intervention.get('baseline', 'unknown')))}.</td></tr>
+<tr><th>Candidate</th><td>{html.escape(str(intervention.get('candidate', 'unknown')))}.</td></tr>
+<tr><th>Changed property</th><td>{html.escape(str(intervention.get('changed_property', 'unknown')))}.</td></tr>
+<tr><th>Held constant</th><td>{html.escape(str(intervention.get('held_constant', 'unknown')))}.</td></tr>
+<tr><th>Expected mechanism</th><td>{html.escape(str(intervention.get('expected_mechanism', 'unknown')))}.</td></tr>
+</tbody></table>
+
 <h2>Task-quality result</h2>
 <table><thead><tr><th>Variant</th><th class="number">Successes</th><th class="number">Success rate</th><th class="number">Exact 95% interval</th><th class="number">Process completion</th></tr></thead><tbody>{''.join(outcome_rows)}</tbody></table>
-<p>The paired candidate-minus-baseline success estimate was {_percent(paired_success.get("candidate_minus_baseline_mean"))}; its 95% interval was {_percent(paired_interval[0], 2)} to {_percent(paired_interval[1], 2)}, and the one-sided lower bound was {_percent(lower_bound, 2)}. The predeclared non-inferiority margin was −10 percentage points.</p>
+<p>The paired candidate-minus-baseline success estimate was {_percentage_points(paired_success.get("candidate_minus_baseline_mean"))}; its 95% interval was {_percentage_points(paired_interval[0], 2)} to {_percentage_points(paired_interval[1], 2)}, and the one-sided lower bound was {_percentage_points(lower_bound, 2)}. The predeclared non-inferiority margin was −{_percentage_points(noninferiority_margin, 2)}.</p>
 
 <h2>Predeclared acceptance checks</h2>
 <table><thead><tr><th>Check</th><th>Threshold</th><th>Result</th></tr></thead><tbody>{''.join(check_rows)}</tbody></table>
+
+<h2>Decision gates, in order</h2>
+<ol>{gate_order}</ol>
+<p><strong>Decisive stage:</strong> <code>{html.escape(str(decision.get('decisive_stage', 'unknown')))}</code>. The baseline validity failure made the verdict <code>invalid</code> before successful-pair latency could verify the candidate. Paired non-inferiority also failed independently.</p>
 
 <section class="conditional">
 <h2>Conditional observations only — not verified improvements</h2>
@@ -534,7 +570,7 @@ footer {{ border-top: 1px solid #999; margin-top: 30px; padding-top: 10px; color
 <tr><th>Order</th><td><code>{html.escape(str(experiment.get('order', 'unknown')))}</code>, seed <code>{html.escape(str(experiment.get('seed', 'unknown')))}</code>.</td></tr>
 <tr><th>Primary outcome</th><td>{html.escape(str(experiment.get('primary_metric', 'unknown')))}.</td></tr>
 <tr><th>Latency population</th><td>{html.escape(str(experiment.get('latency_population', 'unknown')))}.</td></tr>
-<tr><th>Reuse restriction</th><td>This 40-task held-out workload has been consumed. It cannot be rerun or retuned and presented as fresh held-out evidence.</td></tr>
+<tr><th>Reuse restriction</th><td>This {experiment.get('task_count', 'unknown')}-task held-out workload has been consumed. It cannot be rerun or retuned and presented as fresh held-out evidence.</td></tr>
 </tbody></table>
 
 <h2>Recorded environment</h2>
@@ -556,6 +592,7 @@ footer {{ border-top: 1px solid #999; margin-top: 30px; padding-top: 10px; color
 <h2>Claim boundary</h2>
 <p><strong>Supported:</strong> {html.escape(str(claim.get('supported', 'unknown')))}</p>
 <p><strong>Not supported:</strong></p><ul>{not_supported}</ul>
+<h2>Experiment limitations</h2><ul>{limitation_items}</ul>
 <p class="note">The favorable mechanism and latency measurements are conditional observations. This report is not a positive benchmark claim.</p>
 
 <footer>Generated from a checked-in aggregate-only artifact. No prompts, task answers, model output, stderr, credentials, endpoints, local paths, raw traces, or private workload records are embedded. No remote scripts, fonts, or network resources are used.</footer>

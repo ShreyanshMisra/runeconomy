@@ -1,6 +1,6 @@
 {
   "artifact_kind": "runeconomy.public_proof",
-  "artifact_version": "0.1",
+  "artifact_version": "0.2",
   "claim_boundary": {
     "not_supported": [
       "a verified performance improvement",
@@ -163,9 +163,48 @@
     }
   },
   "decision": {
+    "decisive_stage": "baseline_completion_and_absolute_task_success",
     "failed_quality_gates": [
       "baseline_minimum_task_success",
       "task_success_noninferiority"
+    ],
+    "gating_order": [
+      {
+        "decisive": false,
+        "failure_verdict": "invalid",
+        "observed_result": "passed: 80/80 valid traces and 80/80 complete explicit DAGs",
+        "stage": "evidence_integrity"
+      },
+      {
+        "decisive": true,
+        "failure_verdict": "invalid",
+        "observed_result": "failed: 79.61% lower bound was below 80.00%",
+        "stage": "baseline_completion_and_absolute_task_success"
+      },
+      {
+        "decisive": false,
+        "failure_verdict": "regression",
+        "observed_result": "passed: 83.08% lower bound exceeded 80.00%",
+        "stage": "candidate_completion_and_absolute_task_success"
+      },
+      {
+        "decisive": false,
+        "failure_verdict": "regression",
+        "observed_result": "passed: candidate point estimate 95.00% exceeded baseline 92.50%",
+        "stage": "candidate_point_estimate_task_success_guardrail"
+      },
+      {
+        "decisive": false,
+        "failure_verdict": "inconclusive",
+        "observed_result": "failed independently: -12.55 percentage points was below -10.00 percentage points",
+        "stage": "paired_task_success_noninferiority"
+      },
+      {
+        "decisive": false,
+        "failure_verdict": "regression_or_inconclusive",
+        "observed_result": "conditionally favorable at -62.43 ms but ineligible to verify the change",
+        "stage": "successful_pair_workflow_latency"
+      }
     ],
     "reason": "the baseline did not establish a valid, sufficiently successful workload",
     "status": "invalid"
@@ -198,6 +237,11 @@
       "direct_call": 13,
       "docstring": 13,
       "string_literal": 14
+    },
+    "workflow_structure": {
+      "inference_calls_per_attempt": 2,
+      "real_tool_spans_per_attempt": 1,
+      "tool_kind": "bounded repository search over supplied candidate paths"
     }
   },
   "failure_categories": {
@@ -333,6 +377,22 @@
       "primary_metric": "workflow_latency_ms on paired successful tasks"
     }
   },
+  "intervention": {
+    "baseline": "dynamic run metadata before the static system instructions",
+    "candidate": "the same dynamic run metadata after the static system instructions",
+    "changed_property": "system-message block order",
+    "expected_mechanism": "keep the static instruction prefix stable so the second inference call can reuse more cached prompt tokens",
+    "held_constant": "agent code, static instructions, dynamic metadata content, model, backend, tools, evaluator, tasks, and acceptance gates"
+  },
+  "limitations": [
+    "One pinned model revision, vLLM version, A10 hardware class, and repository-analysis workload were evaluated.",
+    "Execution was sequential and colocated; production concurrency and multi-replica routing were not tested.",
+    "Continuous effects use only the 36 task pairs where both variants succeeded.",
+    "Workflow latency includes process startup and agent execution but excludes evaluator time.",
+    "Prefill, decode, retrieval, cost, and GPU-time effects were unavailable and remain unknown rather than zero.",
+    "The 40-task held-out workload is consumed and cannot be reused as fresh held-out evidence.",
+    "External readers can audit the aggregate arithmetic, gate logic, provenance hashes, and claim boundary, but cannot independently recompute the experiment without the private raw tasks and traces."
+  ],
   "outcomes": {
     "baseline": {
       "attempt_count": 40,

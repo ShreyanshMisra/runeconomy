@@ -19,6 +19,11 @@ workload records. The earlier static request experiment remains available as
 an explicitly selected historical case. Treat both as narrow, pinned
 evidence—not general benchmarks.
 
+Read the [public proof case study](docs/public-proof.md) or inspect its
+[aggregate machine-readable evidence](src/runeconomy/data/public-proof-rejection.json).
+The case study, JSON artifact, and bundled HTML report are generated from the
+same preserved result and publish no private tasks or model output.
+
 The project focuses on critical-path workflow experiments rather than trying to
 replace prompt-cache collectors or general observability systems. It consumes
 normalized evidence from those layers and tests application or serving
@@ -52,11 +57,12 @@ Install RunEconomy from PyPI:
 pip install runeconomy
 ```
 
-The `0.2.0a1` prerelease is intended for invited testers. After it is
-published, install that exact alpha with:
+The published `0.2.0a1` prerelease is intended for invited testers. Install
+that exact alpha with:
 
 ```bash
 pip install --pre runeconomy==0.2.0a1
+runeconomy demo --open
 ```
 
 RunEconomy requires Python 3.11 or newer. Trace analysis and the bundled demo
@@ -64,9 +70,11 @@ run locally without a GPU or network connection.
 
 ## Run the flagship rejection demo
 
-The default demo shows a real candidate that improved cache reuse, TTFT, and
-measured successful-pair latency, but was rejected because the predeclared
-task-quality gates failed. It makes no network or GPU calls.
+The baseline placed dynamic run metadata before static system instructions.
+The candidate moved the same metadata after those instructions, preserving a
+longer reusable prefix. It improved cache reuse, TTFT, and measured
+successful-pair latency, but was rejected because the predeclared task-quality
+gates failed. The demo makes no network or GPU calls.
 
 ```bash
 runeconomy demo --open

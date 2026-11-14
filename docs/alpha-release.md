@@ -5,7 +5,7 @@ general benchmark suite. RunEconomy remains a local CLI and Python package.
 
 ## Install the prerelease
 
-After the alpha is published:
+Install the published alpha:
 
 ```bash
 python -m pip install --pre runeconomy==0.2.0a1
@@ -15,6 +15,8 @@ runeconomy demo --open
 
 The default demo is the aggregate-only frozen rejection proof. Use
 `runeconomy demo --case historical` to render the earlier static-request case.
+The [public proof case study](public-proof.md) documents the intervention,
+gating order, evidence, limitations, and frozen hashes.
 
 ## What is included
 
