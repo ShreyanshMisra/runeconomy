@@ -12,9 +12,12 @@ missed their predeclared gates. RunEconomy therefore declined to verify the
 change. The 40-task workload has been consumed and cannot be rerun or retuned
 as fresh held-out evidence.
 
-The bundled CPU-only demo currently remains a separate, historical static
-request experiment. It is intentionally `inconclusive` after methodology
-review. Treat both results as narrow, pinned evidence—not general benchmarks.
+The default CPU-only demo is this quality-gated rejection. It is generated
+from a checked-in, aggregate-only artifact and contains no prompts, task
+answers, generated output, raw traces, endpoints, credentials, or private
+workload records. The earlier static request experiment remains available as
+an explicitly selected historical case. Treat both as narrow, pinned
+evidence—not general benchmarks.
 
 The project focuses on critical-path workflow experiments rather than trying to
 replace prompt-cache collectors or general observability systems. It consumes
@@ -49,21 +52,39 @@ Install RunEconomy from PyPI:
 pip install runeconomy
 ```
 
+The `0.2.0a1` prerelease is intended for invited testers. After it is
+published, install that exact alpha with:
+
+```bash
+pip install --pre runeconomy==0.2.0a1
+```
+
 RunEconomy requires Python 3.11 or newer. Trace analysis and the bundled demo
 run locally without a GPU or network connection.
 
-## Run the CPU-only demo
+## Run the flagship rejection demo
 
-The bundled demo uses sanitized aggregate evidence from the measured repository-agent experiment. It makes no network or GPU calls.
+The default demo shows a real candidate that improved cache reuse, TTFT, and
+measured successful-pair latency, but was rejected because the predeclared
+task-quality gates failed. It makes no network or GPU calls.
 
 ```bash
 runeconomy demo --open
 ```
 
-This writes `runeconomy-demo.html`, a self-contained NegativeSplit report with
-the diagnosis, baseline/candidate comparison, continuous-metric and exact
-task-success intervals, quality gates, provenance, and claim boundary.
-Generated output and raw trials are not embedded.
+This writes `runeconomy-demo.html`, a self-contained NegativeSplit report. The
+`invalid` verdict and failed quality gates are visually dominant. Favorable
+mechanism and latency effects are labelled conditional because latency uses
+only the 36 task pairs where both variants succeeded.
+
+The earlier static-request demo is retained for compatibility:
+
+```bash
+runeconomy demo --case historical --open
+```
+
+See the [alpha guide and migration notes](docs/alpha-release.md) for the
+complete feature and privacy boundary.
 
 ## Check a vLLM deployment
 

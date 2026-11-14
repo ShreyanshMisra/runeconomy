@@ -159,6 +159,12 @@ def _build_parser() -> argparse.ArgumentParser:
     demo = subparsers.add_parser(
         "demo", help="render the bundled CPU-only NegativeSplit demonstration"
     )
+    demo.add_argument(
+        "--case",
+        choices=("rejection", "historical"),
+        default="rejection",
+        help="bundled case to render (default: quality-gated rejection)",
+    )
     demo.add_argument("--output", type=Path, default=Path("runeconomy-demo.html"))
     demo.add_argument("--open", action="store_true", help="open the report in a browser")
 
@@ -430,7 +436,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "demo":
-            rendered = render_demo_html(load_demo_result())
+            rendered = render_demo_html(load_demo_result(args.case))
             args.output.write_text(rendered, encoding="utf-8")
             print(f"wrote RunEconomy demo to {args.output}")
             if args.open:

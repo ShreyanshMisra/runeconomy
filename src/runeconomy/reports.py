@@ -202,10 +202,18 @@ def render_experiment_markdown(result: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def load_demo_result() -> dict[str, Any]:
-    """Load the bundled, sanitized measured result used by the CPU-only demo."""
+def load_demo_result(case: str = "rejection") -> dict[str, Any]:
+    """Load one bundled, sanitized result used by the CPU-only demo."""
 
-    resource = files("runeconomy").joinpath("data/repository-agent-tool-pruning.json")
+    resources = {
+        "rejection": "public-proof-rejection.json",
+        "historical": "repository-agent-tool-pruning.json",
+    }
+    try:
+        name = resources[case]
+    except KeyError as exc:
+        raise ValueError(f"unknown demo case: {case}") from exc
+    resource = files("runeconomy").joinpath(f"data/{name}")
     payload = json.loads(resource.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("bundled demo result must be a JSON object")
@@ -386,7 +394,183 @@ code {{ font: 12px ui-monospace, monospace; overflow-wrap: anywhere; }}
 </main></body></html>"""
 
 
+def _render_public_proof_html(result: Mapping[str, Any]) -> str:
+    """Render the aggregate-only, quality-gated public proof."""
+
+    if result.get("artifact_kind") != "runeconomy.public_proof":
+        raise ValueError("result is not a RunEconomy public-proof artifact")
+    decision = result.get("decision", {})
+    experiment = result.get("experiment", {})
+    outcomes = result.get("outcomes", {})
+    effects = result.get("conditional_effects", {})
+    gates = result.get("gates", {})
+    provenance = result.get("provenance", {})
+    hashes = result.get("frozen_hashes", {})
+    evidence = result.get("evidence_integrity", {})
+    failures = result.get("failure_categories", {})
+    claim = result.get("claim_boundary", {})
+    paired_success = result.get("paired_success", {})
+    if decision.get("status") != "invalid":
+        raise ValueError("the flagship public proof must retain an invalid verdict")
+
+    def effect_row(key: str, label: str) -> str:
+        item = effects.get(key, {})
+        interval = item.get("confidence_interval")
+        interval_text = (
+            f"[{_number(interval[0], 2)}, {_number(interval[1], 2)}]"
+            if isinstance(interval, list) and len(interval) == 2
+            else "unavailable"
+        )
+        return (
+            "<tr>"
+            f"<td>{html.escape(label)}</td>"
+            f'<td class="number">{html.escape(_number(item.get("candidate_minus_baseline_mean"), 2))}</td>'
+            f'<td class="number">{html.escape(interval_text)}</td>'
+            f'<td class="number">{html.escape(str(item.get("paired_count", 0)))}</td>'
+            "</tr>"
+        )
+
+    outcome_rows = []
+    for variant in ("baseline", "candidate"):
+        item = outcomes.get(variant, {})
+        interval = item.get("task_success_95_ci") or [None, None]
+        outcome_rows.append(
+            "<tr>"
+            f"<td>{variant.title()}</td>"
+            f'<td class="number">{item.get("task_success_count", "unknown")} / {item.get("attempt_count", "unknown")}</td>'
+            f'<td class="number">{html.escape(_percent(item.get("task_success_rate")))}</td>'
+            f'<td class="number">{html.escape(_percent(interval[0], 2))}–{html.escape(_percent(interval[1], 2))}</td>'
+            f'<td class="number">{html.escape(_percent(item.get("completed_rate")))}</td>'
+            "</tr>"
+        )
+
+    check_rows = []
+    for item in gates.get("checks", []):
+        passed = bool(item.get("passed"))
+        check_rows.append(
+            "<tr>"
+            f"<td><code>{html.escape(str(item.get('name', 'unknown')))}</code></td>"
+            f"<td>{html.escape(str(item.get('threshold', 'unknown')))}</td>"
+            f'<td class="{"met" if passed else "failed"}">{"MET" if passed else "FAILED"}</td>'
+            "</tr>"
+        )
+
+    family_text = ", ".join(
+        f"{html.escape(str(name))}: {count}"
+        for name, count in experiment.get("task_family_counts", {}).items()
+    )
+    failed_names = ", ".join(
+        f"<code>{html.escape(str(name))}</code>"
+        for name in decision.get("failed_quality_gates", [])
+    )
+    not_supported = "".join(
+        f"<li>{html.escape(str(item))}</li>"
+        for item in claim.get("not_supported", [])
+    )
+    hash_rows = "".join(
+        "<tr>"
+        f"<th>{html.escape(str(name).replace('_', ' ').title())}</th>"
+        f"<td><code>{html.escape(str(value))}</code></td>"
+        "</tr>"
+        for name, value in hashes.items()
+    )
+    paired_interval = paired_success.get("confidence_interval") or [None, None]
+    lower_bound = paired_success.get("one_sided_lower_bound")
+
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RunEconomy NegativeSplit — rejected candidate</title>
+<style>
+* {{ box-sizing: border-box; }}
+body {{ margin: 0; background: #fff; color: #111; font: 14px/1.45 Arial, Helvetica, sans-serif; }}
+main {{ width: min(980px, calc(100% - 32px)); margin: 32px auto 64px; }}
+header {{ border-bottom: 3px solid #111; padding-bottom: 14px; }}
+h1 {{ margin: 0 0 5px; font: 700 26px/1.2 Georgia, "Times New Roman", serif; }}
+h2 {{ margin: 28px 0 8px; font: 700 18px/1.25 Georgia, "Times New Roman", serif; }}
+.verdict {{ border: 3px double #111; margin: 22px 0; padding: 14px; }}
+.verdict h2 {{ margin: 0 0 8px; font-size: 22px; }}
+.failed {{ font-weight: 700; text-decoration: underline; }}
+.met {{ font-weight: 700; }}
+.conditional {{ border-left: 5px solid #777; padding-left: 12px; }}
+.note {{ color: #333; }}
+table {{ width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-variant-numeric: tabular-nums; }}
+th, td {{ border: 1px solid #999; padding: 7px 8px; text-align: left; vertical-align: top; }}
+th {{ background: #eee; }} td.number, th.number {{ text-align: right; white-space: nowrap; }}
+code {{ font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }}
+footer {{ border-top: 1px solid #999; margin-top: 30px; padding-top: 10px; color: #555; font-size: 12px; }}
+@media(max-width:700px) {{ body {{ font-size: 13px; }} th,td {{ padding: 5px; }} main {{ width:calc(100% - 20px); }} }}
+</style></head><body><main>
+<header><h1>RunEconomy NegativeSplit</h1><div>Frozen real-agent held-out proof · aggregate-only public artifact</div></header>
+
+<section class="verdict">
+<h2>INVALID — quality gates failed</h2>
+<p><strong>RunEconomy declined to verify this candidate.</strong> {html.escape(str(decision.get("reason", "No reason recorded.")))}.</p>
+<p>Failed predeclared gates: {failed_names or "unknown"}.</p>
+</section>
+
+<h2>Task-quality result</h2>
+<table><thead><tr><th>Variant</th><th class="number">Successes</th><th class="number">Success rate</th><th class="number">Exact 95% interval</th><th class="number">Process completion</th></tr></thead><tbody>{''.join(outcome_rows)}</tbody></table>
+<p>The paired candidate-minus-baseline success estimate was {_percent(paired_success.get("candidate_minus_baseline_mean"))}; its 95% interval was {_percent(paired_interval[0], 2)} to {_percent(paired_interval[1], 2)}, and the one-sided lower bound was {_percent(lower_bound, 2)}. The predeclared non-inferiority margin was −10 percentage points.</p>
+
+<h2>Predeclared acceptance checks</h2>
+<table><thead><tr><th>Check</th><th>Threshold</th><th>Result</th></tr></thead><tbody>{''.join(check_rows)}</tbody></table>
+
+<section class="conditional">
+<h2>Conditional observations only — not verified improvements</h2>
+<p>The candidate increased cache reuse and reduced TTFT and measured successful-task latency in this run. These paired effects use only the {effects.get('workflow_latency_ms', {}).get('paired_count', 'unknown')} task pairs where both variants succeeded. Failures did not enter the latency sample, and the failed quality gates prevent a verified performance claim.</p>
+<table><thead><tr><th>Candidate − baseline metric</th><th class="number">Mean effect</th><th class="number">Paired 95% interval</th><th class="number">Pairs</th></tr></thead><tbody>
+{effect_row('cached_input_tokens', 'Cached input tokens')}
+{effect_row('server_ttft_ms', 'Server TTFT (ms)')}
+{effect_row('client_ttft_ms', 'Client TTFT (ms)')}
+{effect_row('workflow_latency_ms', 'End-to-end workflow latency (ms)')}
+{effect_row('critical_path_ms', 'Critical-path latency (ms)')}
+{effect_row('inference_span_ms', 'Inference-span latency (ms)')}
+</tbody></table>
+</section>
+
+<h2>Frozen experiment design</h2>
+<table><tbody>
+<tr><th>Workload</th><td>{experiment.get('task_count', 'unknown')} frozen held-out tasks; {family_text or 'family counts unavailable'}.</td></tr>
+<tr><th>Order</th><td><code>{html.escape(str(experiment.get('order', 'unknown')))}</code>, seed <code>{html.escape(str(experiment.get('seed', 'unknown')))}</code>.</td></tr>
+<tr><th>Primary outcome</th><td>{html.escape(str(experiment.get('primary_metric', 'unknown')))}.</td></tr>
+<tr><th>Latency population</th><td>{html.escape(str(experiment.get('latency_population', 'unknown')))}.</td></tr>
+<tr><th>Reuse restriction</th><td>This 40-task held-out workload has been consumed. It cannot be rerun or retuned and presented as fresh held-out evidence.</td></tr>
+</tbody></table>
+
+<h2>Recorded environment</h2>
+<table><tbody>
+<tr><th>Model</th><td><code>{html.escape(str(provenance.get('model', 'unknown')))}</code></td></tr>
+<tr><th>Model revision</th><td><code>{html.escape(str(provenance.get('model_revision', 'unknown')))}</code></td></tr>
+<tr><th>Backend</th><td><code>{html.escape(str(provenance.get('backend', 'unknown')))} {html.escape(str(provenance.get('backend_version', 'unknown')))}</code></td></tr>
+<tr><th>API dialect</th><td><code>{html.escape(str(provenance.get('api_dialect', 'unknown')))}</code></td></tr>
+<tr><th>Hardware</th><td>{html.escape(str(provenance.get('hardware', 'unknown')))}</td></tr>
+<tr><th>Chat-template digest</th><td><code>{html.escape(str(provenance.get('chat_template_digest', 'unknown')))}</code></td></tr>
+</tbody></table>
+
+<h2>Evidence integrity</h2>
+<p>{evidence.get('attempt_count', 'unknown')} attempts retained status evidence; {evidence.get('valid_trace_count', 'unknown')} valid traces and {evidence.get('complete_dag_count', 'unknown')} complete explicit DAGs were recorded. Environment identity was complete and stable: {str(bool(evidence.get('environment_identity_complete') and evidence.get('environment_identity_stable'))).lower()}. Raw attempts and generated content are not included.</p>
+<p>High-level failures: {failures.get('task_quality_failure', 'unknown')} task-quality failures; {failures.get('timeout', 'unknown')} timeouts; {failures.get('process_or_infrastructure_failure', 'unknown')} process/infrastructure failures; {failures.get('evaluator_failure', 'unknown')} evaluator failures; {failures.get('invalid_trace', 'unknown')} invalid traces.</p>
+
+<h2>Frozen hashes</h2><table><tbody>{hash_rows}</tbody></table>
+
+<h2>Claim boundary</h2>
+<p><strong>Supported:</strong> {html.escape(str(claim.get('supported', 'unknown')))}</p>
+<p><strong>Not supported:</strong></p><ul>{not_supported}</ul>
+<p class="note">The favorable mechanism and latency measurements are conditional observations. This report is not a positive benchmark claim.</p>
+
+<footer>Generated from a checked-in aggregate-only artifact. No prompts, task answers, model output, stderr, credentials, endpoints, local paths, raw traces, or private workload records are embedded. No remote scripts, fonts, or network resources are used.</footer>
+</main></body></html>"""
+
+
 def render_demo_html(result: Mapping[str, Any]) -> str:
+    """Render either the flagship rejection or the historical static demo."""
+
+    if result.get("artifact_kind") == "runeconomy.public_proof":
+        return _render_public_proof_html(result)
+    return _render_historical_demo_html(result)
+
+
+def _render_historical_demo_html(result: Mapping[str, Any]) -> str:
     """Render the repository-agent demonstration from its bundled evidence."""
 
     if not isinstance(result.get("summary"), dict) or not isinstance(

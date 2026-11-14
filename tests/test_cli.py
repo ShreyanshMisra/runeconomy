@@ -22,7 +22,9 @@ class CLITests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             source = Path(directory) / "result.json"
             output = Path(directory) / "report.html"
-            source.write_text(json.dumps(load_demo_result()), encoding="utf-8")
+            source.write_text(
+                json.dumps(load_demo_result("historical")), encoding="utf-8"
+            )
             self.assertEqual(
                 main(
                     ["negative-split", "report", str(source), "--output", str(output)]
@@ -88,6 +90,24 @@ class CLITests(unittest.TestCase):
                     main(["demo", "--output", str(output), "--open"]), 0
                 )
             opened.assert_called_once_with(output.resolve().as_uri())
+
+    def test_demo_can_render_historical_case_explicitly(self) -> None:
+        with TemporaryDirectory() as directory:
+            output = Path(directory) / "historical.html"
+            self.assertEqual(
+                main(
+                    [
+                        "demo",
+                        "--case",
+                        "historical",
+                        "--output",
+                        str(output),
+                    ]
+                ),
+                0,
+            )
+            rendered = output.read_text(encoding="utf-8")
+            self.assertIn("Runner decision:</strong> inconclusive", rendered)
 
     def test_doctor_json_does_not_echo_base_url_or_api_key(self) -> None:
         capabilities = {

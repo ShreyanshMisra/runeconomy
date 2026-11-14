@@ -1,0 +1,399 @@
+{
+  "artifact_kind": "runeconomy.public_proof",
+  "artifact_version": "0.1",
+  "claim_boundary": {
+    "not_supported": [
+      "a verified performance improvement",
+      "universal model behavior",
+      "production-concurrency performance",
+      "superiority over another tool"
+    ],
+    "supported": "RunEconomy rejected an apparently faster, more cache-efficient candidate because the frozen successful-task quality requirements were not established."
+  },
+  "conditional_effects": {
+    "cached_input_tokens": {
+      "available": true,
+      "candidate_minus_baseline_mean": 105.33333333333333,
+      "confidence_interval": [
+        98.64832920445093,
+        112.01833746221573
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 36
+    },
+    "client_ttft_ms": {
+      "available": true,
+      "candidate_minus_baseline_mean": -9.386063083331761,
+      "confidence_interval": [
+        -12.20627059652196,
+        -6.565855570141561
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 36
+    },
+    "cost_usd": {
+      "available": false,
+      "candidate_minus_baseline_mean": null,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 0
+    },
+    "critical_path_ms": {
+      "available": true,
+      "candidate_minus_baseline_mean": -61.980329111111146,
+      "confidence_interval": [
+        -123.43913622412765,
+        -0.5215219980946486
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 36
+    },
+    "decode_ms": {
+      "available": false,
+      "candidate_minus_baseline_mean": null,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 0
+    },
+    "gpu_time_ms": {
+      "available": false,
+      "candidate_minus_baseline_mean": null,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 0
+    },
+    "inference_span_ms": {
+      "available": true,
+      "candidate_minus_baseline_mean": -61.914126416666704,
+      "confidence_interval": [
+        -123.34561669659847,
+        -0.4826361367349392
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 36
+    },
+    "input_tokens": {
+      "available": true,
+      "candidate_minus_baseline_mean": -3.4444444444444446,
+      "confidence_interval": [
+        -5.311089466616766,
+        -1.5777994222721237
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 36
+    },
+    "output_tokens": {
+      "available": true,
+      "candidate_minus_baseline_mean": -1.5555555555555556,
+      "confidence_interval": [
+        -3.418651444866935,
+        0.30754033375582357
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 36
+    },
+    "prefill_ms": {
+      "available": false,
+      "candidate_minus_baseline_mean": null,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 0
+    },
+    "queue_ms": {
+      "available": true,
+      "candidate_minus_baseline_mean": -0.03981422222053431,
+      "confidence_interval": [
+        -0.33350357732379055,
+        0.2538751328827219
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 36
+    },
+    "retrieval_span_ms": {
+      "available": false,
+      "candidate_minus_baseline_mean": null,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 0
+    },
+    "server_ttft_ms": {
+      "available": true,
+      "candidate_minus_baseline_mean": -9.075384361111697,
+      "confidence_interval": [
+        -11.846462225709175,
+        -6.3043064965142195
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 36
+    },
+    "tool_span_ms": {
+      "available": true,
+      "candidate_minus_baseline_mean": -0.06620269444445152,
+      "confidence_interval": [
+        -0.1993339647218983,
+        0.06692857583299523
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 36
+    },
+    "workflow_latency_ms": {
+      "available": true,
+      "candidate_minus_baseline_mean": -62.43227297222221,
+      "confidence_interval": [
+        -123.85694821653173,
+        -1.0075977279126818
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 36
+    }
+  },
+  "decision": {
+    "failed_quality_gates": [
+      "baseline_minimum_task_success",
+      "task_success_noninferiority"
+    ],
+    "reason": "the baseline did not establish a valid, sufficiently successful workload",
+    "status": "invalid"
+  },
+  "evidence_integrity": {
+    "attempt_count": 80,
+    "attempt_status_schema_versions": [
+      "0.1"
+    ],
+    "complete_dag_count": 80,
+    "environment_identity_complete": true,
+    "environment_identity_stable": true,
+    "generated_content_included": false,
+    "raw_attempts_included": false,
+    "valid_trace_count": 80
+  },
+  "experiment": {
+    "consumed_held_out_workload": true,
+    "latency_population": "task-level pairs where both baseline and candidate succeeded",
+    "order": "randomized",
+    "primary_metric": "workflow_latency_ms on paired successful tasks",
+    "purpose": "frozen 40-task held-out proof",
+    "repetitions": 1,
+    "result_type": "runeconomy.closed_loop_comparison",
+    "result_version": "0.1",
+    "schema_version": "0.1",
+    "seed": 20261114,
+    "task_count": 40,
+    "task_family_counts": {
+      "direct_call": 13,
+      "docstring": 13,
+      "string_literal": 14
+    }
+  },
+  "failure_categories": {
+    "evaluator_failure": 0,
+    "invalid_trace": 0,
+    "process_or_infrastructure_failure": 0,
+    "task_quality_failure": 5,
+    "timeout": 0
+  },
+  "frozen_hashes": {
+    "agent": "sha256:e6f42c619f15be192512d234ee21b623a09e69402a62ab16516190c9ea348dcb",
+    "comparison": "sha256:d8df549ebcb7d814aa1d70b02e2d9c482830e02d7812a40376d1c8161dd31e8f",
+    "driver": "sha256:1a6a589353e5352116a58ee446493fbc83c486f4fc7634a49483ac81b474b1b1",
+    "environment_identity": "sha256:a62037eec6d2c8d31743f404018469cb8d42c9359b1fe5a84f1e0053c86638ef",
+    "evaluator": "sha256:8f6f0ac64145392fd9f2086705345871628fce3957bae810f5cd551be4b02dba",
+    "experiment_design": "sha256:51975b24f8792f6f9ab453fb6a2fcba84ab1247e9f1a230e3ca0b9910564a48e",
+    "private_result": "sha256:783c08972d972b2cc7aad610c13d9df934d8f4c573915ad6423ebaf74402aa99",
+    "status_protocol": "sha256:b3885985bfa88510d901600b28e3d6341427b2390b3dedb2c16ccd124e68e723",
+    "workload": "sha256:85e53d2d2f2ab108b5bc83e27947a67d710ed53326a89467005630dea3bddf61"
+  },
+  "gates": {
+    "checks": [
+      {
+        "name": "trace_and_environment_identity",
+        "observed": {
+          "baseline": {
+            "complete_dag_count": 40,
+            "complete_dag_rate": 1.0,
+            "environment_identity_complete": true,
+            "environment_identity_stable": true,
+            "valid_trace_count": 40
+          },
+          "candidate": {
+            "complete_dag_count": 40,
+            "complete_dag_rate": 1.0,
+            "environment_identity_complete": true,
+            "environment_identity_stable": true,
+            "valid_trace_count": 40
+          }
+        },
+        "passed": true,
+        "threshold": "every attempt has an explicit complete DAG and each variant has complete, stable environment identity"
+      },
+      {
+        "name": "baseline_minimum_task_success",
+        "observed": [
+          0.7961352512671009,
+          0.9842578201489585
+        ],
+        "passed": false,
+        "threshold": 0.8
+      },
+      {
+        "name": "candidate_minimum_task_success",
+        "observed": [
+          0.8308031360405823,
+          0.9938863534006492
+        ],
+        "passed": true,
+        "threshold": 0.8
+      },
+      {
+        "name": "task_success_noninferiority",
+        "observed": {
+          "candidate_minus_baseline_mean": 0.025,
+          "confidence_interval": [
+            -0.14498205538583642,
+            0.18780457959853636
+          ],
+          "confidence_level": 0.95,
+          "method": "exact marginal binomial bounds with Bonferroni coverage",
+          "one_sided_lower_bound": -0.12547221188341495,
+          "outcome_counts": {
+            "baseline_only": 1,
+            "both_failure": 1,
+            "both_success": 36,
+            "candidate_only": 2
+          },
+          "paired_count": 40
+        },
+        "passed": false,
+        "threshold": -0.1
+      },
+      {
+        "name": "baseline_completion",
+        "observed": 1.0,
+        "passed": true,
+        "threshold": 1.0
+      },
+      {
+        "name": "candidate_completion",
+        "observed": 1.0,
+        "passed": true,
+        "threshold": 1.0
+      },
+      {
+        "name": "successful_task_workflow_latency_improvement",
+        "observed": {
+          "available": true,
+          "candidate_minus_baseline_mean": -62.43227297222221,
+          "confidence_interval": [
+            -123.85694821653173,
+            -1.0075977279126818
+          ],
+          "confidence_level": 0.95,
+          "method": "paired Student-t interval",
+          "paired_count": 36
+        },
+        "passed": true,
+        "threshold": "upper bound of paired 95% Student-t interval < 0"
+      },
+      {
+        "name": "successful_task_workflow_latency_non_regression",
+        "observed": {
+          "available": true,
+          "candidate_minus_baseline_mean": -62.43227297222221,
+          "confidence_interval": [
+            -123.85694821653173,
+            -1.0075977279126818
+          ],
+          "confidence_level": 0.95,
+          "method": "paired Student-t interval",
+          "paired_count": 36
+        },
+        "passed": true,
+        "threshold": "lower bound of paired 95% Student-t interval <= 0"
+      }
+    ],
+    "predeclared": {
+      "max_task_success_regression": 0.1,
+      "min_completed_rate": 1.0,
+      "min_task_success_rate": 0.8,
+      "primary_metric": "workflow_latency_ms on paired successful tasks"
+    }
+  },
+  "outcomes": {
+    "baseline": {
+      "attempt_count": 40,
+      "completed_rate": 1.0,
+      "task_success_95_ci": [
+        0.7961352512671009,
+        0.9842578201489585
+      ],
+      "task_success_count": 37,
+      "task_success_rate": 0.925
+    },
+    "candidate": {
+      "attempt_count": 40,
+      "completed_rate": 1.0,
+      "task_success_95_ci": [
+        0.8308031360405823,
+        0.9938863534006492
+      ],
+      "task_success_count": 38,
+      "task_success_rate": 0.95
+    }
+  },
+  "paired_success": {
+    "candidate_minus_baseline_mean": 0.025,
+    "confidence_interval": [
+      -0.14498205538583642,
+      0.18780457959853636
+    ],
+    "confidence_level": 0.95,
+    "method": "exact marginal binomial bounds with Bonferroni coverage",
+    "one_sided_lower_bound": -0.12547221188341495,
+    "outcome_counts": {
+      "baseline_only": 1,
+      "both_failure": 1,
+      "both_success": 36,
+      "candidate_only": 2
+    },
+    "paired_count": 40
+  },
+  "provenance": {
+    "api_dialect": "chat_completions",
+    "backend": "vllm",
+    "backend_version": "0.33.0",
+    "chat_template_digest": "sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+    "driver_location": "same Modal container as vLLM",
+    "engine_configuration": {
+      "block_size": 16,
+      "gpu_memory_utilization": 0.85,
+      "max_model_len": 8192,
+      "max_num_seqs": 8
+    },
+    "hardware": "A10",
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "model_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+    "tokenizer": "Qwen/Qwen2.5-7B-Instruct",
+    "tokenizer_revision": "a09a35458c702b33eeacc393d103063234e8bc28"
+  },
+  "sanitization": {
+    "aggregate_only": true,
+    "generator": "scripts/build_public_proof_artifact.py",
+    "private_evidence_distributed": false,
+    "private_evidence_required_at_build_time": true
+  }
+}

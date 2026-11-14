@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "runeconomy"
-version = "0.1.0"
+version = "0.2.0a1"
 description = "Find inference waste in agent workflows and verify performance improvements"
 readme = "README.md"
 requires-python = ">=3.11"
