@@ -14,6 +14,7 @@ from runeconomy.reports import (
     render_experiment_html,
     render_experiment_markdown,
 )
+from scripts.rebuild_demo_artifact import build
 
 
 class ReportTests(unittest.TestCase):
@@ -84,6 +85,8 @@ class ReportTests(unittest.TestCase):
         self.assertIn("RunEconomy", rendered)
         self.assertIn("NegativeSplit", rendered)
         self.assertIn("37.2%", rendered)
+        self.assertIn("inconclusive", rendered)
+        self.assertIn("exact CI", rendered)
         self.assertIn("No remote scripts", rendered)
         self.assertIn("background: #fff", rendered)
         self.assertNotIn("radial-gradient", rendered)
@@ -107,12 +110,29 @@ class ReportTests(unittest.TestCase):
         self.assertNotIn("tool definitions per request", rendered)
         self.assertNotIn("summed over two inference calls", rendered)
 
+    def test_generic_reports_show_predeclared_prediction_assessment(self) -> None:
+        result = load_demo_result()
+        result["summary"]["predeclared_prediction"] = {
+            "status": "not_established",
+            "metric": "total_latency_ms",
+            "direction": "decrease",
+            "causal_mechanism": "less prefill work",
+            "candidate_minus_baseline_mean": -3.0,
+            "confidence_interval": [-8.0, 2.0],
+        }
+        html_report = render_experiment_html(result)
+        markdown_report = render_experiment_markdown(result)
+        self.assertIn("Predeclared hypothesis", html_report)
+        self.assertIn("not_established", html_report)
+        self.assertIn("## Predeclared hypothesis", markdown_report)
+        self.assertIn("NOT_ESTABLISHED", markdown_report)
+
     def test_demo_command_writes_html_without_network(self) -> None:
         with TemporaryDirectory() as directory:
             output = Path(directory) / "demo.html"
             self.assertEqual(main(["demo", "--output", str(output)]), 0)
             self.assertIn(
-                "<strong>Runner decision:</strong> verified.",
+                "<strong>Runner decision:</strong> inconclusive.",
                 output.read_text(encoding="utf-8"),
             )
 
@@ -143,11 +163,13 @@ class ReportTests(unittest.TestCase):
             Path(__file__).parents[1]
             / "examples"
             / "experiments"
-            / "repository-agent-tool-pruning.json"
+            / "repository-agent-tool-pruning-recorded.json"
         )
-        self.assertNotEqual(
-            manifest.fingerprint(), result["provenance"]["manifest_sha256"]
+        self.assertEqual(
+            manifest.reproducibility_fingerprint(),
+            result["provenance"]["reproducibility_manifest_sha256"],
         )
+        self.assertEqual(result["decision"]["status"], "inconclusive")
         for case in manifest.cases:
             differing_fields = {
                 key
@@ -172,21 +194,19 @@ class ReportTests(unittest.TestCase):
         if not raw_path.exists():
             self.skipTest("local raw result is intentionally not distributed")
         raw_bytes = raw_path.read_bytes()
-        raw = json.loads(raw_bytes)
         sanitized = load_demo_result()
         self.assertEqual(
             hashlib.sha256(raw_bytes).hexdigest(),
             sanitized["sanitization"]["raw_result_sha256"],
         )
-        for key in (
-            "result_schema_version",
-            "created_at",
-            "experiment_id",
-            "provenance",
-            "summary",
-            "decision",
-        ):
-            self.assertEqual(sanitized[key], raw[key])
+        rebuilt = build(
+            raw_path,
+            root
+            / "examples"
+            / "experiments"
+            / "repository-agent-tool-pruning-recorded.json",
+        )
+        self.assertEqual(sanitized, rebuilt)
 
 
 if __name__ == "__main__":

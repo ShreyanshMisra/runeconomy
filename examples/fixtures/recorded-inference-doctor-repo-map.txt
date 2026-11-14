@@ -1,0 +1,42 @@
+Agent Inference Doctor repository map
+
+README.md
+pyproject.toml
+deploy/modal_vllm.py
+docs/experiment-format.md
+docs/implementation-plan.md
+examples/experiments/long-context-runbook.json
+examples/experiments/tool-order-stability.json
+src/inference_doctor/__init__.py
+src/inference_doctor/__main__.py
+src/inference_doctor/analysis.py
+src/inference_doctor/cache.py
+src/inference_doctor/cli.py
+src/inference_doctor/critical_path.py
+src/inference_doctor/evaluators.py
+src/inference_doctor/experiments.py
+src/inference_doctor/models.py
+src/inference_doctor/reports.py
+src/inference_doctor/vllm.py
+tests/test_analysis.py
+tests/test_evaluators.py
+tests/test_experiments.py
+tests/test_modal_deployment.py
+tests/test_reports.py
+tests/test_vllm.py
+
+Module responsibilities
+
+- analysis.py compares request token prefixes and emits evidence-backed findings.
+- cache.py implements longest-common-prefix and vLLM block eligibility logic.
+- cli.py exposes trace analysis, capture, experiment, and report commands.
+- critical_path.py computes workflow critical paths from explicit span dependencies.
+- evaluators.py applies deterministic task-success evaluators to generated output.
+- experiments.py validates manifests, schedules paired trials, and makes decisions.
+- models.py defines the normalized local agent-trace format.
+- reports.py renders static Markdown experiment reports.
+- vllm.py renders exact server prompts, streams Responses API generations, captures
+  timing and token telemetry, and resets the trusted benchmark prefix cache.
+
+The task is read-only. No file modification, shell execution, network access, or
+deployment action is required.

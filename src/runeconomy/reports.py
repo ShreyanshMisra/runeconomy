@@ -24,7 +24,7 @@ def _interval(effect: Mapping[str, Any], digits: int = 1) -> str:
 
 
 def _percent_interval(effect: Mapping[str, Any]) -> str:
-    interval = effect.get("bootstrap_95_ci")
+    interval = effect.get("confidence_interval", effect.get("bootstrap_95_ci"))
     if not isinstance(interval, list) or len(interval) != 2:
         return "unknown"
     if interval[0] is None or interval[1] is None:
@@ -51,6 +51,7 @@ def render_experiment_markdown(result: Mapping[str, Any]) -> str:
         ("cache_coverage", "Cache coverage", 3),
         ("server_ttft_ms", "Server TTFT (ms)", 1),
         ("client_ttft_ms", "Client TTFT (ms)", 1),
+        ("client_server_ttft_gap_ms", "Client − server TTFT gap (ms)", 1),
         ("total_latency_ms", "Total latency (ms)", 1),
         ("output_tokens", "Output tokens", 1),
         ("task_success", "Task success", 3),
@@ -67,22 +68,25 @@ def render_experiment_markdown(result: Mapping[str, Any]) -> str:
         f"- Model: `{provenance.get('model', 'unknown')}`",
         f"- Model revision: `{provenance.get('model_revision', 'unknown')}`",
         f"- Backend: vLLM `{provenance.get('backend_version', 'unknown')}`",
+        f"- API dialect: `{provenance.get('api_dialect', 'unknown')}`",
         f"- Hardware: {provenance.get('hardware', 'unknown')}",
         f"- Cache treatment: `{provenance.get('cache_treatment', 'unknown')}`",
+        f"- Cache isolation: `{provenance.get('cache_isolation', 'unknown')}`",
         f"- Trial order: `{provenance.get('order', 'unknown')}`",
         f"- Optimization target: `{provenance.get('acceptance', {}).get('optimization_target', 'cache_reuse')}`",
-        f"- Manifest SHA-256: `{provenance.get('manifest_sha256', 'unknown')}`",
+        f"- Reproducibility manifest SHA-256: `{provenance.get('reproducibility_manifest_sha256', provenance.get('manifest_sha256', 'unknown'))}`",
         "",
         "## Outcomes",
         "",
-        "| Variant | Completion rate | Task-success rate | Evaluated trials |",
-        "|---|---:|---:|---:|",
+        "| Variant | Completion rate | Task-success rate | Exact 95% CI | Evaluated trials |",
+        "|---|---:|---:|---:|---:|",
     ]
     for variant in ("baseline", "candidate"):
         outcomes = variants[variant]["outcomes"]
         lines.append(
             f"| {variant.title()} | {_percent(outcomes.get('completed_rate'))} | "
             f"{_percent(outcomes.get('task_success_rate'))} | "
+            f"{_percent_interval({'confidence_interval': outcomes.get('task_success_95_ci')})} | "
             f"{outcomes.get('evaluated_count', 0)} |"
         )
     lines.extend(
@@ -90,11 +94,17 @@ def render_experiment_markdown(result: Mapping[str, Any]) -> str:
             "",
             "## Inference results",
             "",
-            "| Metric | Baseline mean | Candidate mean | Candidate − baseline | 95% paired bootstrap CI |",
+            "| Metric | Baseline mean | Candidate mean | Candidate − baseline | 95% interval |",
             "|---|---:|---:|---:|---:|",
         ]
     )
     for key, label, digits in metrics:
+        if (
+            key not in variants["baseline"]
+            or key not in variants["candidate"]
+            or key not in effects
+        ):
+            continue
         baseline = variants["baseline"][key]["mean"]
         candidate = variants["candidate"][key]["mean"]
         effect = effects[key]
@@ -115,6 +125,7 @@ def render_experiment_markdown(result: Mapping[str, Any]) -> str:
         )
 
     prediction = summary.get("prediction_vs_observation", {})
+    predeclared = raw_summary.get("predeclared_prediction")
     lines.extend(
         [
             "",
@@ -123,6 +134,26 @@ def render_experiment_markdown(result: Mapping[str, Any]) -> str:
             f"- Predicted cached-token delta: {_number(prediction.get('predicted_candidate_minus_baseline_cached_tokens'))}",
             f"- Observed cached-token delta: {_number(prediction.get('observed_candidate_minus_baseline_cached_tokens'))}",
             f"- Realization ratio: {_number(prediction.get('realization_ratio'), 3)}",
+        ]
+    )
+    if isinstance(predeclared, Mapping):
+        lines.extend(
+            [
+                "",
+                "## Predeclared hypothesis",
+                "",
+                f"- Mechanism: {predeclared.get('causal_mechanism', 'unknown')}",
+                f"- Prediction: `{predeclared.get('metric', 'unknown')}` should "
+                f"`{predeclared.get('direction', 'unknown')}`",
+                f"- Assessment: **{str(predeclared.get('status', 'unknown')).upper()}**",
+                f"- Observed candidate − baseline: "
+                f"{_number(predeclared.get('candidate_minus_baseline_mean'))}",
+                f"- Paired 95% interval: "
+                f"{predeclared.get('confidence_interval', 'unknown')}",
+            ]
+        )
+    lines.extend(
+        [
             "",
             "## Verification checks",
             "",
@@ -211,6 +242,7 @@ def render_experiment_html(result: Mapping[str, Any]) -> str:
         ("cache_coverage", "Cache coverage", 1, True),
         ("server_ttft_ms", "Server TTFT (ms)", 1, False),
         ("client_ttft_ms", "Client TTFT (ms)", 1, False),
+        ("client_server_ttft_gap_ms", "Client − server TTFT gap (ms)", 1, False),
         ("total_latency_ms", "Total latency (ms)", 1, False),
         ("output_tokens", "Output tokens", 1, False),
         ("task_success", "Task success", 1, True),
@@ -261,6 +293,7 @@ def render_experiment_html(result: Mapping[str, Any]) -> str:
             f"<td>{name.title()}</td>"
             f'<td class="number">{html.escape(_percent(outcomes.get("completed_rate")))}</td>'
             f'<td class="number">{html.escape(_percent(outcomes.get("task_success_rate")))}</td>'
+            f'<td class="number">{html.escape(_percent_interval({"confidence_interval": outcomes.get("task_success_95_ci")}))}</td>'
             f'<td class="number">{evaluated}</td>'
             "</tr>"
         )
@@ -304,6 +337,18 @@ def render_experiment_html(result: Mapping[str, Any]) -> str:
     experiment_id = html.escape(str(result.get("experiment_id", "unknown")))
     status = html.escape(str(decision.get("status", "unknown")))
     reason = html.escape(str(decision.get("reason", "No reason recorded.")))
+    predeclared = raw_summary.get("predeclared_prediction")
+    prediction_note = ""
+    if isinstance(predeclared, Mapping):
+        prediction_note = (
+            "<h2>Predeclared hypothesis</h2><table><tbody>"
+            f"<tr><th>Causal mechanism</th><td>{html.escape(str(predeclared.get('causal_mechanism', 'unknown')))}</td></tr>"
+            f"<tr><th>Prediction</th><td><code>{html.escape(str(predeclared.get('metric', 'unknown')))}</code> should {html.escape(str(predeclared.get('direction', 'unknown')))}</td></tr>"
+            f"<tr><th>Assessment</th><td>{html.escape(str(predeclared.get('status', 'unknown')))}</td></tr>"
+            f"<tr><th>Candidate − baseline</th><td>{html.escape(_number(predeclared.get('candidate_minus_baseline_mean')))}</td></tr>"
+            f"<tr><th>Paired 95% interval</th><td>{html.escape(str(predeclared.get('confidence_interval', 'unknown')))}</td></tr>"
+            "</tbody></table>"
+        )
 
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -322,16 +367,19 @@ code {{ font: 12px ui-monospace, monospace; overflow-wrap: anywhere; }}
 </style></head><body><main>
 <header><h1>RunEconomy NegativeSplit report</h1><div>Experiment: <code>{experiment_id}</code></div></header>
 <h2>Decision</h2><p><strong>{status}</strong> — {reason}</p>{workflow_note}{error_note}
-<h2>Outcomes</h2><table><thead><tr><th>Variant</th><th class="number">Completion rate</th><th class="number">Task-success rate</th><th class="number">Evaluated trials</th></tr></thead><tbody>{"".join(outcome_rows)}</tbody></table>
-<h2>Inference results</h2><table><thead><tr><th>Metric</th><th class="number">Baseline mean</th><th class="number">Candidate mean</th><th class="number">Candidate − baseline</th><th class="number">95% paired bootstrap CI</th></tr></thead><tbody>{"".join(metric_rows)}</tbody></table>
+<h2>Outcomes</h2><table><thead><tr><th>Variant</th><th class="number">Completion rate</th><th class="number">Task-success rate</th><th class="number">Exact 95% CI</th><th class="number">Evaluated trials</th></tr></thead><tbody>{"".join(outcome_rows)}</tbody></table>
+<h2>Inference results</h2><table><thead><tr><th>Metric</th><th class="number">Baseline mean</th><th class="number">Candidate mean</th><th class="number">Candidate − baseline</th><th class="number">95% interval</th></tr></thead><tbody>{"".join(metric_rows)}</tbody></table>
+{prediction_note}
 <h2>Verification checks</h2><table><thead><tr><th>Check</th><th>Required</th><th>Passed</th></tr></thead><tbody>{"".join(check_rows)}</tbody></table>
 <h2>Recorded environment</h2><table><tbody>
 <tr><th>Model</th><td><code>{html.escape(str(provenance.get("model", "unknown")))}</code></td></tr>
 <tr><th>Model revision</th><td><code>{html.escape(str(provenance.get("model_revision", "unknown")))}</code></td></tr>
 <tr><th>Backend</th><td><code>{html.escape(str(provenance.get("backend_kind", "vllm")))} {html.escape(str(provenance.get("backend_version", "unknown")))}</code></td></tr>
+<tr><th>API dialect</th><td><code>{html.escape(str(provenance.get("api_dialect", "unknown")))}</code></td></tr>
 <tr><th>Hardware</th><td>{html.escape(str(provenance.get("hardware", "unknown")))}</td></tr>
 <tr><th>Cache treatment</th><td><code>{html.escape(str(provenance.get("cache_treatment", "unknown")))}</code></td></tr>
-<tr><th>Manifest SHA-256</th><td><code>{html.escape(str(provenance.get("manifest_sha256", "unknown")))}</code></td></tr>
+<tr><th>Cache isolation</th><td><code>{html.escape(str(provenance.get("cache_isolation", "unknown")))}</code></td></tr>
+<tr><th>Reproducibility manifest SHA-256</th><td><code>{html.escape(str(provenance.get("reproducibility_manifest_sha256", provenance.get("manifest_sha256", "unknown"))))}</code></td></tr>
 </tbody></table>
 <h2>Claim boundary</h2><p>{html.escape(evaluation_note)} Exact output-digest agreement is not treated as semantic correctness. The decision applies only to the recorded workload, backend, hardware, and acceptance thresholds.</p>
 <footer>Generated from recorded RunEconomy aggregate result fields. No remote scripts, fonts, or network resources are used.</footer>
@@ -373,7 +421,12 @@ def render_demo_html(result: Mapping[str, Any]) -> str:
     backend = html.escape(str(provenance.get("backend_version", "unknown")))
     measured_at = html.escape(str(result.get("created_at", "unknown")))
     raw_trials = html.escape(str(sanitization.get("raw_trial_count", "unknown")))
-    manifest_sha = html.escape(str(provenance.get("manifest_sha256", "unknown")))
+    manifest_sha = html.escape(
+        str(provenance.get("reproducibility_manifest_sha256", "unknown"))
+    )
+    legacy_manifest_sha = html.escape(
+        str(provenance.get("legacy_manifest_sha256", "unknown"))
+    )
     baseline_tools = html.escape(str(context.get("baseline_tool_count", "unknown")))
     candidate_tools = html.escape(str(context.get("candidate_tool_count", "unknown")))
     measured_pairs = html.escape(
@@ -394,7 +447,9 @@ def render_demo_html(result: Mapping[str, Any]) -> str:
         str(context.get("warmup_inference_call_count", "unknown"))
     )
     evaluator_kind = html.escape(str(context.get("evaluator_kind", "unknown")))
-    rename_note = html.escape(str(context.get("post_measurement_change", "")))
+    candidate_selection = html.escape(
+        str(context.get("candidate_selection", "unknown"))
+    )
     workflow_steps = html.escape(str(context.get("workflow_step_count", "unknown")))
     candidate_tool_names = context.get("candidate_tool_names", [])
     candidate_tools_text = (
@@ -419,7 +474,15 @@ def render_demo_html(result: Mapping[str, Any]) -> str:
     client_effect = effects["client_ttft_ms"]
     client_ci = client_effect.get("bootstrap_95_ci") or [None, None]
     success_effect = effects["task_success"]
-    success_ci = success_effect.get("bootstrap_95_ci") or [None, None]
+    success_ci = success_effect.get("confidence_interval") or [None, None]
+    baseline_success_ci = variants["baseline"]["outcomes"].get(
+        "task_success_95_ci"
+    ) or [None, None]
+    candidate_success_ci = variants["candidate"]["outcomes"].get(
+        "task_success_95_ci"
+    ) or [None, None]
+    baseline_gap = mean("baseline", "client_server_ttft_gap_ms")
+    candidate_gap = mean("candidate", "client_server_ttft_gap_ms")
 
     check_rows = []
     for check in decision.get("checks", []):
@@ -471,17 +534,18 @@ footer {{ border-top: 1px solid #999; margin-top: 30px; padding-top: 10px; color
 <h2>Result</h2>
 <p><strong>Runner decision:</strong> {status}.</p>
 <p>The runner compared a baseline containing {baseline_tools} tool definitions per request with a candidate containing {candidate_tools}. In this pinned replay, the candidate used fewer input tokens and had lower summed inference latency. Both variants had a {_percent(candidate_success)} workflow evaluator pass rate.</p>
-<p class="note"><strong>Meaning of “verified”:</strong> this is the decision produced by the RunEconomy acceptance rules shown below. It is not an independent audit, certification, or claim that the result generalizes beyond this experiment.</p>
+<p class="note"><strong>Why this is inconclusive:</strong> the measured latency effect is positive evidence, but the candidate allowlist was not selected on a separate calibration workload and fifteen agreeing outcome pairs do not establish a zero-regression task-success margin.</p>
 
 <h2>Measured workflow results</h2>
 <table>
-<thead><tr><th>Metric</th><th class="number">Baseline mean</th><th class="number">Candidate mean</th><th class="number">Candidate − baseline</th><th class="number">Relative change</th><th class="number">95% paired bootstrap CI for difference</th></tr></thead>
+<thead><tr><th>Metric</th><th class="number">Baseline mean</th><th class="number">Candidate mean</th><th class="number">Candidate − baseline</th><th class="number">Relative change</th><th class="number">95% interval for difference</th></tr></thead>
 <tbody>
 <tr><td>Input tokens, summed over two inference calls</td><td class="number">{_number(baseline_input, 0)}</td><td class="number">{_number(candidate_input, 0)}</td><td class="number">{_number(input_effect.get("candidate_minus_baseline_mean"), 0)}</td><td class="number">{_signed_percent(input_effect.get("relative_change"))}</td><td class="number">[{_number(input_effect.get("bootstrap_95_ci")[0], 0)}, {_number(input_effect.get("bootstrap_95_ci")[1], 0)}]</td></tr>
 <tr><td>Server TTFT, summed (ms)</td><td class="number">{_number(server_baseline, 1)}</td><td class="number">{_number(server_candidate, 1)}</td><td class="number">{_number(server_effect.get("candidate_minus_baseline_mean"), 1)}</td><td class="number">{_signed_percent(server_effect.get("relative_change"))}</td><td class="number">[{_number(server_ci[0], 1)}, {_number(server_ci[1], 1)}]</td></tr>
 <tr><td>Client TTFT, summed (ms)</td><td class="number">{_number(client_baseline, 1)}</td><td class="number">{_number(client_candidate, 1)}</td><td class="number">{_number(client_effect.get("candidate_minus_baseline_mean"), 1)}</td><td class="number">{_signed_percent(client_effect.get("relative_change"))}</td><td class="number">[{_number(client_ci[0], 1)}, {_number(client_ci[1], 1)}]</td></tr>
+<tr><td>Client − server TTFT gap, summed (ms)</td><td class="number">{_number(baseline_gap, 1)}</td><td class="number">{_number(candidate_gap, 1)}</td><td class="number">{_number(effects["client_server_ttft_gap_ms"].get("candidate_minus_baseline_mean"), 1)}</td><td class="number">{_signed_percent(effects["client_server_ttft_gap_ms"].get("relative_change"))}</td><td class="number">{_interval(effects["client_server_ttft_gap_ms"], 1)}</td></tr>
 <tr><td>Inference latency, summed (ms)</td><td class="number">{_number(baseline_latency, 1)}</td><td class="number">{_number(candidate_latency, 1)}</td><td class="number">{_number(latency_effect.get("candidate_minus_baseline_mean"), 1)}</td><td class="number">{_signed_percent(latency_effect.get("relative_change"))}</td><td class="number">[{_number(latency_ci[0], 1)}, {_number(latency_ci[1], 1)}]</td></tr>
-<tr><td>Workflow evaluator pass rate</td><td class="number">{_percent(baseline_success)}</td><td class="number">{_percent(candidate_success)}</td><td class="number">{float(success_effect.get("candidate_minus_baseline_mean", 0)) * 100:.1f} percentage points</td><td class="number">{_signed_percent(success_effect.get("relative_change"))}</td><td class="number">[{float(success_ci[0]) * 100:.1f}, {float(success_ci[1]) * 100:.1f}] percentage points</td></tr>
+<tr><td>Workflow evaluator pass rate</td><td class="number">{_percent(baseline_success)} (exact CI {_percent(baseline_success_ci[0])}–{_percent(baseline_success_ci[1])})</td><td class="number">{_percent(candidate_success)} (exact CI {_percent(candidate_success_ci[0])}–{_percent(candidate_success_ci[1])})</td><td class="number">{float(success_effect.get("candidate_minus_baseline_mean", 0)) * 100:.1f} percentage points</td><td class="number">{_signed_percent(success_effect.get("relative_change"))}</td><td class="number">[{float(success_ci[0]) * 100:.1f}, {float(success_ci[1]) * 100:.1f}] percentage points</td></tr>
 </tbody></table>
 
 <h2>Experiment design</h2>
@@ -491,6 +555,7 @@ footer {{ border-top: 1px solid #999; margin-top: 30px; padding-top: 10px; color
 <tr><th>Candidate</th><td>{candidate_tools} tool definitions on each request: {candidate_tools_text}.</td></tr>
 <tr><th>Changed request field</th><td>{changed_fields_text}. Within each case, the baseline and candidate request objects otherwise matched.</td></tr>
 <tr><th>Evaluation</th><td>{evaluator_kind}.</td></tr>
+<tr><th>Candidate selection</th><td><code>{candidate_selection}</code>; no held-out evaluation workload was recorded.</td></tr>
 <tr><th>Measured sample</th><td>{measured_pairs} paired workflows = {measured_calls} measured inference calls.</td></tr>
 <tr><th>Warmup sample</th><td>{warmup_pairs} paired workflows = {warmup_calls} warmup inference calls.</td></tr>
 <tr><th>Total retained before sanitization</th><td>{raw_trials} inference trial records.</td></tr>
@@ -508,23 +573,27 @@ footer {{ border-top: 1px solid #999; margin-top: 30px; padding-top: 10px; color
 <tr><th>Hardware</th><td>{hardware}</td></tr>
 <tr><th>Cache treatment</th><td><code>{html.escape(str(provenance.get("cache_treatment", "unknown")))}</code></td></tr>
 <tr><th>Trial order</th><td><code>{html.escape(str(provenance.get("order", "unknown")))}</code></td></tr>
-<tr><th>Recorded resolved-manifest fingerprint</th><td><code>{manifest_sha}</code></td></tr>
+<tr><th>Reproducibility manifest fingerprint</th><td><code>{manifest_sha}</code></td></tr>
+<tr><th>Legacy private-manifest fingerprint</th><td><code>{legacy_manifest_sha}</code></td></tr>
 </tbody></table>
 
 <h2>Provenance note</h2>
-<p>{rename_note}</p>
+<p>The checked-in recorded manifest preserves the measured prompt and fixture content while replacing the private endpoint and credential-variable name. The reproducibility fingerprint excludes only those transport locations. The legacy fingerprint remains recorded for the original private resolved manifest.</p>
 
 <h2>Limitations and claim boundary</h2>
 <ul>
   <li>The workload was a fixture-backed repository-analysis replay, not a live autonomous agent executing arbitrary tools.</li>
   <li>The workflow evaluator used two deterministic regex checks. “100% pass rate” refers to those checks, not an independent assessment of general answer quality.</li>
+  <li>The exact 95% interval for each 15/15 pass rate extends below 100%, and the conservative paired interval includes a material regression; agreement is not proof of zero failure probability.</li>
+  <li>The three-tool candidate allowlist was not shown to be predeclared or selected on a separate calibration workload.</li>
   <li>The measurement used one pinned small model, one A10 GPU, sequential traffic, and cold-cache treatment.</li>
+  <li>Client TTFT exceeded server TTFT by {_number(baseline_gap, 1)} ms for the baseline and {_number(candidate_gap, 1)} ms for the candidate on average, so proxy and network overhead remain visible.</li>
   <li>The latency metric sums two inference calls and excludes fixture access and tool runtime.</li>
   <li>The experiment does not establish behavior under high concurrency, multiple replicas, larger models, SGLang, or other workloads.</li>
 </ul>
 
 <h2>Sanitization</h2>
-<p>This HTML was generated from a checked-in aggregate result copied from the local raw result. The aggregate result matches the raw result for the recorded summary, decision, and provenance fields. Per-trial records, prompt token IDs, output digests, generated output, and request content are not embedded in this report.</p>
+<p>This HTML was generated from a checked-in aggregate derived from the local raw result. Performance measurements are recomputed from the raw trials; the task-success intervals, evidence review, and verdict use the repaired post-measurement methodology. Per-trial records, prompt token IDs, output digests, generated output, and request content are not embedded in this report.</p>
 <p>Local raw-result SHA-256 recorded during sanitization: <code>{raw_result_sha}</code>.</p>
 
 <footer>No remote scripts, fonts, or network resources are used.</footer>

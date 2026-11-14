@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.1",
+  "calibration_id": "repository-readonly-tools-v1",
+  "purpose": "Select the minimum tool capabilities for read-only repository analysis before evaluating the held-out RunEconomy workload.",
+  "selection_rule": "Take the union of required capabilities across calibration tasks, map each capability to the single matching tool in the broad catalog, and exclude every tool that is not required.",
+  "tasks": [
+    {
+      "task_id": "inventory-package-layout",
+      "description": "Identify likely source and test directories from an unfamiliar repository tree.",
+      "required_capabilities": ["list_repository"]
+    },
+    {
+      "task_id": "inspect-parser-implementation",
+      "description": "Read the implementation of a parser after its path is known.",
+      "required_capabilities": ["read_file"]
+    },
+    {
+      "task_id": "locate-symbol-definition",
+      "description": "Find the file and line that define a named symbol.",
+      "required_capabilities": ["search_repository", "read_file"]
+    },
+    {
+      "task_id": "trace-call-sites",
+      "description": "Find references to a function and inspect the relevant callers.",
+      "required_capabilities": ["search_repository", "read_file"]
+    },
+    {
+      "task_id": "summarize-module-boundary",
+      "description": "List a package and inspect selected modules without modifying or executing the repository.",
+      "required_capabilities": ["list_repository", "read_file"]
+    }
+  ],
+  "capability_to_tool": {
+    "list_repository": "list_repository",
+    "read_file": "read_file",
+    "search_repository": "search_repository"
+  },
+  "selected_tools": [
+    "list_repository",
+    "read_file",
+    "search_repository"
+  ],
+  "excluded_tool_policy": "Mutation, command execution, test execution, version-control history, dependency documentation, diff summarization, and pull-request authoring are unnecessary for these read-only tasks.",
+  "evaluation_data_used": false
+}

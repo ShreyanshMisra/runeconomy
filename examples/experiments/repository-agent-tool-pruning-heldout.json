@@ -1,0 +1,2543 @@
+{
+  "acceptance": {
+    "max_task_success_regression": 0.1,
+    "min_completed_rate": 1.0,
+    "min_input_token_reduction": 500,
+    "optimization_target": "input_tokens",
+    "primary_metric": "total_latency_ms",
+    "require_environment_identity": true,
+    "require_latency_improvement": true,
+    "task_success_method": "paired_exact"
+  },
+  "backend": {
+    "api_key_env": "VLLM_API_KEY",
+    "backend_version": "0.33.0",
+    "base_url": "https://vllm.example.invalid",
+    "block_size": 16,
+    "chat_template_digest": "sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+    "engine_config": {
+      "dtype": "bfloat16",
+      "enable_prefix_caching": true,
+      "gpu_memory_utilization": 0.85,
+      "max_model_len": 8192,
+      "max_num_seqs": 8,
+      "tensor_parallel_size": 1
+    },
+    "hardware": "1x NVIDIA A10 24GB on Modal",
+    "kind": "vllm",
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "model_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+    "tokenizer_revision": "a09a35458c702b33eeacc393d103063234e8bc28"
+  },
+  "cases": [
+    {
+      "case_id": "heldout-01-locate",
+      "evaluator": {
+        "expected": "analysis.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _segment_at, which finds the semantic prompt segment containing a token offset?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _segment_at, which finds the semantic prompt segment containing a token offset?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-01"
+    },
+    {
+      "case_id": "heldout-01-inspect",
+      "evaluator": {
+        "expected": "_segment_at",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol finds the semantic prompt segment containing a token offset?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_01}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol finds the semantic prompt segment containing a token offset?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_01}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-01"
+    },
+    {
+      "case_id": "heldout-02-locate",
+      "evaluator": {
+        "expected": "analysis.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _best_baseline, which selects the best prior request for prefix comparison?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _best_baseline, which selects the best prior request for prefix comparison?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-02"
+    },
+    {
+      "case_id": "heldout-02-inspect",
+      "evaluator": {
+        "expected": "_best_baseline",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol selects the best prior request for prefix comparison?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_02}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol selects the best prior request for prefix comparison?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_02}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-02"
+    },
+    {
+      "case_id": "heldout-03-locate",
+      "evaluator": {
+        "expected": "analysis.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _finding_for_divergence, which creates a finding for semantic prefix divergence?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _finding_for_divergence, which creates a finding for semantic prefix divergence?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-03"
+    },
+    {
+      "case_id": "heldout-03-inspect",
+      "evaluator": {
+        "expected": "_finding_for_divergence",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol creates a finding for semantic prefix divergence?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_03}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol creates a finding for semantic prefix divergence?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_03}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-03"
+    },
+    {
+      "case_id": "heldout-04-locate",
+      "evaluator": {
+        "expected": "analysis.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _finding_for_runtime_gap, which creates a finding when observed cache reuse trails eligibility?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _finding_for_runtime_gap, which creates a finding when observed cache reuse trails eligibility?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-04"
+    },
+    {
+      "case_id": "heldout-04-inspect",
+      "evaluator": {
+        "expected": "_finding_for_runtime_gap",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol creates a finding when observed cache reuse trails eligibility?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_04}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol creates a finding when observed cache reuse trails eligibility?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_04}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-04"
+    },
+    {
+      "case_id": "heldout-05-locate",
+      "evaluator": {
+        "expected": "analysis.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _finding_for_unused_tools, which creates a finding for exposed tools that were not invoked?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _finding_for_unused_tools, which creates a finding for exposed tools that were not invoked?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-05"
+    },
+    {
+      "case_id": "heldout-05-inspect",
+      "evaluator": {
+        "expected": "_finding_for_unused_tools",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol creates a finding for exposed tools that were not invoked?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_05}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol creates a finding for exposed tools that were not invoked?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_05}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-05"
+    },
+    {
+      "case_id": "heldout-06-locate",
+      "evaluator": {
+        "expected": "analysis.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol analyze_trace, which turns a normalized trace into a serializable analysis report?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol analyze_trace, which turns a normalized trace into a serializable analysis report?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-06"
+    },
+    {
+      "case_id": "heldout-06-inspect",
+      "evaluator": {
+        "expected": "analyze_trace",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol turns a normalized trace into a serializable analysis report?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_06}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol turns a normalized trace into a serializable analysis report?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/analysis.py ---\n{{SOURCE_CONTEXT_06}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-06"
+    },
+    {
+      "case_id": "heldout-07-locate",
+      "evaluator": {
+        "expected": "cache.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol longest_common_prefix, which counts identical leading token identifiers?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol longest_common_prefix, which counts identical leading token identifiers?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-07"
+    },
+    {
+      "case_id": "heldout-07-inspect",
+      "evaluator": {
+        "expected": "longest_common_prefix",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol counts identical leading token identifiers?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cache.py ---\n{{SOURCE_CONTEXT_07}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol counts identical leading token identifiers?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cache.py ---\n{{SOURCE_CONTEXT_07}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-07"
+    },
+    {
+      "case_id": "heldout-08-locate",
+      "evaluator": {
+        "expected": "cache.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol eligible_prefix_tokens, which computes the conservative full-block reusable prefix bound?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol eligible_prefix_tokens, which computes the conservative full-block reusable prefix bound?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-08"
+    },
+    {
+      "case_id": "heldout-08-inspect",
+      "evaluator": {
+        "expected": "eligible_prefix_tokens",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol computes the conservative full-block reusable prefix bound?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cache.py ---\n{{SOURCE_CONTEXT_08}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol computes the conservative full-block reusable prefix bound?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cache.py ---\n{{SOURCE_CONTEXT_08}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-08"
+    },
+    {
+      "case_id": "heldout-09-locate",
+      "evaluator": {
+        "expected": "cli.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _load_trace, which loads and validates a normalized trace file?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _load_trace, which loads and validates a normalized trace file?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-09"
+    },
+    {
+      "case_id": "heldout-09-inspect",
+      "evaluator": {
+        "expected": "_load_trace",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol loads and validates a normalized trace file?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_09}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol loads and validates a normalized trace file?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_09}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-09"
+    },
+    {
+      "case_id": "heldout-10-locate",
+      "evaluator": {
+        "expected": "cli.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _format_human, which formats an analysis report for terminal output?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _format_human, which formats an analysis report for terminal output?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-10"
+    },
+    {
+      "case_id": "heldout-10-inspect",
+      "evaluator": {
+        "expected": "_format_human",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol formats an analysis report for terminal output?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_10}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol formats an analysis report for terminal output?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_10}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-10"
+    },
+    {
+      "case_id": "heldout-11-locate",
+      "evaluator": {
+        "expected": "cli.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _build_parser, which constructs the command-line argument parser?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _build_parser, which constructs the command-line argument parser?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-11"
+    },
+    {
+      "case_id": "heldout-11-inspect",
+      "evaluator": {
+        "expected": "_build_parser",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol constructs the command-line argument parser?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_11}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol constructs the command-line argument parser?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_11}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-11"
+    },
+    {
+      "case_id": "heldout-12-locate",
+      "evaluator": {
+        "expected": "cli.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _load_json_object, which loads a JSON file while requiring an object root?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _load_json_object, which loads a JSON file while requiring an object root?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-12"
+    },
+    {
+      "case_id": "heldout-12-inspect",
+      "evaluator": {
+        "expected": "_load_json_object",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol loads a JSON file while requiring an object root?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_12}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol loads a JSON file while requiring an object root?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_12}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-12"
+    },
+    {
+      "case_id": "heldout-13-locate",
+      "evaluator": {
+        "expected": "cli.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _api_key, which reads a required API key from an environment variable?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _api_key, which reads a required API key from an environment variable?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-13"
+    },
+    {
+      "case_id": "heldout-13-inspect",
+      "evaluator": {
+        "expected": "_api_key",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol reads a required API key from an environment variable?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_13}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol reads a required API key from an environment variable?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_13}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-13"
+    },
+    {
+      "case_id": "heldout-14-locate",
+      "evaluator": {
+        "expected": "cli.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _write_json, which atomically writes a JSON result file?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _write_json, which atomically writes a JSON result file?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-14"
+    },
+    {
+      "case_id": "heldout-14-inspect",
+      "evaluator": {
+        "expected": "_write_json",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol atomically writes a JSON result file?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_14}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol atomically writes a JSON result file?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_14}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-14"
+    },
+    {
+      "case_id": "heldout-15-locate",
+      "evaluator": {
+        "expected": "cli.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _append_jsonl, which durably appends one record to a JSONL file?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _append_jsonl, which durably appends one record to a JSONL file?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-15"
+    },
+    {
+      "case_id": "heldout-15-inspect",
+      "evaluator": {
+        "expected": "_append_jsonl",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol durably appends one record to a JSONL file?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_15}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol durably appends one record to a JSONL file?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_15}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-15"
+    },
+    {
+      "case_id": "heldout-16-locate",
+      "evaluator": {
+        "expected": "cli.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _require_trusted_evaluators, which blocks executable evaluators until explicitly authorized?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _require_trusted_evaluators, which blocks executable evaluators until explicitly authorized?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-16"
+    },
+    {
+      "case_id": "heldout-16-inspect",
+      "evaluator": {
+        "expected": "_require_trusted_evaluators",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol blocks executable evaluators until explicitly authorized?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_16}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol blocks executable evaluators until explicitly authorized?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/cli.py ---\n{{SOURCE_CONTEXT_16}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-16"
+    },
+    {
+      "case_id": "heldout-17-locate",
+      "evaluator": {
+        "expected": "critical_path.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol CriticalPath, which stores a calculated critical path and its duration?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol CriticalPath, which stores a calculated critical path and its duration?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-17"
+    },
+    {
+      "case_id": "heldout-17-inspect",
+      "evaluator": {
+        "expected": "CriticalPath",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol stores a calculated critical path and its duration?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/critical_path.py ---\n{{SOURCE_CONTEXT_17}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol stores a calculated critical path and its duration?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/critical_path.py ---\n{{SOURCE_CONTEXT_17}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-17"
+    },
+    {
+      "case_id": "heldout-18-locate",
+      "evaluator": {
+        "expected": "critical_path.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol calculate_critical_path, which finds the longest duration-weighted path through an execution DAG?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol calculate_critical_path, which finds the longest duration-weighted path through an execution DAG?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-18"
+    },
+    {
+      "case_id": "heldout-18-inspect",
+      "evaluator": {
+        "expected": "calculate_critical_path",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol finds the longest duration-weighted path through an execution DAG?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/critical_path.py ---\n{{SOURCE_CONTEXT_18}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol finds the longest duration-weighted path through an execution DAG?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/critical_path.py ---\n{{SOURCE_CONTEXT_18}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-18"
+    },
+    {
+      "case_id": "heldout-19-locate",
+      "evaluator": {
+        "expected": "evaluators.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol EvaluatorInfrastructureError, which distinguishes evaluator execution failure from task failure?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol EvaluatorInfrastructureError, which distinguishes evaluator execution failure from task failure?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-19"
+    },
+    {
+      "case_id": "heldout-19-inspect",
+      "evaluator": {
+        "expected": "EvaluatorInfrastructureError",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol distinguishes evaluator execution failure from task failure?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/evaluators.py ---\n{{SOURCE_CONTEXT_19}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol distinguishes evaluator execution failure from task failure?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/evaluators.py ---\n{{SOURCE_CONTEXT_19}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-19"
+    },
+    {
+      "case_id": "heldout-20-locate",
+      "evaluator": {
+        "expected": "evaluators.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol EvaluationResult, which stores evaluator success, score, kind, and details?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol EvaluationResult, which stores evaluator success, score, kind, and details?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-20"
+    },
+    {
+      "case_id": "heldout-20-inspect",
+      "evaluator": {
+        "expected": "EvaluationResult",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol stores evaluator success, score, kind, and details?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/evaluators.py ---\n{{SOURCE_CONTEXT_20}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol stores evaluator success, score, kind, and details?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/evaluators.py ---\n{{SOURCE_CONTEXT_20}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-20"
+    },
+    {
+      "case_id": "heldout-21-locate",
+      "evaluator": {
+        "expected": "evaluators.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _require_object, which requires an evaluator value to be an object?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _require_object, which requires an evaluator value to be an object?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-21"
+    },
+    {
+      "case_id": "heldout-21-inspect",
+      "evaluator": {
+        "expected": "_require_object",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol requires an evaluator value to be an object?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/evaluators.py ---\n{{SOURCE_CONTEXT_21}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol requires an evaluator value to be an object?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/evaluators.py ---\n{{SOURCE_CONTEXT_21}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-21"
+    },
+    {
+      "case_id": "heldout-22-locate",
+      "evaluator": {
+        "expected": "evaluators.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol validate_evaluator_spec, which validates supported evaluator configurations?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol validate_evaluator_spec, which validates supported evaluator configurations?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-22"
+    },
+    {
+      "case_id": "heldout-22-inspect",
+      "evaluator": {
+        "expected": "validate_evaluator_spec",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol validates supported evaluator configurations?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/evaluators.py ---\n{{SOURCE_CONTEXT_22}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol validates supported evaluator configurations?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/evaluators.py ---\n{{SOURCE_CONTEXT_22}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-22"
+    },
+    {
+      "case_id": "heldout-23-locate",
+      "evaluator": {
+        "expected": "evaluators.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _normalize_text, which applies configured whitespace and case normalization?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _normalize_text, which applies configured whitespace and case normalization?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-23"
+    },
+    {
+      "case_id": "heldout-23-inspect",
+      "evaluator": {
+        "expected": "_normalize_text",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol applies configured whitespace and case normalization?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/evaluators.py ---\n{{SOURCE_CONTEXT_23}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol applies configured whitespace and case normalization?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/evaluators.py ---\n{{SOURCE_CONTEXT_23}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-23"
+    },
+    {
+      "case_id": "heldout-24-locate",
+      "evaluator": {
+        "expected": "evaluators.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _coerce_python_result, which normalizes a Python evaluator return value?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _coerce_python_result, which normalizes a Python evaluator return value?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-24"
+    },
+    {
+      "case_id": "heldout-24-inspect",
+      "evaluator": {
+        "expected": "_coerce_python_result",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol normalizes a Python evaluator return value?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/evaluators.py ---\n{{SOURCE_CONTEXT_24}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol normalizes a Python evaluator return value?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/evaluators.py ---\n{{SOURCE_CONTEXT_24}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-24"
+    },
+    {
+      "case_id": "heldout-25-locate",
+      "evaluator": {
+        "expected": "evaluators.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol evaluate_output, which runs a configured evaluator against generated output?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol evaluate_output, which runs a configured evaluator against generated output?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-25"
+    },
+    {
+      "case_id": "heldout-25-inspect",
+      "evaluator": {
+        "expected": "evaluate_output",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol runs a configured evaluator against generated output?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/evaluators.py ---\n{{SOURCE_CONTEXT_25}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol runs a configured evaluator against generated output?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/evaluators.py ---\n{{SOURCE_CONTEXT_25}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-25"
+    },
+    {
+      "case_id": "heldout-26-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol ExperimentValidationError, which represents an invalid experiment manifest or run?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol ExperimentValidationError, which represents an invalid experiment manifest or run?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-26"
+    },
+    {
+      "case_id": "heldout-26-inspect",
+      "evaluator": {
+        "expected": "ExperimentValidationError",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol represents an invalid experiment manifest or run?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_26}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol represents an invalid experiment manifest or run?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_26}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-26"
+    },
+    {
+      "case_id": "heldout-27-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _object, which requires a manifest value to be an object?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _object, which requires a manifest value to be an object?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-27"
+    },
+    {
+      "case_id": "heldout-27-inspect",
+      "evaluator": {
+        "expected": "_object",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol requires a manifest value to be an object?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_27}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol requires a manifest value to be an object?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_27}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-27"
+    },
+    {
+      "case_id": "heldout-28-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _string, which requires a manifest value to be a non-empty string?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _string, which requires a manifest value to be a non-empty string?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-28"
+    },
+    {
+      "case_id": "heldout-28-inspect",
+      "evaluator": {
+        "expected": "_string",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol requires a manifest value to be a non-empty string?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_28}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol requires a manifest value to be a non-empty string?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_28}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-28"
+    },
+    {
+      "case_id": "heldout-29-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _positive_int, which validates a bounded non-negative or positive integer?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _positive_int, which validates a bounded non-negative or positive integer?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-29"
+    },
+    {
+      "case_id": "heldout-29-inspect",
+      "evaluator": {
+        "expected": "_positive_int",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol validates a bounded non-negative or positive integer?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_29}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol validates a bounded non-negative or positive integer?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_29}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-29"
+    },
+    {
+      "case_id": "heldout-30-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _expected_environment_identity, which derives the pinned environment identity from a manifest?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _expected_environment_identity, which derives the pinned environment identity from a manifest?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-30"
+    },
+    {
+      "case_id": "heldout-30-inspect",
+      "evaluator": {
+        "expected": "_expected_environment_identity",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol derives the pinned environment identity from a manifest?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_30}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol derives the pinned environment identity from a manifest?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_30}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-30"
+    },
+    {
+      "case_id": "heldout-31-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _read_environment_identity, which reads optional identity evidence from a capture client?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _read_environment_identity, which reads optional identity evidence from a capture client?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-31"
+    },
+    {
+      "case_id": "heldout-31-inspect",
+      "evaluator": {
+        "expected": "_read_environment_identity",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol reads optional identity evidence from a capture client?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_31}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol reads optional identity evidence from a capture client?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_31}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-31"
+    },
+    {
+      "case_id": "heldout-32-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _environment_identity_check, which compares expected, before, and after environment identity?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _environment_identity_check, which compares expected, before, and after environment identity?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-32"
+    },
+    {
+      "case_id": "heldout-32-inspect",
+      "evaluator": {
+        "expected": "_environment_identity_check",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol compares expected, before, and after environment identity?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_32}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol compares expected, before, and after environment identity?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_32}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-32"
+    },
+    {
+      "case_id": "heldout-33-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _materialize_trial, which replaces deterministic placeholders in a request?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _materialize_trial, which replaces deterministic placeholders in a request?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-33"
+    },
+    {
+      "case_id": "heldout-33-inspect",
+      "evaluator": {
+        "expected": "_materialize_trial",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol replaces deterministic placeholders in a request?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_33}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol replaces deterministic placeholders in a request?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_33}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-33"
+    },
+    {
+      "case_id": "heldout-34-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _tool_name, which extracts a tool name from either supported tool schema?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _tool_name, which extracts a tool name from either supported tool schema?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-34"
+    },
+    {
+      "case_id": "heldout-34-inspect",
+      "evaluator": {
+        "expected": "_tool_name",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol extracts a tool name from either supported tool schema?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_34}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol extracts a tool name from either supported tool schema?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_34}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-34"
+    },
+    {
+      "case_id": "heldout-35-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _apply_request_transform, which applies a deterministic tool-list transformation?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _apply_request_transform, which applies a deterministic tool-list transformation?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-35"
+    },
+    {
+      "case_id": "heldout-35-inspect",
+      "evaluator": {
+        "expected": "_apply_request_transform",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol applies a deterministic tool-list transformation?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_35}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol applies a deterministic tool-list transformation?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_35}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-35"
+    },
+    {
+      "case_id": "heldout-36-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _predicted_eligible_tokens, which predicts reusable full-block tokens from prior prompts?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _predicted_eligible_tokens, which predicts reusable full-block tokens from prior prompts?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-36"
+    },
+    {
+      "case_id": "heldout-36-inspect",
+      "evaluator": {
+        "expected": "_predicted_eligible_tokens",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol predicts reusable full-block tokens from prior prompts?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_36}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol predicts reusable full-block tokens from prior prompts?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_36}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-36"
+    },
+    {
+      "case_id": "heldout-37-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _clopper_pearson_interval, which calculates an exact two-sided binomial interval?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _clopper_pearson_interval, which calculates an exact two-sided binomial interval?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-37"
+    },
+    {
+      "case_id": "heldout-37-inspect",
+      "evaluator": {
+        "expected": "_clopper_pearson_interval",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol calculates an exact two-sided binomial interval?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_37}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol calculates an exact two-sided binomial interval?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_37}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-37"
+    },
+    {
+      "case_id": "heldout-38-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _paired_success_statistics, which bounds the paired task-success difference without bootstrap collapse?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _paired_success_statistics, which bounds the paired task-success difference without bootstrap collapse?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-38"
+    },
+    {
+      "case_id": "heldout-38-inspect",
+      "evaluator": {
+        "expected": "_paired_success_statistics",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol bounds the paired task-success difference without bootstrap collapse?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_38}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol bounds the paired task-success difference without bootstrap collapse?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_38}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-38"
+    },
+    {
+      "case_id": "heldout-39-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _percentile, which selects a nearest-rank percentile from numeric values?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _percentile, which selects a nearest-rank percentile from numeric values?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-39"
+    },
+    {
+      "case_id": "heldout-39-inspect",
+      "evaluator": {
+        "expected": "_percentile",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol selects a nearest-rank percentile from numeric values?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_39}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol selects a nearest-rank percentile from numeric values?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_39}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-39"
+    },
+    {
+      "case_id": "heldout-40-locate",
+      "evaluator": {
+        "expected": "experiments.py",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _metric_summary, which summarizes a metric with count, mean, median, and p95?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which Python filename defines the top-level symbol _metric_summary, which summarizes a metric with count, mean, median, and p95?",
+            "instructions": "You are a read-only coding agent. Use only the supplied repository map; do not call a tool. Return only the bare Python filename such as cache.py, with no directory, markdown, or explanation.\n\n{{REPOSITORY_MAP}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-40"
+    },
+    {
+      "case_id": "heldout-40-inspect",
+      "evaluator": {
+        "expected": "_metric_summary",
+        "kind": "exact"
+      },
+      "variants": {
+        "baseline": {
+          "request": {
+            "input": "Which top-level symbol summarizes a metric with count, mean, median, and p95?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_40}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "BROAD_CODING_TOOLS"
+            }
+          }
+        },
+        "candidate": {
+          "request": {
+            "input": "Which top-level symbol summarizes a metric with count, mean, median, and p95?",
+            "instructions": "You are a read-only coding agent. Inspect only the supplied Python source excerpt; do not call a tool. Return only the bare top-level Python identifier, with no markdown or explanation.\n\n--- src/runeconomy/experiments.py ---\n{{SOURCE_CONTEXT_40}}",
+            "tool_choice": "none",
+            "tools": {
+              "$fixture": "SCOPED_CODING_TOOLS"
+            }
+          }
+        }
+      },
+      "workflow_id": "heldout-40"
+    }
+  ],
+  "constants": {
+    "REPOSITORY_MAP": "- src/runeconomy/analysis.py: trace-level diagnosis and finding generation; top-level symbols: _segment_at, _best_baseline, _finding_for_divergence, _finding_for_runtime_gap, _finding_for_unused_tools, analyze_trace\n- src/runeconomy/cache.py: static prompt-prefix cache calculations; top-level symbols: longest_common_prefix, eligible_prefix_tokens\n- src/runeconomy/cli.py: command-line parsing, validation, and dispatch; top-level symbols: _load_trace, _format_human, _build_parser, _load_json_object, _api_key, _write_json, _append_jsonl, _require_trusted_evaluators\n- src/runeconomy/critical_path.py: duration-weighted execution DAG analysis; top-level symbols: CriticalPath, calculate_critical_path\n- src/runeconomy/evaluators.py: deterministic task-output evaluators; top-level symbols: EvaluatorInfrastructureError, EvaluationResult, _require_object, validate_evaluator_spec, _normalize_text, _coerce_python_result, evaluate_output\n- src/runeconomy/experiments.py: paired experiment manifests, statistics, and execution; top-level symbols: ExperimentValidationError, _object, _string, _positive_int, _expected_environment_identity, _read_environment_identity, _environment_identity_check, _materialize_trial, _tool_name, _apply_request_transform, _predicted_eligible_tokens, _clopper_pearson_interval, _paired_success_statistics, _percentile, _metric_summary",
+    "SOURCE_CONTEXT_01": "def _segment_at(request: InferenceRequest, token_index: int) -> PromptSegment | None:\n    for segment in request.segments:\n        if segment.start_token <= token_index < segment.end_token:\n            return segment\n    return None",
+    "SOURCE_CONTEXT_02": "def _best_baseline(\n    request: InferenceRequest, prior: list[InferenceRequest]\n) -> tuple[InferenceRequest | None, int]:\n    best: InferenceRequest | None = None\n    best_lcp = 0\n    for candidate in prior:\n        if candidate.cache_identity != request.cache_identity:\n            continue\n        lcp = longest_common_prefix(candidate.prompt_token_ids, request.prompt_token_ids)\n        if best is None or lcp > best_lcp:\n            best = candidate\n            best_lcp = lcp\n    return best, best_lcp",
+    "SOURCE_CONTEXT_03": "def _finding_for_divergence(\n    analysis: RequestAnalysis, segment: PromptSegment\n) -> Finding | None:\n    experiments = {\n        \"dynamic_metadata\": (\n            \"Move changing metadata after the stable shared prefix and replay the same \"\n            \"workload with prompt semantics held constant.\"\n        ),\n        \"tools\": (\n            \"Canonicalize tool definitions and ordering, then compare cache reuse and \"\n            \"task success on paired requests.\"\n        ),\n        \"retrieved_context\": (\n            \"Stabilize document ordering or separate stable reference context from \"\n            \"per-step retrieval, then run a paired replay.\"\n        ),\n        \"history\": (\n            \"Preserve earlier turns byte-for-byte and append new turns; compare against \"\n            \"the current history reconstruction.\"\n        ),\n    }\n    experiment = experiments.get(segment.kind)\n    if experiment is None:\n        return None\n    eligible = analysis.eligible_prefix_tokens\n    return Finding(\n        rule_id=f\"prefix_divergence.{segment.kind}\",\n        request_id=analysis.request_id,\n        title=f\"Reusable prefix diverges in {segment.label}\",\n        evidence_level=\"observed\",\n        confidence=\"high\",\n        summary=(\n            f\"The best comparable prior request diverges at token \"\n            f\"{analysis.divergence_token} inside segment {segment.label!r}. \"\n            f\"Only {eligible} leading tokens are statically eligible for reuse.\"\n        ),\n        suggested_experiment=experiment,\n        supporting_metrics={\n            \"baseline_request_id\": analysis.baseline_request_id,\n            \"shared_prefix_tokens\": analysis.shared_prefix_tokens,\n            \"eligible_prefix_tokens\": eligible,\n            \"divergence_token\": analysis.divergence_token,\n        },\n        on_critical_path=analysis.on_critical_path,\n    )",
+    "SOURCE_CONTEXT_04": "def _finding_for_runtime_gap(analysis: RequestAnalysis) -> Finding | None:\n    gap = analysis.unrealized_eligible_tokens\n    if gap is None or gap <= 0:\n        return None\n    return Finding(\n        rule_id=\"cache.unrealized_eligibility\",\n        request_id=analysis.request_id,\n        title=\"Eligible prefix reuse was not realized\",\n        evidence_level=\"inferred\",\n        confidence=\"medium\",\n        summary=(\n            f\"Static analysis found {analysis.eligible_prefix_tokens} eligible tokens, \"\n            f\"but the runtime reported {analysis.actual_cached_tokens} cached tokens. \"\n            f\"The {gap}-token gap can result from eviction, routing, cache state, or \"\n            \"backend-specific eligibility not present in this trace.\"\n        ),\n        suggested_experiment=(\n            \"Replay on one isolated backend with a documented warm-cache sequence. If \"\n            \"the gap disappears, test routing and eviction separately.\"\n        ),\n        supporting_metrics={\n            \"baseline_request_id\": analysis.baseline_request_id,\n            \"eligible_prefix_tokens\": analysis.eligible_prefix_tokens,\n            \"actual_cached_tokens\": analysis.actual_cached_tokens,\n            \"unrealized_eligible_tokens\": gap,\n        },\n        on_critical_path=analysis.on_critical_path,\n    )",
+    "SOURCE_CONTEXT_05": "def _finding_for_unused_tools(\n    request: InferenceRequest, on_critical_path: bool | None\n) -> Finding | None:\n    available = request.available_tools\n    if len(available) < 4:\n        return None\n    invoked = set(request.invoked_tools)\n    unused = tuple(tool for tool in available if tool not in invoked)\n    if len(unused) < 3 or len(unused) / len(available) < 0.5:\n        return None\n    tool_tokens = sum(\n        segment.end_token - segment.start_token\n        for segment in request.segments\n        if segment.kind == \"tools\"\n    )\n    return Finding(\n        rule_id=\"tools.unused_exposure\",\n        request_id=request.request_id,\n        title=\"Most exposed tools were unused on this step\",\n        evidence_level=\"observed\",\n        confidence=\"medium\",\n        summary=(\n            f\"The request exposed {len(available)} tools but invoked \"\n            f\"{len(invoked)}; {len(unused)} were unused in this trace. \"\n            f\"The tool segment occupied {tool_tokens} prompt tokens. Observed \"\n            \"non-use does not prove a tool is unnecessary on every task.\"\n        ),\n        suggested_experiment=(\n            \"Replay representative tasks with the full catalog versus a \"\n            \"task-scoped allowlist. Require non-inferior workflow success and \"\n            \"measure input tokens plus total critical-path latency.\"\n        ),\n        supporting_metrics={\n            \"available_tool_count\": len(available),\n            \"invoked_tool_count\": len(invoked),\n            \"unused_tool_count\": len(unused),\n            \"unused_tool_names\": list(unused),\n            \"tool_segment_tokens\": tool_tokens,\n            \"candidate_tool_names\": list(request.invoked_tools),\n            \"optimization_target\": \"input_tokens\",\n            \"primary_metric\": \"total_latency_ms\",\n        },\n        on_critical_path=on_critical_path,\n    )",
+    "SOURCE_CONTEXT_06": "def analyze_trace(trace: Trace) -> dict[str, Any]:\n    \"\"\"Analyze a normalized trace and return a JSON-serializable report.\"\"\"\n    analyses: list[RequestAnalysis] = []\n    findings: list[Finding] = []\n    prior: list[InferenceRequest] = []\n    critical_path = calculate_critical_path(trace.spans)\n    critical_request_ids = (\n        set(critical_path.inference_request_ids) if critical_path is not None else None\n    )\n\n    for request in trace.requests:\n        baseline, shared = _best_baseline(request, prior)\n        eligible = eligible_prefix_tokens(request, shared) if baseline else 0\n        actual = request.metrics.cached_input_tokens\n        gap = None if actual is None else max(eligible - actual, 0)\n        divergence = None\n        segment = None\n        if baseline is not None and shared < min(\n            len(baseline.prompt_token_ids), len(request.prompt_token_ids)\n        ):\n            divergence = shared\n            segment = _segment_at(request, divergence)\n\n        result = RequestAnalysis(\n            request_id=request.request_id,\n            baseline_request_id=baseline.request_id if baseline else None,\n            shared_prefix_tokens=shared,\n            eligible_prefix_tokens=eligible,\n            actual_cached_tokens=actual,\n            unrealized_eligible_tokens=gap,\n            divergence_token=divergence,\n            divergence_segment_kind=segment.kind if segment else None,\n            divergence_segment_label=segment.label if segment else None,\n            eligibility_model=\"vllm_full_blocks\" if request.backend == \"vllm\" else \"generic_tokens\",\n            on_critical_path=(\n                request.request_id in critical_request_ids\n                if critical_request_ids is not None\n                else None\n            ),\n        )\n        analyses.append(result)\n        if segment is not None:\n            finding = _finding_for_divergence(result, segment)\n            if finding is not None:\n                findings.append(finding)\n        runtime_finding = _finding_for_runtime_gap(result)\n        if runtime_finding is not None:\n            findings.append(runtime_finding)\n        unused_tools_finding = _finding_for_unused_tools(\n            request, result.on_critical_path\n        )\n        if unused_tools_finding is not None:\n            findings.append(unused_tools_finding)\n        prior.append(request)\n\n    total_input = sum(\n        request.metrics.input_tokens\n        if request.metrics.input_tokens is not None\n        else len(request.prompt_token_ids)\n        for request in trace.requests\n    )\n    cache_telemetry_complete = all(\n        request.metrics.cached_input_tokens is not None for request in trace.requests\n    )\n    total_actual_cached = (\n        sum(request.metrics.cached_input_tokens or 0 for request in trace.requests)\n        if cache_telemetry_complete\n        else None\n    )\n    total_eligible = sum(item.eligible_prefix_tokens for item in analyses)\n    observed_cache_coverage = (\n        total_actual_cached / total_input\n        if total_input and total_actual_cached is not None\n        else None\n    )\n\n    return {\n        \"report_version\": \"0.1\",\n        \"trace_id\": trace.trace_id,\n        \"workload\": trace.workload,\n        \"success\": trace.success,\n        \"summary\": {\n            \"request_count\": len(trace.requests),\n            \"total_input_tokens\": total_input,\n            \"total_eligible_prefix_tokens\": total_eligible,\n            \"total_actual_cached_tokens\": total_actual_cached,\n            \"cache_telemetry_complete\": cache_telemetry_complete,\n            \"observed_cache_coverage\": observed_cache_coverage,\n            \"finding_count\": len(findings),\n            \"critical_path_duration_ms\": (\n                critical_path.duration_ms if critical_path is not None else None\n            ),\n        },\n        \"critical_path\": asdict(critical_path) if critical_path is not None else None,\n        \"requests\": [asdict(item) for item in analyses],\n        \"findings\": [asdict(item) for item in findings],\n    }",
+    "SOURCE_CONTEXT_07": "def longest_common_prefix(left: tuple[int, ...], right: tuple[int, ...]) -> int:\n    \"\"\"Return the number of identical leading token IDs.\"\"\"\n    limit = min(len(left), len(right))\n    for index in range(limit):\n        if left[index] != right[index]:\n            return index\n    return limit",
+    "SOURCE_CONTEXT_08": "def eligible_prefix_tokens(request: InferenceRequest, shared_tokens: int) -> int:\n    \"\"\"Return a conservative static upper bound for reusable prefix tokens.\n\n    vLLM reuses full cache blocks. It also recomputes at least the final prompt\n    token, so the upper bound excludes the current request's final token before\n    rounding down. Unknown backends currently use token-level eligibility and\n    are explicitly reported as generic by the analyzer.\n    \"\"\"\n    if not request.cache.enabled or not request.prompt_token_ids:\n        return 0\n    bounded = min(shared_tokens, len(request.prompt_token_ids) - 1)\n    if bounded <= 0:\n        return 0\n    if request.backend == \"vllm\":\n        block_size = request.cache.block_size\n        return (bounded // block_size) * block_size\n    return bounded",
+    "SOURCE_CONTEXT_09": "def _load_trace(path: Path) -> Trace:\n    try:\n        with path.open(\"r\", encoding=\"utf-8\") as handle:\n            payload = json.load(handle)\n    except OSError as exc:\n        raise TraceValidationError(f\"cannot read {path}: {exc}\") from exc\n    except json.JSONDecodeError as exc:\n        raise TraceValidationError(\n            f\"{path}:{exc.lineno}:{exc.colno}: invalid JSON: {exc.msg}\"\n        ) from exc\n    return Trace.from_dict(payload)",
+    "SOURCE_CONTEXT_10": "def _format_human(report: dict[str, Any]) -> str:\n    summary = report[\"summary\"]\n    coverage = summary[\"observed_cache_coverage\"]\n    coverage_text = \"unknown\" if coverage is None else f\"{coverage:.1%}\"\n    lines = [\n        f\"Trace: {report['trace_id']} ({report['workload']})\",\n        f\"Requests: {summary['request_count']}\",\n        f\"Input tokens: {summary['total_input_tokens']}\",\n        f\"Eligible prefix tokens: {summary['total_eligible_prefix_tokens']}\",\n        f\"Actual cached tokens: {summary['total_actual_cached_tokens']}\",\n        f\"Observed cache coverage: {coverage_text}\",\n        \"Critical path: \"\n        + (\n            \"not provided\"\n            if summary[\"critical_path_duration_ms\"] is None\n            else f\"{summary['critical_path_duration_ms']:.1f} ms\"\n        ),\n        f\"Findings: {summary['finding_count']}\",\n    ]\n    for finding in report[\"findings\"]:\n        lines.extend(\n            [\n                \"\",\n                f\"[{finding['evidence_level']}/{finding['confidence']}] \"\n                f\"{finding['title']} ({finding['request_id']})\",\n                \"Critical path: \"\n                + (\n                    \"unknown\"\n                    if finding[\"on_critical_path\"] is None\n                    else \"yes\"\n                    if finding[\"on_critical_path\"]\n                    else \"no\"\n                ),\n                finding[\"summary\"],\n                f\"Experiment: {finding['suggested_experiment']}\",\n            ]\n        )\n    return \"\\n\".join(lines)",
+    "SOURCE_CONTEXT_11": "def _build_parser() -> argparse.ArgumentParser:\n    parser = argparse.ArgumentParser(prog=\"runeconomy\")\n    subparsers = parser.add_subparsers(dest=\"command\", required=True)\n    analyze = subparsers.add_parser(\"analyze\", help=\"analyze a normalized trace\")\n    analyze.add_argument(\"trace\", type=Path)\n    analyze.add_argument(\"--format\", choices=(\"human\", \"json\"), default=\"human\")\n    analyze.add_argument(\"--output\", type=Path)\n\n    import_vllm = subparsers.add_parser(\n        \"import-vllm-jsonl\",\n        help=\"convert exact-token vLLM capture records into a normalized trace\",\n    )\n    import_vllm.add_argument(\"captures\", type=Path)\n    import_vllm.add_argument(\"--output\", type=Path, required=True)\n    import_vllm.add_argument(\"--trace-id\", required=True)\n    import_vllm.add_argument(\"--workload\", default=\"unknown\")\n    import_vllm.add_argument(\"--model\", required=True)\n    import_vllm.add_argument(\"--model-revision\")\n    import_vllm.add_argument(\"--tokenizer\")\n    import_vllm.add_argument(\"--tokenizer-revision\")\n    import_vllm.add_argument(\"--chat-template-digest\")\n    import_vllm.add_argument(\"--backend-version\")\n    import_vllm.add_argument(\"--block-size\", type=int, default=16)\n    success = import_vllm.add_mutually_exclusive_group()\n    success.add_argument(\"--success\", dest=\"success\", action=\"store_true\")\n    success.add_argument(\"--failure\", dest=\"success\", action=\"store_false\")\n    import_vllm.set_defaults(success=None)\n\n    capture = subparsers.add_parser(\n        \"capture-vllm\", help=\"render and execute one vLLM Responses request\"\n    )\n    capture.add_argument(\"request\", type=Path)\n    capture.add_argument(\"--base-url\", required=True)\n    capture.add_argument(\"--api-key-env\")\n    capture.add_argument(\"--timeout\", type=float, default=300.0)\n    capture.add_argument(\"--startup-timeout\", type=float, default=600.0)\n    capture.add_argument(\"--output\", type=Path)\n    capture.add_argument(\n        \"--append-trace-jsonl\",\n        type=Path,\n        help=\"append an importable envelope containing the request and capture\",\n    )\n    capture.add_argument(\"--request-id\")\n    capture.add_argument(\"--invoked-tool\", action=\"append\", default=[])\n\n    demo = subparsers.add_parser(\n        \"demo\", help=\"render the bundled CPU-only NegativeSplit demonstration\"\n    )\n    demo.add_argument(\"--output\", type=Path, default=Path(\"runeconomy-demo.html\"))\n\n    experiment = subparsers.add_parser(\n        \"negative-split\",\n        aliases=[\"experiment\"],\n        help=\"run a controlled baseline-versus-candidate comparison\",\n    )\n    experiment_commands = experiment.add_subparsers(\n        dest=\"experiment_command\", required=True\n    )\n    validate = experiment_commands.add_parser(\"validate\", help=\"validate a manifest\")\n    validate.add_argument(\"manifest\", type=Path)\n    validate.add_argument(\n        \"--allow-exec-evaluators\",\n        action=\"store_true\",\n        help=\"allow trusted python and command evaluators\",\n    )\n    run = experiment_commands.add_parser(\"run\", help=\"run a manifest against vLLM\")\n    run.add_argument(\"manifest\", type=Path)\n    run.add_argument(\"--output\", type=Path, required=True)\n    run.add_argument(\"--timeout\", type=float, default=300.0)\n    run.add_argument(\"--startup-timeout\", type=float, default=600.0)\n    run.add_argument(\n        \"--checkpoint\",\n        type=Path,\n        help=\"JSONL recovery journal (defaults beside the output file)\",\n    )\n    run.add_argument(\n        \"--resume\",\n        action=\"store_true\",\n        help=\"resume the deterministic schedule from an existing checkpoint\",\n    )\n    run.add_argument(\n        \"--allow-exec-evaluators\",\n        action=\"store_true\",\n        help=\"allow trusted python and command evaluators\",\n    )\n    run.add_argument(\n        \"--require-verified\",\n        action=\"store_true\",\n        help=\"return exit code 3 unless every configured acceptance gate passes\",\n    )\n    report = experiment_commands.add_parser(\n        \"report\", help=\"render a static NegativeSplit report\"\n    )\n    report.add_argument(\"result\", type=Path)\n    report.add_argument(\"--output\", type=Path, required=True)\n    report.add_argument(\"--format\", choices=(\"markdown\", \"html\"))\n    return parser",
+    "SOURCE_CONTEXT_12": "def _load_json_object(path: Path) -> dict[str, Any]:\n    try:\n        with path.open(\"r\", encoding=\"utf-8\") as handle:\n            payload = json.load(handle)\n    except OSError as exc:\n        raise ExperimentValidationError(f\"cannot read {path}: {exc}\") from exc\n    except json.JSONDecodeError as exc:\n        raise ExperimentValidationError(\n            f\"{path}:{exc.lineno}:{exc.colno}: invalid JSON: {exc.msg}\"\n        ) from exc\n    if not isinstance(payload, dict):\n        raise ExperimentValidationError(f\"{path} must contain a JSON object\")\n    return payload",
+    "SOURCE_CONTEXT_13": "def _api_key(environment_name: str | None) -> str | None:\n    if environment_name is None:\n        return None\n    value = os.environ.get(environment_name)\n    if not value:\n        raise ExperimentValidationError(\n            f\"API key environment variable {environment_name!r} is not set\"\n        )\n    return value",
+    "SOURCE_CONTEXT_14": "def _write_json(path: Path, payload: Mapping[str, Any]) -> None:\n    temporary = path.with_name(path.name + \".tmp\")\n    try:\n        temporary.write_text(\n            json.dumps(payload, indent=2, sort_keys=True) + \"\\n\", encoding=\"utf-8\"\n        )\n        temporary.replace(path)\n    except OSError as exc:\n        try:\n            temporary.unlink(missing_ok=True)\n        except OSError:\n            pass\n        raise ExperimentValidationError(f\"cannot write {path}: {exc}\") from exc",
+    "SOURCE_CONTEXT_15": "def _append_jsonl(path: Path, payload: Mapping[str, Any]) -> None:\n    try:\n        with path.open(\"a\", encoding=\"utf-8\") as handle:\n            handle.write(json.dumps(payload, sort_keys=True, separators=(\",\", \":\")))\n            handle.write(\"\\n\")\n            handle.flush()\n            os.fsync(handle.fileno())\n    except OSError as exc:\n        raise ExperimentValidationError(f\"cannot append to {path}: {exc}\") from exc",
+    "SOURCE_CONTEXT_16": "def _require_trusted_evaluators(\n    manifest: ExperimentManifest, allow_exec_evaluators: bool\n) -> None:\n    if manifest.uses_executable_evaluators() and not allow_exec_evaluators:\n        raise ExperimentValidationError(\n            \"manifest contains python or command evaluators that execute local code; \"\n            \"review the manifest and pass --allow-exec-evaluators to continue\"\n        )",
+    "SOURCE_CONTEXT_17": "class CriticalPath:\n    duration_ms: float\n    span_ids: tuple[str, ...]\n    inference_request_ids: tuple[str, ...]\n    inference_ms: float\n    tool_ms: float",
+    "SOURCE_CONTEXT_18": "def calculate_critical_path(spans: tuple[ExecutionSpan, ...]) -> CriticalPath | None:\n    \"\"\"Return the longest duration-weighted path through an execution DAG.\"\"\"\n    if not spans:\n        return None\n\n    by_id = {span.span_id: span for span in spans}\n    indegree = {span.span_id: len(span.depends_on) for span in spans}\n    successors: dict[str, list[str]] = {span.span_id: [] for span in spans}\n    for span in spans:\n        for dependency in span.depends_on:\n            successors[dependency].append(span.span_id)\n\n    ready = sorted(span_id for span_id, degree in indegree.items() if degree == 0)\n    topological: list[str] = []\n    while ready:\n        span_id = ready.pop(0)\n        topological.append(span_id)\n        for successor in sorted(successors[span_id]):\n            indegree[successor] -= 1\n            if indegree[successor] == 0:\n                ready.append(successor)\n                ready.sort()\n    if len(topological) != len(spans):\n        raise TraceValidationError(\"trace.spans: dependency graph contains a cycle\")\n\n    longest: dict[str, float] = {}\n    predecessor: dict[str, str | None] = {}\n    for span_id in topological:\n        span = by_id[span_id]\n        if not span.depends_on:\n            longest[span_id] = span.duration_ms\n            predecessor[span_id] = None\n            continue\n        best_dependency = max(\n            span.depends_on, key=lambda item: (longest[item], item)\n        )\n        longest[span_id] = longest[best_dependency] + span.duration_ms\n        predecessor[span_id] = best_dependency\n\n    final_id = max(topological, key=lambda item: (longest[item], item))\n    reversed_path: list[str] = []\n    cursor: str | None = final_id\n    while cursor is not None:\n        reversed_path.append(cursor)\n        cursor = predecessor[cursor]\n    path_ids = tuple(reversed(reversed_path))\n    path_spans = [by_id[span_id] for span_id in path_ids]\n    return CriticalPath(\n        duration_ms=longest[final_id],\n        span_ids=path_ids,\n        inference_request_ids=tuple(\n            span.request_id\n            for span in path_spans\n            if span.kind == \"inference\" and span.request_id is not None\n        ),\n        inference_ms=sum(\n            span.duration_ms for span in path_spans if span.kind == \"inference\"\n        ),\n        tool_ms=sum(span.duration_ms for span in path_spans if span.kind == \"tool\"),\n    )",
+    "SOURCE_CONTEXT_19": "class EvaluatorInfrastructureError(EvaluatorError):\n    \"\"\"Raised when an evaluator cannot run, rather than when a task fails.\"\"\"",
+    "SOURCE_CONTEXT_20": "class EvaluationResult:\n    success: bool\n    evaluator_kind: str\n    score: float\n    details: dict[str, Any]\n\n    def to_dict(self) -> dict[str, Any]:\n        return asdict(self)",
+    "SOURCE_CONTEXT_21": "def _require_object(value: Any, location: str) -> dict[str, Any]:\n    if not isinstance(value, dict):\n        raise EvaluatorError(f\"{location} must be an object\")\n    return value",
+    "SOURCE_CONTEXT_22": "def validate_evaluator_spec(spec: Any, location: str = \"evaluator\") -> dict[str, Any]:\n    value = _require_object(spec, location)\n    kind = value.get(\"kind\")\n    if kind == \"exact\":\n        if not isinstance(value.get(\"expected\"), str):\n            raise EvaluatorError(f\"{location}.expected must be a string\")\n    elif kind == \"regex\":\n        pattern = value.get(\"pattern\")\n        if not isinstance(pattern, str):\n            raise EvaluatorError(f\"{location}.pattern must be a string\")\n        try:\n            re.compile(pattern)\n        except re.error as exc:\n            raise EvaluatorError(f\"{location}.pattern is invalid: {exc}\") from exc\n        flags = value.get(\"flags\", [])\n        allowed_flags = {\"IGNORECASE\", \"MULTILINE\", \"DOTALL\"}\n        if not isinstance(flags, list) or any(\n            flag not in allowed_flags for flag in flags\n        ):\n            raise EvaluatorError(\n                f\"{location}.flags may contain IGNORECASE, MULTILINE, or DOTALL\"\n            )\n    elif kind == \"json_schema\":\n        schema = _require_object(value.get(\"schema\"), f\"{location}.schema\")\n        try:\n            jsonschema.validators.validator_for(schema).check_schema(schema)\n        except jsonschema.exceptions.SchemaError as exc:\n            raise EvaluatorError(\n                f\"{location}.schema is invalid: {exc.message}\"\n            ) from exc\n    elif kind == \"python\":\n        target = value.get(\"callable\")\n        if not isinstance(target, str) or \":\" not in target:\n            raise EvaluatorError(\n                f\"{location}.callable must use the form 'module:function'\"\n            )\n    elif kind == \"command\":\n        argv = value.get(\"argv\")\n        if (\n            not isinstance(argv, list)\n            or not argv\n            or any(not isinstance(item, str) or not item for item in argv)\n        ):\n            raise EvaluatorError(f\"{location}.argv must be a non-empty string array\")\n        timeout = value.get(\"timeout_seconds\", 30)\n        if not isinstance(timeout, (int, float)) or timeout <= 0:\n            raise EvaluatorError(f\"{location}.timeout_seconds must be positive\")\n    elif kind == \"all\":\n        evaluators = value.get(\"evaluators\")\n        if not isinstance(evaluators, list) or not evaluators:\n            raise EvaluatorError(f\"{location}.evaluators must be a non-empty array\")\n        for index, child in enumerate(evaluators):\n            validate_evaluator_spec(child, f\"{location}.evaluators[{index}]\")\n    else:\n        raise EvaluatorError(\n            f\"{location}.kind must be exact, regex, json_schema, python, command, or all\"\n        )\n    return dict(value)",
+    "SOURCE_CONTEXT_23": "def _normalize_text(text: str, spec: Mapping[str, Any]) -> str:\n    result = text.strip() if spec.get(\"strip\", True) else text\n    return result if spec.get(\"case_sensitive\", True) else result.casefold()",
+    "SOURCE_CONTEXT_24": "def _coerce_python_result(result: Any) -> tuple[bool, float, dict[str, Any]]:\n    if isinstance(result, bool):\n        return result, float(result), {}\n    if isinstance(result, (int, float)) and not isinstance(result, bool):\n        score = float(result)\n        return score > 0, score, {}\n    if isinstance(result, dict) and isinstance(result.get(\"success\"), bool):\n        score_value = result.get(\"score\", float(result[\"success\"]))\n        if not isinstance(score_value, (int, float)):\n            raise EvaluatorError(\"python evaluator result.score must be numeric\")\n        details = result.get(\"details\", {})\n        if not isinstance(details, dict):\n            raise EvaluatorError(\"python evaluator result.details must be an object\")\n        return result[\"success\"], float(score_value), details\n    raise EvaluatorError(\n        \"python evaluator must return bool, number, or an object with boolean success\"\n    )",
+    "SOURCE_CONTEXT_25": "def evaluate_output(\n    spec: Mapping[str, Any], output_text: str | None, context: Mapping[str, Any]\n) -> EvaluationResult:\n    validated = validate_evaluator_spec(dict(spec))\n    kind = validated[\"kind\"]\n    if output_text is None:\n        return EvaluationResult(False, kind, 0.0, {\"reason\": \"no_output_text\"})\n\n    if kind == \"exact\":\n        actual = _normalize_text(output_text, validated)\n        expected = _normalize_text(validated[\"expected\"], validated)\n        success = actual == expected\n        return EvaluationResult(success, kind, float(success), {})\n\n    if kind == \"regex\":\n        flags = 0\n        for flag_name in validated.get(\"flags\", []):\n            flags |= getattr(re, flag_name)\n        pattern = re.compile(validated[\"pattern\"], flags)\n        match = (\n            pattern.fullmatch(output_text)\n            if validated.get(\"full_match\", True)\n            else pattern.search(output_text)\n        )\n        success = match is not None\n        return EvaluationResult(success, kind, float(success), {})\n\n    if kind == \"json_schema\":\n        try:\n            document = json.loads(output_text)\n        except json.JSONDecodeError as exc:\n            return EvaluationResult(\n                False,\n                kind,\n                0.0,\n                {\"reason\": \"invalid_json\", \"line\": exc.lineno, \"column\": exc.colno},\n            )\n        try:\n            jsonschema.validate(document, validated[\"schema\"])\n        except jsonschema.ValidationError as exc:\n            return EvaluationResult(\n                False,\n                kind,\n                0.0,\n                {\"reason\": \"schema_mismatch\", \"path\": list(exc.absolute_path)},\n            )\n        return EvaluationResult(True, kind, 1.0, {})\n\n    if kind == \"python\":\n        module_name, function_name = validated[\"callable\"].split(\":\", 1)\n        try:\n            module = importlib.import_module(module_name)\n        except (ImportError, ValueError) as exc:\n            raise EvaluatorInfrastructureError(\n                f\"cannot import python evaluator module {module_name!r}: {exc}\"\n            ) from exc\n        function = getattr(module, function_name, None)\n        if not callable(function):\n            raise EvaluatorInfrastructureError(\n                f\"python evaluator {validated['callable']!r} is not callable\"\n            )\n        try:\n            raw_result = function(output_text, dict(context))\n        except Exception as exc:\n            raise EvaluatorInfrastructureError(\n                f\"python evaluator {validated['callable']!r} raised \"\n                f\"{type(exc).__name__}: {exc}\"\n            ) from exc\n        success, score, details = _coerce_python_result(raw_result)\n        return EvaluationResult(success, kind, score, details)\n\n    if kind == \"command\":\n        timeout_seconds = float(validated.get(\"timeout_seconds\", 30))\n        try:\n            completed = subprocess.run(\n                validated[\"argv\"],\n                input=output_text,\n                text=True,\n                capture_output=True,\n                timeout=timeout_seconds,\n                check=False,\n            )\n        except subprocess.TimeoutExpired as exc:\n            raise EvaluatorInfrastructureError(\n                f\"command evaluator timed out after {timeout_seconds:g} seconds\"\n            ) from exc\n        except OSError as exc:\n            raise EvaluatorInfrastructureError(\n                f\"cannot run command evaluator {validated['argv'][0]!r}: {exc}\"\n            ) from exc\n        success = completed.returncode == 0\n        details: dict[str, Any] = {\"returncode\": completed.returncode}\n        if completed.stderr:\n            details[\"stderr\"] = completed.stderr[-2000:]\n        return EvaluationResult(success, kind, float(success), details)\n\n    child_results = [\n        evaluate_output(child, output_text, context)\n        for child in validated[\"evaluators\"]\n    ]\n    success = all(result.success for result in child_results)\n    score = min(result.score for result in child_results)\n    return EvaluationResult(\n        success,\n        kind,\n        score,\n        {\"children\": [result.to_dict() for result in child_results]},\n    )",
+    "SOURCE_CONTEXT_26": "class ExperimentValidationError(ValueError):\n    pass",
+    "SOURCE_CONTEXT_27": "def _object(value: Any, location: str) -> dict[str, Any]:\n    if not isinstance(value, dict):\n        raise ExperimentValidationError(f\"{location} must be an object\")\n    return value",
+    "SOURCE_CONTEXT_28": "def _string(value: Any, location: str) -> str:\n    if not isinstance(value, str) or not value.strip():\n        raise ExperimentValidationError(f\"{location} must be a non-empty string\")\n    return value",
+    "SOURCE_CONTEXT_29": "def _positive_int(value: Any, location: str, *, allow_zero: bool = False) -> int:\n    minimum = 0 if allow_zero else 1\n    if not isinstance(value, int) or isinstance(value, bool) or value < minimum:\n        raise ExperimentValidationError(f\"{location} must be an integer >= {minimum}\")\n    return value",
+    "SOURCE_CONTEXT_30": "def _expected_environment_identity(manifest: ExperimentManifest) -> dict[str, Any]:\n    return {\n        \"model\": manifest.backend.model,\n        \"model_revision\": manifest.backend.model_revision,\n        \"tokenizer_revision\": manifest.backend.tokenizer_revision,\n        \"chat_template_digest\": manifest.backend.chat_template_digest,\n        \"backend_version\": manifest.backend.backend_version,\n        \"engine_config\": manifest.backend.engine_config,\n    }",
+    "SOURCE_CONTEXT_31": "def _read_environment_identity(client: CaptureClient) -> dict[str, Any] | None:\n    provider = getattr(client, \"environment_identity\", None)\n    if not callable(provider):\n        return None\n    identity = provider()\n    if identity is None:\n        return None\n    if not isinstance(identity, Mapping):\n        raise ExperimentValidationError(\n            \"environment identity provider returned a non-object value\"\n        )\n    return dict(identity)",
+    "SOURCE_CONTEXT_32": "def _environment_identity_check(\n    expected: Mapping[str, Any],\n    before: Mapping[str, Any] | None,\n    after: Mapping[str, Any] | None,\n) -> dict[str, Any]:\n    fields = tuple(expected)\n    missing_before = [field for field in fields if before is None or field not in before]\n    missing_after = [field for field in fields if after is None or field not in after]\n    expected_mismatches = {\n        field: {\"expected\": expected[field], \"observed\": before[field]}\n        for field in fields\n        if before is not None and field in before and before[field] != expected[field]\n    }\n    drift = {\n        field: {\"before\": before[field], \"after\": after[field]}\n        for field in fields\n        if before is not None\n        and after is not None\n        and field in before\n        and field in after\n        and before[field] != after[field]\n    }\n    verified = not missing_before and not missing_after and not expected_mismatches and not drift\n    return {\n        \"verified\": verified,\n        \"expected\": dict(expected),\n        \"before\": None if before is None else dict(before),\n        \"after\": None if after is None else dict(after),\n        \"missing_before\": missing_before,\n        \"missing_after\": missing_after,\n        \"expected_mismatches\": expected_mismatches,\n        \"drift\": drift,\n    }",
+    "SOURCE_CONTEXT_33": "def _materialize_trial(value: Any, replacements: Mapping[str, Any]) -> Any:\n    \"\"\"Replace deterministic trial and fixture placeholders recursively.\"\"\"\n\n    if isinstance(value, str):\n        result = value\n        for name, replacement in replacements.items():\n            if isinstance(replacement, str):\n                result = result.replace(\"{{\" + name + \"}}\", replacement)\n        unresolved = re.search(r\"\\{\\{[A-Z][A-Z0-9_]*\\}\\}\", result)\n        if unresolved:\n            raise ExperimentValidationError(\n                f\"unresolved request placeholder {unresolved.group(0)}\"\n            )\n        return result\n    if isinstance(value, list):\n        return [_materialize_trial(item, replacements) for item in value]\n    if isinstance(value, dict):\n        if set(value) == {\"$fixture\"}:\n            name = value[\"$fixture\"]\n            if not isinstance(name, str) or name not in replacements:\n                raise ExperimentValidationError(\n                    f\"unknown structured fixture reference {name!r}\"\n                )\n            return deepcopy(replacements[name])\n        return {\n            key: _materialize_trial(item, replacements) for key, item in value.items()\n        }\n    return value",
+    "SOURCE_CONTEXT_34": "def _tool_name(tool: Any) -> str:\n    if not isinstance(tool, dict):\n        return \"\"\n    name = tool.get(\"name\")\n    if isinstance(name, str):\n        return name\n    function = tool.get(\"function\")\n    if isinstance(function, dict) and isinstance(function.get(\"name\"), str):\n        return function[\"name\"]\n    return \"\"",
+    "SOURCE_CONTEXT_35": "def _apply_request_transform(\n    request: dict[str, Any], transform: Mapping[str, Any] | None, seed: int\n) -> dict[str, Any]:\n    result = deepcopy(request)\n    if transform is None:\n        return result\n    tools = result.get(\"tools\")\n    if not isinstance(tools, list) or len(tools) < 2:\n        raise ExperimentValidationError(\n            f\"{transform.get('kind')} requires at least two materialized tools\"\n        )\n    kind = transform[\"kind\"]\n    if kind == \"shuffle_tools\":\n        random.Random(seed).shuffle(tools)\n    elif kind == \"canonicalize_tools\":\n        tools.sort(\n            key=lambda tool: (\n                _tool_name(tool),\n                json.dumps(tool, sort_keys=True, separators=(\",\", \":\")),\n            )\n        )\n    else:  # Protected by manifest validation.\n        raise ExperimentValidationError(f\"unsupported request transform {kind!r}\")\n    return result",
+    "SOURCE_CONTEXT_36": "def _predicted_eligible_tokens(\n    token_ids: tuple[int, ...], prior_prompts: list[tuple[int, ...]], block_size: int\n) -> int:\n    if not token_ids or not prior_prompts:\n        return 0\n    shared = max(longest_common_prefix(token_ids, prior) for prior in prior_prompts)\n    bounded = min(shared, len(token_ids) - 1)\n    return 0 if bounded <= 0 else (bounded // block_size) * block_size",
+    "SOURCE_CONTEXT_37": "def _clopper_pearson_interval(\n    successes: int, trials: int, *, confidence: float = 0.95\n) -> list[float] | None:\n    \"\"\"Return an exact two-sided binomial confidence interval.\"\"\"\n\n    if trials <= 0:\n        return None\n    alpha = 1.0 - confidence\n    tail = alpha / 2.0\n    lower = (\n        0.0\n        if successes == 0\n        else _inverse_binomial_cdf(successes - 1, trials, 1.0 - tail)\n    )\n    upper = (\n        1.0\n        if successes == trials\n        else _inverse_binomial_cdf(successes, trials, tail)\n    )\n    return [lower, upper]",
+    "SOURCE_CONTEXT_38": "def _paired_success_statistics(\n    pairs: list[tuple[bool, bool]], *, confidence: float = 0.95\n) -> dict[str, Any]:\n    \"\"\"Bound a paired success-rate difference without a degenerate bootstrap.\n\n    The difference is p(candidate-only) - p(baseline-only). Exact binomial\n    bounds are computed for both marginal discordance probabilities and joined\n    with Bonferroni coverage. This is conservative but valid for small samples,\n    including the all-agreement case.\n    \"\"\"\n\n    count = len(pairs)\n    both_success = sum(baseline and candidate for baseline, candidate in pairs)\n    both_failure = sum(not baseline and not candidate for baseline, candidate in pairs)\n    candidate_only = sum(not baseline and candidate for baseline, candidate in pairs)\n    baseline_only = sum(baseline and not candidate for baseline, candidate in pairs)\n    if not count:\n        return {\n            \"paired_count\": 0,\n            \"candidate_minus_baseline_mean\": None,\n            \"confidence_interval\": None,\n            \"one_sided_lower_bound\": None,\n            \"outcome_counts\": {\n                \"both_success\": 0,\n                \"both_failure\": 0,\n                \"candidate_only\": 0,\n                \"baseline_only\": 0,\n            },\n            \"method\": \"exact marginal binomial bounds with Bonferroni coverage\",\n        }\n\n    alpha = 1.0 - confidence\n    marginal_confidence = 1.0 - alpha / 2.0\n    candidate_only_interval = _clopper_pearson_interval(\n        candidate_only, count, confidence=marginal_confidence\n    )\n    baseline_only_interval = _clopper_pearson_interval(\n        baseline_only, count, confidence=marginal_confidence\n    )\n    assert candidate_only_interval is not None\n    assert baseline_only_interval is not None\n    simultaneous_interval = [\n        candidate_only_interval[0] - baseline_only_interval[1],\n        candidate_only_interval[1] - baseline_only_interval[0],\n    ]\n    one_sided_lower = _one_sided_binomial_lower(\n        candidate_only, count, alpha=alpha / 2.0\n    ) - _one_sided_binomial_upper(\n        baseline_only, count, alpha=alpha / 2.0\n    )\n    return {\n        \"paired_count\": count,\n        \"candidate_minus_baseline_mean\": (candidate_only - baseline_only) / count,\n        \"confidence_interval\": simultaneous_interval,\n        \"confidence_level\": confidence,\n        \"one_sided_lower_bound\": one_sided_lower,\n        \"outcome_counts\": {\n            \"both_success\": both_success,\n            \"both_failure\": both_failure,\n            \"candidate_only\": candidate_only,\n            \"baseline_only\": baseline_only,\n        },\n        \"method\": \"exact marginal binomial bounds with Bonferroni coverage\",\n    }",
+    "SOURCE_CONTEXT_39": "def _percentile(values: list[float], percentile: float) -> float | None:\n    if not values:\n        return None\n    ordered = sorted(values)\n    rank = max(0, math.ceil(percentile * len(ordered)) - 1)\n    return ordered[rank]",
+    "SOURCE_CONTEXT_40": "def _metric_summary(values: list[float]) -> dict[str, float | int | None]:\n    return {\n        \"count\": len(values),\n        \"mean\": statistics.fmean(values) if values else None,\n        \"median\": statistics.median(values) if values else None,\n        \"p95\": _percentile(values, 0.95),\n    }"
+  },
+  "design": {
+    "candidate_selection": {
+      "calibration_id": "repository-readonly-tools-v1",
+      "calibration_sha256": "sha256:aa3a2480a41ff12dc6d64aeb9d8851d9ab805254c967772ffb0f18f2616d32be",
+      "evaluation_data_used": false,
+      "selected_tools": [
+        "list_repository",
+        "read_file",
+        "search_repository"
+      ],
+      "selection_rule": "Take the union of required capabilities across calibration tasks, map each capability to the single matching tool in the broad catalog, and exclude every tool that is not required."
+    },
+    "claim_boundary": "40 distinct fixture-backed, two-step repository-analysis units; no live tool execution or candidate-local state propagation.",
+    "eligible_for_final_claim": true,
+    "evaluation_split": "held_out_from_tool_and_prompt_calibration",
+    "mechanism_metrics": [
+      "input_tokens",
+      "server_ttft_ms",
+      "client_ttft_ms",
+      "client_server_ttft_gap_ms",
+      "server_queue_ms",
+      "cached_tokens"
+    ],
+    "predeclared_primary_outcome": "summed total_latency_ms per workflow",
+    "prediction": "The scoped tool catalog will reduce input tokens and cold-cache workflow latency without reducing paired workflow success by more than 10 percentage points.",
+    "prompt_format_calibration": {
+      "change": "Repository maps now expose top-level symbol inventories and location questions name the target symbol explicitly. Because filenames are unique in this benchmark, both the requested filename and inspected identifier are exact-match outputs.",
+      "excluded_from_heldout_evaluation": true,
+      "excluded_symbols": [
+        "RequestAnalysis",
+        "Finding"
+      ]
+    },
+    "steps_per_workflow": 2,
+    "workflow_unit_count": 40
+  },
+  "execution": {
+    "arrival_pattern": "sequential",
+    "cache_treatment": "cold",
+    "cases_form_workflow": true,
+    "order": "randomized",
+    "repetitions": 1,
+    "require_evaluation": true,
+    "reset_external": false,
+    "seed": 404,
+    "warmup_repetitions": 0
+  },
+  "experiment_id": "repository-agent-tool-pruning-heldout-v1",
+  "json_fixtures": [
+    {
+      "name": "BROAD_CODING_TOOLS",
+      "path": "../fixtures/coding-tools-broad.json",
+      "sha256": "sha256:2e65258d9d25214f2e16815eab808565b09b9e6d170507ab16b771c111715f99"
+    },
+    {
+      "name": "SCOPED_CODING_TOOLS",
+      "path": "../fixtures/coding-tools-scoped.json",
+      "sha256": "sha256:06b77b0f7549eba1258ae3437896ab396573757e21ec553258bca807841b1f2c"
+    }
+  ],
+  "sampling": {
+    "max_output_tokens": 48,
+    "seed": 404,
+    "temperature": 0.0
+  },
+  "schema_version": "0.2"
+}
