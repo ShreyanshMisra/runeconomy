@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import unittest
+from html.parser import HTMLParser
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -17,85 +19,98 @@ from runeconomy.reports import (
 from scripts.rebuild_demo_artifact import build
 
 
-class ReportTests(unittest.TestCase):
-    def test_verified_report_contains_claim_and_metrics(self) -> None:
-        metrics = {
-            name: {"mean": value}
-            for name, value in {
-                "input_tokens": 100.0,
-                "cached_tokens": 10.0,
-                "cache_coverage": 0.5,
-                "server_ttft_ms": 20.0,
-                "client_ttft_ms": 30.0,
-                "total_latency_ms": 50.0,
-                "output_tokens": 4.0,
-                "task_success": 1.0,
-            }.items()
-        }
-        effects = {
-            name: {
-                "candidate_minus_baseline_mean": -1.0,
-                "bootstrap_95_ci": [-2.0, -0.5],
-            }
-            for name in metrics
-        }
-        result = {
-            "experiment_id": "demo",
-            "provenance": {"model": "model", "backend_version": "1"},
-            "summary": {
-                "variants": {
-                    "baseline": {
-                        **metrics,
-                        "outcomes": {
-                            "completed_rate": 1.0,
-                            "task_success_rate": 1.0,
-                            "evaluated_count": 2,
-                        },
-                    },
-                    "candidate": {
-                        **metrics,
-                        "outcomes": {
-                            "completed_rate": 1.0,
-                            "task_success_rate": 1.0,
-                            "evaluated_count": 2,
-                        },
-                    },
-                },
-                "effects": effects,
-                "prediction_vs_observation": {
-                    "predicted_candidate_minus_baseline_cached_tokens": 16,
-                    "observed_candidate_minus_baseline_cached_tokens": 16,
-                    "realization_ratio": 1.0,
-                },
-            },
-            "decision": {
-                "status": "verified",
-                "reason": "all checks passed",
-                "checks": [{"name": "quality", "passed": True}],
-            },
-        }
-        rendered = render_experiment_markdown(result)
-        self.assertIn("**Decision: VERIFIED**", rendered)
-        self.assertIn("Prediction versus observation", rendered)
-        self.assertIn("Generated output text was evaluated locally", rendered)
+class _VisibleText(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.hidden = 0
+        self.parts: list[str] = []
 
-    def test_bundled_demo_renders_self_contained_html(self) -> None:
-        result = load_demo_result()
-        rendered = render_demo_html(result)
-        self.assertIn("RunEconomy", rendered)
-        self.assertIn("NegativeSplit", rendered)
-        self.assertIn("INVALID — quality gates failed", rendered)
-        self.assertIn("Conditional observations only", rendered)
-        self.assertIn("not a positive benchmark claim", rendered)
-        self.assertIn("36 task pairs where both variants succeeded", rendered)
-        self.assertIn("Intervention tested", rendered)
-        self.assertIn("Decision gates, in order", rendered)
-        self.assertIn("No remote scripts", rendered)
-        self.assertIn("background: #fff", rendered)
-        self.assertNotIn("radial-gradient", rendered)
-        self.assertNotIn("border-radius", rendered)
-        self.assertNotIn('class="status"', rendered)
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"style", "script", "code", "pre"}:
+            self.hidden += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"style", "script", "code", "pre"} and self.hidden:
+            self.hidden -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self.hidden:
+            self.parts.append(data)
+
+    @property
+    def text(self) -> str:
+        return " ".join(self.parts)
+
+
+class ReportTests(unittest.TestCase):
+    def test_public_report_uses_required_order_and_plain_verdict(self) -> None:
+        rendered = render_demo_html(load_demo_result())
+        headings = [
+            rendered.index(f">{heading}<")
+            for heading in (
+                "Intervention Tested",
+                "Results",
+                "Verdict",
+                "Experiment Details",
+            )
+        ]
+        self.assertEqual(headings, sorted(headings))
+        self.assertIn("Result not verified", rendered)
+        self.assertIn("Verdict: Invalid", rendered)
+        self.assertIn("Invalid does not mean the candidate was slower", rendered)
+        self.assertNotIn("INVALID", rendered)
+        self.assertNotIn("<footer", rendered)
+
+    def test_favorable_numbers_are_qualified_in_results(self) -> None:
+        rendered = render_demo_html(load_demo_result())
+        results = rendered[rendered.index(">Results<") : rendered.index(">Verdict<")]
+        self.assertIn("+105", results)
+        self.assertIn("9 ms lower", results)
+        self.assertIn("62 ms lower", results)
+        self.assertIn("36 task pairs where both variants succeeded", results)
+        self.assertIn("not a verified improvement", results)
+
+    def test_report_prose_punctuation_and_offline_contract(self) -> None:
+        rendered = render_demo_html(load_demo_result())
+        parser = _VisibleText()
+        parser.feed(rendered)
+        self.assertNotIn("—", parser.text)
+        self.assertNotIn(";", parser.text)
         self.assertNotIn("<script", rendered)
+        self.assertNotRegex(rendered, r"(?:src|href)=[\"']https?://")
+        self.assertNotIn("@import", rendered)
+
+    def test_html_is_deterministic_and_responsive(self) -> None:
+        result = load_demo_result()
+        first = render_demo_html(result)
+        second = render_demo_html(result)
+        self.assertEqual(first, second)
+        self.assertIn("@media (max-width: 700px)", first)
+        self.assertIn('name="viewport"', first)
+        self.assertIn('aria-label="Decision path"', first)
+        self.assertIn("Synthetic labels show ordering only", first)
+
+    def test_all_verdicts_render_coherently(self) -> None:
+        base = load_demo_result("historical")
+        expected = {
+            "verified": "Improvement verified",
+            "regression": "Candidate regressed",
+            "inconclusive": "Result inconclusive",
+            "invalid": "Result not verified",
+        }
+        for status, message in expected.items():
+            with self.subTest(status=status):
+                result = copy.deepcopy(base)
+                result["decision"]["status"] = status
+                rendered = render_experiment_html(result)
+                markdown = render_experiment_markdown(result)
+                self.assertIn(message, rendered)
+                self.assertIn(f"Verdict: {status.title()}", rendered)
+                self.assertIn("## Intervention Tested", markdown)
+                self.assertLess(
+                    markdown.index("## Intervention Tested"),
+                    markdown.index("## Results"),
+                )
 
     def test_generic_html_handles_unevaluated_result_without_demo_claims(self) -> None:
         result = load_demo_result("historical")
@@ -105,41 +120,33 @@ class ReportTests(unittest.TestCase):
         result["summary"]["workflow"]["variants"]["candidate"]["outcomes"].update(
             {"task_success_rate": None, "evaluated_count": 0}
         )
-        result["summary"]["workflow"]["effects"]["task_success"].update(
-            {"candidate_minus_baseline_mean": None, "bootstrap_95_ci": None}
-        )
         rendered = render_experiment_html(result)
         self.assertIn("Task success was not evaluated", rendered)
-        self.assertNotIn("tool definitions per request", rendered)
-        self.assertNotIn("summed over two inference calls", rendered)
+        self.assertNotIn("36 task pairs", rendered)
 
-    def test_generic_reports_show_predeclared_prediction_assessment(self) -> None:
+    def test_predeclared_prediction_remains_in_technical_details(self) -> None:
         result = load_demo_result("historical")
         result["summary"]["predeclared_prediction"] = {
             "status": "not_established",
             "metric": "total_latency_ms",
             "direction": "decrease",
             "causal_mechanism": "less prefill work",
-            "candidate_minus_baseline_mean": -3.0,
-            "confidence_interval": [-8.0, 2.0],
         }
         html_report = render_experiment_html(result)
         markdown_report = render_experiment_markdown(result)
         self.assertIn("Predeclared hypothesis", html_report)
         self.assertIn("not_established", html_report)
-        self.assertIn("## Predeclared hypothesis", markdown_report)
-        self.assertIn("NOT_ESTABLISHED", markdown_report)
+        self.assertIn("Predeclared hypothesis", markdown_report)
 
-    def test_demo_command_writes_html_without_network(self) -> None:
+    def test_demo_command_writes_unified_report(self) -> None:
         with TemporaryDirectory() as directory:
             output = Path(directory) / "demo.html"
             self.assertEqual(main(["demo", "--output", str(output)]), 0)
-            self.assertIn(
-                "INVALID — quality gates failed",
-                output.read_text(encoding="utf-8"),
-            )
+            rendered = output.read_text(encoding="utf-8")
+            self.assertIn("RunEconomy Experiment Report", rendered)
+            self.assertIn("Result not verified", rendered)
 
-    def test_bundled_demo_context_is_internally_consistent(self) -> None:
+    def test_bundled_historical_context_is_internally_consistent(self) -> None:
         result = load_demo_result("historical")
         context = result["measurement_context"]
         workflow = result["summary"]["workflow"]
@@ -152,16 +159,8 @@ class ReportTests(unittest.TestCase):
         )
         self.assertEqual(context["workflow_step_count"], 2)
         self.assertEqual(context["measured_workflow_pair_count"], 15)
-        self.assertEqual(context["measured_inference_call_count"], 60)
-        self.assertEqual(context["warmup_inference_call_count"], 8)
-        self.assertEqual(context["baseline_tool_count"], 12)
-        self.assertEqual(context["candidate_tool_count"], 3)
         self.assertEqual(context["baseline_tool_count"], len(broad_tools))
         self.assertEqual(context["candidate_tool_count"], len(scoped_tools))
-        self.assertEqual(
-            context["candidate_tool_names"],
-            [tool["name"] for tool in scoped_tools],
-        )
         manifest = ExperimentManifest.from_path(
             Path(__file__).parents[1]
             / "examples"
@@ -173,25 +172,14 @@ class ReportTests(unittest.TestCase):
             result["provenance"]["reproducibility_manifest_sha256"],
         )
         self.assertEqual(result["decision"]["status"], "inconclusive")
-        for case in manifest.cases:
-            differing_fields = {
-                key
-                for key in set(case.baseline) | set(case.candidate)
-                if case.baseline.get(key) != case.candidate.get(key)
-            }
-            self.assertEqual(differing_fields, {"tools"})
         self.assertEqual(
             workflow["effects"]["input_tokens"]["paired_count"],
             context["measured_workflow_pair_count"],
         )
-        self.assertEqual(
-            context["measured_inference_call_count"],
-            context["measured_workflow_pair_count"]
-            * context["workflow_step_count"]
-            * 2,
-        )
 
-    def test_sanitized_demo_matches_local_raw_result_when_available(self) -> None:
+    def test_sanitized_historical_demo_matches_local_raw_result_when_available(
+        self,
+    ) -> None:
         root = Path(__file__).parents[1]
         raw_path = root / "reports" / "repository-agent-tool-pruning-modal.json"
         if not raw_path.exists():

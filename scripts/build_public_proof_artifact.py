@@ -11,16 +11,16 @@ import argparse
 import ast
 import hashlib
 import json
+import math
 import re
+import statistics
 from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
-
+from typing import Any
 
 ROOT = Path(__file__).parents[1]
-DEFAULT_RESULT = (
-    ROOT / "artifacts/public-proof-heldout-live-extracted/run/result.json"
-)
+DEFAULT_RESULT = ROOT / "artifacts/public-proof-heldout-live-extracted/run/result.json"
 DEFAULT_METADATA = (
     ROOT / "artifacts/public-proof-heldout-live-extracted/heldout-metadata.json"
 )
@@ -124,10 +124,9 @@ def _metric(effect: Mapping[str, Any]) -> dict[str, Any]:
     interval = effect.get("confidence_interval")
     paired_count = int(effect.get("paired_count", 0) or 0)
     return {
-        "available": paired_count > 0 and effect.get("candidate_minus_baseline_mean") is not None,
-        "candidate_minus_baseline_mean": effect.get(
-            "candidate_minus_baseline_mean"
-        ),
+        "available": paired_count > 0
+        and effect.get("candidate_minus_baseline_mean") is not None,
+        "candidate_minus_baseline_mean": effect.get("candidate_minus_baseline_mean"),
         "confidence_interval": interval,
         "confidence_level": effect.get("confidence_level"),
         "method": effect.get("method"),
@@ -205,6 +204,7 @@ def validate_public_artifact(payload: Mapping[str, Any]) -> None:
         "outcomes",
         "paired_success",
         "provenance",
+        "request_position_effects",
         "sanitization",
     }
     if set(payload) != expected_top_level:
@@ -273,6 +273,7 @@ def build(result_path: Path, metadata_path: Path, dataset_path: Path) -> dict[st
     if not isinstance(attempts, list) or len(attempts) != 80:
         raise ValueError("the frozen proof must retain 80 attempt records")
     workflow_structures: set[tuple[int, int]] = set()
+    request_cache_by_attempt: dict[tuple[str, str], dict[int, int]] = {}
     for attempt in attempts:
         artifacts = attempt.get("artifacts", {})
         relative_directory = artifacts.get("directory")
@@ -296,6 +297,20 @@ def build(result_path: Path, metadata_path: Path, dataset_path: Path) -> dict[st
                 len(requests),
                 sum(span.get("kind") == "tool" for span in spans),
             )
+        )
+        cache_by_sequence: dict[int, int] = {}
+        for request in requests:
+            sequence = request.get("sequence")
+            cached = request.get("metrics", {}).get("cached_input_tokens")
+            if not isinstance(sequence, int) or not isinstance(cached, int):
+                raise ValueError(
+                    "normalized request is missing its sequence or cached-token count"
+                )
+            cache_by_sequence[sequence] = cached
+        if len(cache_by_sequence) != len(requests):
+            raise ValueError("normalized request sequences are not unique")
+        request_cache_by_attempt[(attempt["task_id"], attempt["variant"])] = (
+            cache_by_sequence
         )
     if len(workflow_structures) != 1:
         raise ValueError("attempt workflow structure was not stable")
@@ -370,6 +385,54 @@ def build(result_path: Path, metadata_path: Path, dataset_path: Path) -> dict[st
     )
     conditional_effects = {name: _metric(effects[name]) for name in effect_names}
 
+    attempts_by_task_variant = {
+        (attempt["task_id"], attempt["variant"]): attempt for attempt in attempts
+    }
+    both_successful_tasks = sorted(
+        task_id
+        for task_id in {attempt["task_id"] for attempt in attempts}
+        if attempts_by_task_variant[(task_id, "baseline")]["task_success"] is True
+        and attempts_by_task_variant[(task_id, "candidate")]["task_success"] is True
+    )
+    if len(both_successful_tasks) != effects["workflow_latency_ms"]["paired_count"]:
+        raise ValueError("both-successful task count differs from the paired effects")
+    position_labels = {0: "Planning call", 1: "Final answer call"}
+    request_position_effects = []
+    for sequence in range(inference_calls_per_attempt):
+        baseline_values = [
+            request_cache_by_attempt[(task_id, "baseline")][sequence]
+            for task_id in both_successful_tasks
+        ]
+        candidate_values = [
+            request_cache_by_attempt[(task_id, "candidate")][sequence]
+            for task_id in both_successful_tasks
+        ]
+        differences = [
+            candidate - baseline
+            for baseline, candidate in zip(
+                baseline_values, candidate_values, strict=True
+            )
+        ]
+        request_position_effects.append(
+            {
+                "sequence": sequence,
+                "label": position_labels.get(sequence, f"Agent call {sequence + 1}"),
+                "baseline_mean": statistics.fmean(baseline_values),
+                "candidate_mean": statistics.fmean(candidate_values),
+                "candidate_minus_baseline_mean": statistics.fmean(differences),
+                "paired_count": len(differences),
+            }
+        )
+    position_total = sum(
+        item["candidate_minus_baseline_mean"] for item in request_position_effects
+    )
+    if not math.isclose(
+        position_total,
+        conditional_effects["cached_input_tokens"]["candidate_minus_baseline_mean"],
+        abs_tol=1e-9,
+    ):
+        raise ValueError("request-position effects do not sum to the aggregate effect")
+
     status_versions = sorted(
         {
             str(attempt.get("agent_status", {}).get("schema_version"))
@@ -396,7 +459,7 @@ def build(result_path: Path, metadata_path: Path, dataset_path: Path) -> dict[st
 
     artifact: dict[str, Any] = {
         "artifact_kind": "runeconomy.public_proof",
-        "artifact_version": "0.2",
+        "artifact_version": "0.3",
         "experiment": {
             "result_type": result["result_type"],
             "result_version": result["result_version"],
@@ -466,6 +529,7 @@ def build(result_path: Path, metadata_path: Path, dataset_path: Path) -> dict[st
             )
         },
         "conditional_effects": conditional_effects,
+        "request_position_effects": request_position_effects,
         "failure_categories": {
             "task_quality_failure": sum(
                 item["status_counts"].get("task_failure", 0)
@@ -572,9 +636,11 @@ def build(result_path: Path, metadata_path: Path, dataset_path: Path) -> dict[st
         },
         "limitations": [
             "One pinned model revision, vLLM version, A10 hardware class, and repository-analysis workload were evaluated.",
-            "Execution was sequential and colocated; production concurrency and multi-replica routing were not tested.",
-            "Continuous effects use only the "
-            f"{effects['workflow_latency_ms']['paired_count']} task pairs where both variants succeeded.",
+            "Execution was sequential and colocated. Production concurrency and multi-replica routing were not tested.",
+            (
+                "Continuous effects use only the "
+                f"{effects['workflow_latency_ms']['paired_count']} task pairs where both variants succeeded."
+            ),
             "Workflow latency includes process startup and agent execution but excludes evaluator time.",
             "Prefill, decode, retrieval, cost, and GPU-time effects were unavailable and remain unknown rather than zero.",
             f"The {len(tasks)}-task held-out workload is consumed and cannot be reused as fresh held-out evidence.",
@@ -608,144 +674,9 @@ def render_case_study(payload: Mapping[str, Any]) -> str:
     """Render the public proof directly from the sanitized aggregate artifact."""
 
     validate_public_artifact(payload)
-    outcomes = payload["outcomes"]
-    effects = payload["conditional_effects"]
-    paired = payload["paired_success"]
-    experiment = payload["experiment"]
-    intervention = payload["intervention"]
-    provenance = payload["provenance"]
-    acceptance = payload["gates"]["predeclared"]
+    from runeconomy.reports import render_public_proof_markdown
 
-    def percent(value: Any, digits: int = 2) -> str:
-        return f"{float(value) * 100:.{digits}f}%"
-
-    def percentage_points(value: Any, digits: int = 2) -> str:
-        return f"{float(value) * 100:.{digits}f} percentage points"
-
-    def effect(name: str, unit: str) -> str:
-        item = effects[name]
-        interval = item["confidence_interval"]
-        return (
-            f"{float(item['candidate_minus_baseline_mean']):+.2f} {unit}; "
-            f"95% interval {float(interval[0]):+.2f} to "
-            f"{float(interval[1]):+.2f}; {item['paired_count']} pairs"
-        )
-
-    family_text = ", ".join(
-        f"{count} {name.replace('_', '-')}"
-        for name, count in experiment["task_family_counts"].items()
-    )
-    limitations = "\n".join(f"- {item}" for item in payload["limitations"])
-    hashes = "\n".join(
-        f"- {name.replace('_', ' ').title()}: `{value}`"
-        for name, value in sorted(payload["frozen_hashes"].items())
-    )
-    gate_lines = "\n".join(
-        f"{index}. `{item['stage']}` — {item['observed_result']}"
-        f"{' **(decisive)**' if item['decisive'] else ''}."
-        for index, item in enumerate(payload["decision"]["gating_order"], start=1)
-    )
-    paired_counts = paired["outcome_counts"]
-    return f"""# Public proof: RunEconomy rejected an apparently faster candidate
-
-This is the canonical RunEconomy proof for the frozen
-{experiment['task_count']}-task held-out run.
-The verdict is **`invalid`**, not verified. Every number below is generated
-from the checked-in aggregate artifact; private tasks, answers, model output,
-stderr, endpoints, and raw traces are not published.
-
-## What changed
-
-- Baseline: {intervention['baseline']}.
-- Candidate: {intervention['candidate']}.
-- Only changed property: {intervention['changed_property']}.
-- Held constant: {intervention['held_constant']}.
-- Expected mechanism: {intervention['expected_mechanism']}.
-
-## What was measured
-
-The frozen workload contained {experiment['task_count']} tasks ({family_text}),
-with one baseline and one candidate attempt per task. Each attempt made two
-inference calls around one real bounded repository-search tool. Order was
-seeded and randomized (`{experiment['seed']}`). The predeclared product outcome
-was end-to-end workflow latency, paired only where both variants succeeded.
-
-Environment: `{provenance['model']}` revision
-`{provenance['model_revision']}`, vLLM `{provenance['backend_version']}`, one
-{provenance['hardware']}, Chat Completions, colocated driver.
-
-## Task quality
-
-| Variant | Successes | Point rate | Exact 95% interval | Absolute gate |
-|---|---:|---:|---:|---:|
-| Baseline | {outcomes['baseline']['task_success_count']}/{outcomes['baseline']['attempt_count']} | {percent(outcomes['baseline']['task_success_rate'])} | {percent(outcomes['baseline']['task_success_95_ci'][0])}–{percent(outcomes['baseline']['task_success_95_ci'][1])} | lower bound ≥ 80% |
-| Candidate | {outcomes['candidate']['task_success_count']}/{outcomes['candidate']['attempt_count']} | {percent(outcomes['candidate']['task_success_rate'])} | {percent(outcomes['candidate']['task_success_95_ci'][0])}–{percent(outcomes['candidate']['task_success_95_ci'][1])} | lower bound ≥ 80% |
-
-Paired success was
-{percentage_points(paired['candidate_minus_baseline_mean'])}; its one-sided
-lower bound was {percentage_points(paired['one_sided_lower_bound'])}, missing
-the predeclared
-−{percentage_points(acceptance['max_task_success_regression'])}
-non-inferiority margin. Outcomes were {paired_counts['both_success']}
-both-success, {paired_counts['baseline_only']} baseline-only,
-{paired_counts['candidate_only']} candidate-only, and
-{paired_counts['both_failure']} both-failure.
-
-## Decision gates, in order
-
-{gate_lines}
-
-The baseline validity gate was decisive. RunEconomy therefore returned
-**`invalid`** before the favorable latency result could authorize a verified
-performance claim. The paired non-inferiority gate also failed independently.
-
-## Conditional mechanism and latency observations
-
-Among the {effects['workflow_latency_ms']['paired_count']} pairs where both
-variants succeeded:
-
-- Cached input tokens: {effect('cached_input_tokens', 'tokens')}.
-- Server TTFT: {effect('server_ttft_ms', 'ms')}.
-- Client TTFT: {effect('client_ttft_ms', 'ms')}.
-- Workflow latency: {effect('workflow_latency_ms', 'ms')}.
-- Critical-path latency: {effect('critical_path_ms', 'ms')}.
-
-These are measured conditional effects, not verified improvements. Failed tasks
-remain in the quality analysis and cannot make the candidate appear faster by
-disappearing from the verdict.
-
-## What RunEconomy demonstrated
-
-RunEconomy connected an application-level prompt-layout change to cache,
-inference, workflow, and task-success evidence; then declined to verify an
-attractive latency result because the frozen quality requirements were not
-established. That rejection—not a speedup claim—is the product proof.
-
-## What this does not prove
-
-{limitations}
-
-It also does not establish universal model behavior, production-concurrency
-performance, superiority over another tool, or a verified performance win.
-
-## Audit trail
-
-The machine-readable source is
-[`src/runeconomy/data/public-proof-rejection.json`](../src/runeconomy/data/public-proof-rejection.json).
-It can be rebuilt only when the ignored private evidence is present:
-
-```bash
-uv run python scripts/build_public_proof_artifact.py
-```
-
-Frozen hashes:
-
-{hashes}
-
-The public artifact contains aggregate evidence only. Its sanitizer fails
-closed on unexpected top-level fields, endpoints, credentials, local paths,
-and raw-evidence keys.
-"""
+    return render_public_proof_markdown(payload)
 
 
 def main() -> None:
@@ -754,17 +685,13 @@ def main() -> None:
     parser.add_argument("--metadata", type=Path, default=DEFAULT_METADATA)
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
-    parser.add_argument(
-        "--case-study-output", type=Path, default=DEFAULT_CASE_STUDY
-    )
+    parser.add_argument("--case-study-output", type=Path, default=DEFAULT_CASE_STUDY)
     args = parser.parse_args()
     payload = build(args.result, args.metadata, args.dataset)
     args.output.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    args.case_study_output.write_text(
-        render_case_study(payload), encoding="utf-8"
-    )
+    args.case_study_output.write_text(render_case_study(payload), encoding="utf-8")
 
 
 if __name__ == "__main__":

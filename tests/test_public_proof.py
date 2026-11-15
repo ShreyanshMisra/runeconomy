@@ -16,13 +16,17 @@ from scripts.build_public_proof_artifact import (
     validate_public_artifact,
 )
 
-
 ROOT = Path(__file__).parents[1]
 
 
 class PublicProofTests(unittest.TestCase):
-    def test_bundled_artifact_is_deterministically_rebuilt_from_private_evidence(self) -> None:
-        if not all(path.exists() for path in (DEFAULT_RESULT, DEFAULT_METADATA, DEFAULT_DATASET)):
+    def test_bundled_artifact_is_deterministically_rebuilt_from_private_evidence(
+        self,
+    ) -> None:
+        if not all(
+            path.exists()
+            for path in (DEFAULT_RESULT, DEFAULT_METADATA, DEFAULT_DATASET)
+        ):
             self.skipTest("private frozen evidence is intentionally not distributed")
         self.assertEqual(
             load_demo_result("rejection"),
@@ -35,7 +39,7 @@ class PublicProofTests(unittest.TestCase):
 
     def test_public_artifact_retains_frozen_invalid_verdict_and_gates(self) -> None:
         artifact = load_demo_result("rejection")
-        self.assertEqual(artifact["artifact_version"], "0.2")
+        self.assertEqual(artifact["artifact_version"], "0.3")
         self.assertEqual(artifact["decision"]["status"], "invalid")
         self.assertEqual(
             artifact["decision"]["failed_quality_gates"],
@@ -57,8 +61,57 @@ class PublicProofTests(unittest.TestCase):
             "baseline_completion_and_absolute_task_success",
         )
         self.assertEqual(len(artifact["decision"]["gating_order"]), 6)
+        self.assertAlmostEqual(
+            artifact["outcomes"]["baseline"]["task_success_95_ci"][0],
+            0.7961352512671009,
+        )
+        self.assertAlmostEqual(
+            artifact["outcomes"]["candidate"]["task_success_95_ci"][0],
+            0.8308031360405823,
+        )
+        self.assertAlmostEqual(
+            artifact["paired_success"]["one_sided_lower_bound"],
+            -0.12547221188341495,
+        )
+        self.assertAlmostEqual(
+            artifact["conditional_effects"]["cached_input_tokens"][
+                "candidate_minus_baseline_mean"
+            ],
+            105.33333333333333,
+        )
+        self.assertAlmostEqual(
+            artifact["conditional_effects"]["server_ttft_ms"][
+                "candidate_minus_baseline_mean"
+            ],
+            -9.075384361111697,
+        )
+        self.assertAlmostEqual(
+            artifact["conditional_effects"]["workflow_latency_ms"][
+                "candidate_minus_baseline_mean"
+            ],
+            -62.43227297222221,
+        )
 
-    def test_every_published_result_number_matches_private_aggregate_evidence(self) -> None:
+    def test_request_position_breakdown_is_evidence_derived_and_reconciles(
+        self,
+    ) -> None:
+        artifact = load_demo_result("rejection")
+        positions = artifact["request_position_effects"]
+        self.assertEqual(
+            [item["label"] for item in positions],
+            ["Planning call", "Final answer call"],
+        )
+        self.assertEqual([item["paired_count"] for item in positions], [36, 36])
+        self.assertAlmostEqual(
+            sum(item["candidate_minus_baseline_mean"] for item in positions),
+            artifact["conditional_effects"]["cached_input_tokens"][
+                "candidate_minus_baseline_mean"
+            ],
+        )
+
+    def test_every_published_result_number_matches_private_aggregate_evidence(
+        self,
+    ) -> None:
         if not DEFAULT_RESULT.exists():
             self.skipTest("private frozen evidence is intentionally not distributed")
         private = json.loads(DEFAULT_RESULT.read_text(encoding="utf-8"))
@@ -88,9 +141,7 @@ class PublicProofTests(unittest.TestCase):
             self.assertEqual(published["paired_count"], source["paired_count"])
         self.assertEqual(
             public["paired_success"]["one_sided_lower_bound"],
-            private["summary"]["effects"]["task_success"][
-                "one_sided_lower_bound"
-            ],
+            private["summary"]["effects"]["task_success"]["one_sided_lower_bound"],
         )
 
     def test_public_artifact_contains_no_forbidden_material(self) -> None:
@@ -115,7 +166,9 @@ class PublicProofTests(unittest.TestCase):
         for marker in forbidden:
             self.assertNotIn(marker, rendered)
 
-    def test_private_task_and_generated_content_do_not_appear_in_public_artifact(self) -> None:
+    def test_private_task_and_generated_content_do_not_appear_in_public_artifact(
+        self,
+    ) -> None:
         if not DEFAULT_DATASET.exists() or not DEFAULT_RESULT.exists():
             self.skipTest("private frozen evidence is intentionally not distributed")
         artifact_text = json.dumps(load_demo_result("rejection"), sort_keys=True)
@@ -143,18 +196,22 @@ class PublicProofTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "forbidden public-artifact field"):
             validate_public_artifact(leaked)
 
-    def test_flagship_report_makes_rejection_and_claim_boundary_dominant(self) -> None:
+    def test_flagship_report_explains_rejection_after_intervention_and_results(
+        self,
+    ) -> None:
         rendered = render_demo_html(load_demo_result("rejection"))
-        verdict = rendered.index("INVALID — quality gates failed")
-        conditional = rendered.index("Conditional observations only")
-        self.assertLess(verdict, conditional)
-        self.assertIn("RunEconomy declined to verify this candidate", rendered)
-        self.assertIn("Failures did not enter the latency sample", rendered)
-        self.assertIn("Intervention tested", rendered)
-        self.assertIn("system-message block order", rendered)
-        self.assertIn("Decision gates, in order", rendered)
-        self.assertIn("Experiment limitations", rendered)
-        self.assertIn("This report is not a positive benchmark claim", rendered)
+        intervention = rendered.index(">Intervention Tested<")
+        results = rendered.index(">Results<")
+        verdict = rendered.index(">Verdict<")
+        self.assertLess(intervention, results)
+        self.assertLess(results, verdict)
+        self.assertIn("Result not verified", rendered)
+        self.assertIn("Invalid does not mean the candidate was slower", rendered)
+        self.assertIn("not eligible to become a verified improvement", rendered)
+        self.assertIn("Was the baseline workload reliable enough?", rendered)
+        self.assertIn("Did the candidate preserve task quality?", rendered)
+        self.assertIn("Environment and provenance", rendered)
+        self.assertIn("Limitations", rendered)
 
 
 if __name__ == "__main__":
