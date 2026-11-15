@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" role="img" aria-labelledby="title desc">
+  <title id="title">Agent skill and terminal</title><desc id="desc">A canonical skill document connects to a safe command-line workflow.</desc>
+  <rect width="640" height="400" fill="#f4f1ea"/><g stroke="#cbc9c1"><path d="M0 80h640M0 160h640M0 240h640M0 320h640"/><path d="M128 0v400M256 0v400M384 0v400M512 0v400"/></g>
+  <g transform="translate(66 48)"><path d="M0 0h280l44 44v280H0Z" fill="#fbfaf6" stroke="#171a19"/><path d="M280 0v44h44" fill="none" stroke="#171a19"/><text x="28" y="48" fill="#236b5b" font-family="ui-monospace,monospace" font-size="14">SKILL.md</text><path d="M28 86h204M28 108h244M28 130h178M28 180h246M28 202h216M28 224h238M28 274h124" stroke="#9d9c95" stroke-width="5"/></g>
+  <path d="M390 198h54" stroke="#236b5b" stroke-width="2"/><path d="m438 191 12 7-12 7Z" fill="#236b5b"/>
+  <g transform="translate(444 126)"><rect width="146" height="146" fill="#171a19"/><path d="m18 34 12 8-12 8M40 50h54M18 78h104M18 102h76" fill="none" stroke="#dce8e2" stroke-width="4"/><circle cx="122" cy="120" r="10" fill="none" stroke="#74ad9e" stroke-width="2"/><path d="m117 120 4 4 7-9" fill="none" stroke="#74ad9e" stroke-width="2"/></g>
+</svg>

@@ -35,7 +35,8 @@ class DocumentationTests(unittest.TestCase):
 
     def test_site_sources_are_repository_documents(self) -> None:
         build = (ROOT / "site" / "build.mjs").read_text(encoding="utf-8")
-        sources = re.findall(r'source: "([^"]+)"', build)
+        articles = (ROOT / "site" / "articles.mjs").read_text(encoding="utf-8")
+        sources = re.findall(r'source: "([^"]+)"', build + articles)
         self.assertGreaterEqual(len(sources), 10)
         for source in sources:
             self.assertTrue((ROOT / source).is_file(), source)

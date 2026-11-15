@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" role="img" aria-labelledby="title desc">
+  <title id="title">Terminal and report</title><desc id="desc">A command terminal paired with a structured experiment report.</desc>
+  <rect width="640" height="400" fill="#f4f1ea"/><g stroke="#cbc9c1"><path d="M0 100h640M0 200h640M0 300h640"/><path d="M160 0v400M320 0v400M480 0v400"/></g>
+  <g transform="translate(54 70)"><rect width="310" height="208" fill="#171a19"/><circle cx="20" cy="18" r="3" fill="#dce8e2"/><circle cx="32" cy="18" r="3" fill="#8a4b32"/><path d="M22 58h86M22 82h152M22 106h124M22 150h72" stroke="#dce8e2" stroke-width="6"/><path d="m22 178 12 8-12 8" fill="none" stroke="#74ad9e" stroke-width="3"/><path d="M44 194h72" stroke="#74ad9e" stroke-width="3"/></g>
+  <g transform="translate(332 112)"><rect width="252" height="222" fill="#fbfaf6" stroke="#171a19"/><path d="M22 34h132M22 51h82" stroke="#171a19" stroke-width="5"/><g fill="none" stroke="#9d9c95"><rect x="22" y="80" width="64" height="52"/><rect x="94" y="80" width="64" height="52"/><rect x="166" y="80" width="64" height="52"/></g><path d="M22 157h208M22 176h162M22 195h188" stroke="#cbc9c1" stroke-width="4"/><path d="M22 212h92" stroke="#236b5b" stroke-width="4"/></g>
+  <text x="54" y="322" fill="#686b67" font-family="ui-monospace,monospace" font-size="14">RUNECONOMY / 0.2.0a2</text>
+</svg>
