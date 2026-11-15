@@ -6,7 +6,7 @@ to verify a speedup unless task-quality evidence supports the comparison.
 ## 1. Trace
 
 Instrument a real agent with OpenTelemetry/OpenInference or import evidence from
-supported vLLM and Prefixwise exports. Preserve explicit workflow dependencies,
+supported vLLM capture and cache-ledger exports. Preserve explicit workflow dependencies,
 variant-local state, and unknown fields.
 
 ## 2. Diagnose

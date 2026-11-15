@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" role="img" aria-labelledby="title desc">
+  <title id="title">Read-only capability diagnosis</title><desc id="desc">A capability table distinguishes supported, unsupported and unknown states.</desc>
+  <rect width="640" height="400" fill="#fbfaf6"/><g stroke="#cbc9c1"><path d="M0 100h640M0 200h640M0 300h640"/><path d="M160 0v400M320 0v400M480 0v400"/></g>
+  <g transform="translate(60 50)"><text x="0" y="16" fill="#686b67" font-family="ui-monospace,monospace" font-size="13">READ-ONLY DIAGNOSIS</text><rect y="42" width="520" height="258" fill="#f4f1ea" stroke="#171a19"/><path d="M0 96h520M0 150h520M0 204h520M0 258h520M330 42v258" stroke="#9d9c95"/>
+    <g fill="#171a19" font-family="ui-sans-serif,sans-serif" font-size="14"><text x="20" y="76">Chat Completions</text><text x="20" y="130">Exact tokenization</text><text x="20" y="184">Cache telemetry</text><text x="20" y="238">Physical reset</text><text x="20" y="292">Server timing</text></g>
+    <g font-family="ui-monospace,monospace" font-size="12"><text x="358" y="76" fill="#236b5b">Supported</text><text x="358" y="130" fill="#236b5b">Supported</text><text x="358" y="184" fill="#686b67">Unknown</text><text x="358" y="238" fill="#8a4b32">Manual only</text><text x="358" y="292" fill="#686b67">Unknown</text></g>
+  </g>
+</svg>

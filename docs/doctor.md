@@ -1,9 +1,8 @@
-# vLLM compatibility diagnosis
+# Check what your vLLM server can safely support.
 
-`runeconomy doctor` inspects whether a vLLM deployment supports RunEconomy's
-static experiment runner. It is intentionally read-only: it performs GET
-metadata requests and, when advertised and a model is known, a non-inference
-render probe. It never sends a generation request or invokes cache reset.
+`runeconomy doctor` performs a read-only compatibility diagnosis before you run
+an experiment. It tells you which capabilities are supported, unsupported or
+still unknown, then recommends the safest available experiment mode.
 
 ```bash
 runeconomy doctor \
@@ -11,34 +10,91 @@ runeconomy doctor \
   --api-key-env VLLM_API_KEY
 ```
 
-The configured URL's host, path prefix, query, fragment, embedded credentials,
-and API-key values are not included in output. Generic capability paths such as
-`/openapi.json` may appear as evidence. JSON output is available with
-`--format json` or the shorter `--json` alias.
+## What doctor reads
 
-## Capability states
+`doctor` reads advertised API routes, model metadata and safe rendering or
+tokenization capabilities. When a server advertises a render path and identifies
+a model, it may perform a non-generation render probe.
 
-- `supported`: direct metadata or a safe probe established the capability.
-- `unsupported`: available metadata established that it is absent or disabled.
-- `unknown`: a safe read-only probe could not establish it.
+It does not:
 
-Unknown is not zero and is not automatically a blocker. Cache telemetry and
-per-request server timing usually remain unknown until a real smoke capture is
-performed. Warm-cache execution can still be safe when generation and exact
-tokenization are established.
+- generate text
+- execute an agent workflow
+- reset a cache
+- call a destructive development endpoint
+- print the configured host, path, query, embedded credentials or API-key value
 
-## Experiment modes
+Generic capability paths such as `/openapi.json` may appear as evidence. Use
+`--format json` or `--json` for structured output.
 
-- `warm-cache` measures normal reuse without clearing server state.
-- `salt-isolated` uses unique cache namespaces when `cache_salt` is supported.
-  It prevents cross-trial prefix reuse but does not physically evict blocks or
-  eliminate capacity effects.
-- `physical-reset` is reported when the development endpoint is advertised, but
-  is marked manual/private-only. `doctor` never invokes it.
+## Read capability states
 
-The report gives an exact next action for every blocker or unknown readiness
-state. Optional mechanism telemetry is distinguished from capabilities required
-to execute a valid static experiment.
+| State | Meaning |
+| --- | --- |
+| Supported | Direct metadata or a safe probe established the capability. |
+| Unsupported | Available metadata established that it is absent or disabled. |
+| Unknown | A safe read-only probe could not establish it. |
+
+Unknown is not zero. It is also not automatically a blocker. Cache telemetry
+and server timing often remain unknown until a real request is captured.
+
+## Read the output
+
+The first line reports overall readiness:
+
+| Readiness | Meaning |
+| --- | --- |
+| `READY` | At least one safe experiment mode is supported. |
+| `UNKNOWN` | Metadata was too limited to establish a safe mode. |
+| `BLOCKED` | No safe experiment mode is available. |
+
+This abridged example comes from a local test server that advertises Chat
+Completions and `/tokenize` only. It does not describe a real deployment.
+
+```text
+RunEconomy doctor · READY
+Safe modes available: warm-cache.
+Target details: redacted
+Backend: vLLM 0.33.0
+Models: example/model
+
+Capability                  Status      Evidence
+--------------------------  ----------  ----------------------------------------
+Responses API               unsupported absent from /openapi.json
+Chat Completions API        supported   advertised by /openapi.json
+Responses render            unsupported absent from /openapi.json
+Chat Completions render     unsupported absent from /openapi.json
+Tokenize                    supported   advertised by /openapi.json
+Cache telemetry             unknown     requires a completed generation response
+Per-request timing          unknown     requires a completed generation response
+Cache reset                 unsupported absent from /openapi.json
+Cache salt                  unsupported cache_salt is absent from the OpenAPI schema
+
+Experiment modes:
+  warm-cache: supported (safe)
+  salt-isolated: unsupported
+  physical-reset: unsupported
+
+What to do next
+  1. Run one non-production smoke capture, then inspect whether cached-token and server-timing fields are present.
+  Run with --json for guidance on every capability and identity field.
+```
+
+The full output also explains each experiment mode and reminds you which
+identity fields to pin in the experiment manifest. The human output lists only
+the actions that change what you can run. `--json` carries a next action for
+every capability and identity field.
+
+## Choose a safe experiment mode
+
+- `warm-cache` measures ordinary reuse without clearing server state.
+- `salt-isolated` uses separate cache namespaces when `cache_salt` is supported.
+  A salt does not physically evict blocks or remove capacity effects.
+- `physical-reset` may be reported when a development endpoint is advertised.
+  It remains manual and private-server-only. `doctor` never invokes it.
+
+Physical cache reset should not be enabled on a shared server merely to satisfy
+a benchmark.
 
 ## Exit behavior
 
@@ -49,18 +105,19 @@ to execute a valid static experiment.
 | `2` | Diagnosis could not complete. |
 
 Exit `2` includes invalid URLs, missing API-key variables, authentication
-failures, connection failures, timeouts, and malformed metadata responses.
-These failures emit the same category, safe explanation, evidence-completeness
-flag, and next action in human and JSON modes.
+failures, connection failures, timeouts and malformed metadata responses. Human
+and JSON output use the same failure categories and next actions.
 
-## Common corrections
+## Correct common problems
 
-- Authentication: set the key in an environment variable and use
-  `--api-key-env NAME`; never put the secret directly in a command or manifest.
+- Authentication: set the key in an environment variable and pass its name
+  through `--api-key-env`.
 - Connection: verify the OpenAI-compatible server root and network access.
 - Timeout: increase `--timeout` only after confirming the server is healthy.
-- No API dialect: expose `/v1/chat/completions` or `/v1/responses`.
-- No exact-token path: expose `/tokenize` or start vLLM with scale-out rendering
-  enabled.
-- Missing reset: use warm-cache or salt-isolated mode; do not expose a
-  development reset endpoint merely to satisfy a benchmark.
+- Missing API dialect: expose `/v1/chat/completions` or `/v1/responses`.
+- Missing exact-token path: expose `/tokenize` or supported rendering.
+- Missing reset: use warm-cache or salt isolation. Do not expose a development
+  reset endpoint only for RunEconomy.
+
+See [Troubleshooting](troubleshooting.md) for setup failures and the
+[CLI reference](cli-reference.md) for complete JSON and exit-code behavior.

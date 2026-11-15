@@ -1,70 +1,68 @@
-# RunEconomy agent skill
+# Agents
 
-The canonical RunEconomy coding-agent skill is
-[`skills/runeconomy/SKILL.md`](../skills/runeconomy/SKILL.md). It teaches an
-agent to diagnose a vLLM environment, choose an evidence path, initialize and
-validate an experiment, preserve workflow state and dependencies, and interpret
-quality-gated verdicts without overstating conditional measurements.
+Most users will have a coding agent help install, configure and operate
+RunEconomy. The official RunEconomy skill gives that agent the same safety,
+privacy and verdict contract documented in this repository.
 
-Always install or copy the complete `skills/runeconomy` directory from a tagged
-RunEconomy release. The repository copy is the source of truth.
+The canonical source is
+[`skills/runeconomy/SKILL.md`](../skills/runeconomy/SKILL.md). The website copy
+and download actions are generated from that exact file during the site build.
+The repository copy is the source of truth.
+
+## What the skill teaches
+
+- inspect a repository and deployment without changing infrastructure
+- install the requested RunEconomy version
+- run and interpret the read-only `doctor` command
+- choose between instrumentation and supported trace imports
+- initialize, validate and execute a controlled experiment
+- preserve variant-local state and explicit workflow dependencies
+- read task-quality gates before conditional latency measurements
+- distinguish verified, regression, inconclusive and invalid verdicts
+
+The agent is told not to call a change an improvement unless the verdict is
+`verified`.
+
+## Safety and privacy boundaries
+
+The skill tells an agent to protect prompts, generated output, evaluator data,
+raw traces, credentials, private endpoints and unsanitized result artifacts. It
+also requires explicit approval before paid compute, cache reset, development
+endpoint changes, publication or production infrastructure changes.
+
+The skill targets RunEconomy `0.2.0a3`.
 
 ## Codex
 
-For a project-scoped installation, copy the directory to:
+Copy the complete skill directory to a project-scoped path:
 
 ```text
 .agents/skills/runeconomy/SKILL.md
 ```
 
-For a user-scoped installation, use:
-
-```text
-~/.agents/skills/runeconomy/SKILL.md
-```
-
-Start a new Codex session after copying it. These paths follow the current
-[Codex skill installation guidance](https://developers.openai.com/api/reference/cli#skills).
+For user scope, use `~/.agents/skills/runeconomy/SKILL.md`. Start a new session
+after copying the directory.
 
 ## Claude Code
 
-Claude Code uses the same `SKILL.md` folder shape. Copy the directory to:
+Claude Code uses a compatible `SKILL.md` folder shape. Copy the complete
+directory to:
 
 ```text
 .claude/skills/runeconomy/SKILL.md
 ```
 
-or `~/.claude/skills/runeconomy/SKILL.md` for user scope. Start a new session
-after installation. Do not assume that a Codex plugin manifest or other
-tool-specific metadata is portable; the canonical artifact here is the skill
-directory itself.
+Use `~/.claude/skills/runeconomy/SKILL.md` for user scope. Review the skill
+before allowing it to execute commands.
 
 ## Cursor
 
-Cursor's documented portable mechanism is project rules under `.cursor/rules`
-or a root `AGENTS.md`, not universal `SKILL.md` discovery. Copy the body of the
-canonical skill into a project rule, preserve its safety boundaries, and link
-back to the repository source. Do not describe that adaptation as a native
-RunEconomy skill installation.
+Cursor commonly uses project rules under `.cursor/rules` or a root `AGENTS.md`.
+Adapt the canonical skill into a project rule and preserve its safety
+boundaries. Cursor support is not universal `SKILL.md` discovery, so do not
+describe this adaptation as universal native skill support.
 
-See [Cursor Rules](https://docs.cursor.com/context/rules-for-ai) for its current
-rule format.
+## Keep one canonical source
 
-## Updating
-
-Replace the installed directory from a newer tagged release rather than editing
-multiple divergent copies. Review the diff before allowing an agent to execute
-commands from an updated skill.
-
-## Forward validation
-
-The `0.2.0a2` release candidate was copied into a clean temporary repository
-under the Codex project-scoped path and followed without repository-internal
-instructions. The agent path successfully reached installation verification,
-the bundled proof, a read-only mocked compatibility diagnosis, trace analysis,
-an unresolved experiment skeleton, and validation of a known manifest.
-
-Two operator-provided prerequisites are intentionally not inferred: a real
-vLLM base URL for compatibility diagnosis and real trace/finding evidence for
-experiment initialization. The skill now tells an agent to stop rather than
-guess either value. No additional agent-specific SDK was required.
+Replace the installed directory from a newer tagged release instead of editing
+multiple copies. The repository file remains authoritative for every tool.

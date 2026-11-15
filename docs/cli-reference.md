@@ -20,7 +20,7 @@ no ANSI color in this alpha.
 | `analyze` | Analyze a normalized trace and emit structured findings. |
 | `import-vllm-jsonl` | Normalize exact-token vLLM capture envelopes. |
 | `import-openinference` | Normalize structural OpenInference/OTLP JSON evidence. |
-| `import-prefixwise-jsonl` | Import evidence present in Prefixwise ledgers. |
+| `import-ledger-jsonl` | Import evidence present in cache-ledger JSONL exports. |
 | `capture-vllm` | Render and execute one supported vLLM request. |
 
 `analyze` and `doctor` accept `--json` as an alias for `--format json`.

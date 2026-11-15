@@ -1,4 +1,4 @@
-"""Minimal model -> repository tool -> model agent for Phase 5 validation."""
+"""Minimal model -> repository tool -> model agent for compatibility validation."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import threading
 from pathlib import Path
 from typing import Any, Sequence
 
-from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import (

@@ -46,7 +46,7 @@ must not be presented as one.
 ## Dataset
 
 The dataset is either a JSON array or an object with a `tasks` array. Every
-task must have a unique non-empty `task_id`; all other fields belong to the
+task must have a unique non-empty `task_id`. All other fields belong to the
 agent and evaluator.
 
 ```json
@@ -111,7 +111,7 @@ atomically writes the record. RunEconomy retains the private file and exposes
 only its validated labels and digest in the comparison result.
 
 An external runner timeout overrides any status file. A nonzero exit with a
-declared failure preserves that classification; a nonzero exit declaring
+declared failure preserves that classification. A nonzero exit declaring
 `completed`, or a malformed status record, becomes `invalid_status`. Valid
 partial traces are imported for failed attempts when present. Model-output,
 application, and task failures count as unsuccessful tasks, while true
@@ -146,7 +146,7 @@ where defined and the `runeconomy.model_revision`,
 `runeconomy.tokenizer_revision`, and `runeconomy.chat_template_digest`
 extensions. Identity must remain stable within each variant. Baseline and
 candidate identities may differ because changing the model or serving stack can
-be the declared intervention; both identities remain visible in the result.
+be the declared intervention. Both identities remain visible in the result.
 
 ## Evaluator contract
 
@@ -172,7 +172,7 @@ evaluator specification.
 Order is seeded and either randomized or alternating. Pairing uses
 `(task_id, repetition)`. Task success uses absolute Clopper-Pearson intervals
 and the existing conservative paired exact non-inferiority bound. The default
-absolute-success gate requires the lower confidence bound to reach 80%; change
+absolute-success gate requires the lower confidence bound to reach 80%. Change
 it only as a predeclared property of the workload.
 
 The primary performance outcome is end-to-end agent process wall time. Its
@@ -203,7 +203,7 @@ The JSON result stores digests (including digested task IDs), metrics, statuses,
 uncertainty, provenance, and relative artifact locations, not task contents,
 generated output, stderr, or evaluator detail content. Full evaluator details
 are stored in the attempt's local
-`evaluation.json`; the result contains their digest. The artifacts
+`evaluation.json`. The result contains their digest. The artifacts
 directory stores the task, output, stdout, stderr, raw trace, normalized trace,
 evaluation, and evaluator streams for auditability. These files may contain prompts,
 repository content, secrets printed by an application, or model output. Keep

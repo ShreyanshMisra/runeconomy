@@ -38,9 +38,9 @@ MAX_MODEL_LEN = 8192
 GPU_MEMORY_UTILIZATION = 0.85
 MAX_NUM_SEQS = 8
 GPU_TIMEOUT_SECONDS = 70 * 60
-PHASE2_TIMEOUT_SECONDS = 30 * 60
-PHASE2_MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
-PHASE2_MODEL_REVISION = "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
+STANDARD_TIMEOUT_SECONDS = 30 * 60
+STANDARD_MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
+STANDARD_MODEL_REVISION = "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
 
 HF_CACHE_PATH = "/root/.cache/huggingface"
 VLLM_CACHE_PATH = "/root/.cache/vllm"
@@ -166,17 +166,17 @@ def vllm_command() -> list[str]:
     ]
 
 
-def phase2_vllm_command() -> list[str]:
+def standard_vllm_command() -> list[str]:
     """Return a normal non-development server command without render APIs."""
 
     return [
         "vllm",
         "serve",
-        PHASE2_MODEL_NAME,
+        STANDARD_MODEL_NAME,
         "--revision",
-        PHASE2_MODEL_REVISION,
+        STANDARD_MODEL_REVISION,
         "--served-model-name",
-        PHASE2_MODEL_NAME,
+        STANDARD_MODEL_NAME,
         "--host",
         "127.0.0.1",
         "--port",
@@ -389,22 +389,22 @@ def run_collocated(manifest_payload: dict[str, Any]) -> bytes:
         VLLM_CACHE_PATH: vllm_cache,
         FLASHINFER_CACHE_PATH: flashinfer_cache,
     },
-    timeout=PHASE2_TIMEOUT_SECONDS,
+    timeout=STANDARD_TIMEOUT_SECONDS,
     cpu=4,
     memory=16384,
 )
-def run_phase2_acceptance() -> bytes:
+def run_standard_acceptance() -> bytes:
     """Validate ordinary Chat Completions and salt isolation beside vLLM."""
 
     from runeconomy.backends import discover_vllm_capabilities
     from runeconomy.experiments import ExperimentManifest, run_experiment
     from runeconomy.vllm import VLLMClient
 
-    # The shared benchmark image enables development mode for the Phase 1
-    # runner. Remove it before starting this subprocess so reset endpoints are
-    # genuinely absent from the Phase 2 server.
+    # The shared benchmark image enables development mode for the
+    # physical-reset runner. Remove it before starting this subprocess so reset endpoints are
+    # genuinely absent from the standard server.
     os.environ.pop("VLLM_SERVER_DEV_MODE", None)
-    command = phase2_vllm_command()
+    command = standard_vllm_command()
     started = time.monotonic()
     process = subprocess.Popen(command)
     try:
@@ -418,7 +418,7 @@ def run_phase2_acceptance() -> bytes:
         )
         smoke = client.capture(
             {
-                "model": PHASE2_MODEL_NAME,
+                "model": STANDARD_MODEL_NAME,
                 "messages": [
                     {"role": "user", "content": "Reply with exactly OK."}
                 ],
@@ -430,14 +430,14 @@ def run_phase2_acceptance() -> bytes:
         manifest = ExperimentManifest.from_dict(
             {
                 "schema_version": "0.3",
-                "experiment_id": "phase2-standard-vllm-acceptance",
+                "experiment_id": "standard-vllm-acceptance",
                 "backend": {
                     "kind": "vllm",
                     "api_dialect": "chat_completions",
                     "base_url": base_url,
-                    "model": PHASE2_MODEL_NAME,
-                    "model_revision": PHASE2_MODEL_REVISION,
-                    "tokenizer_revision": PHASE2_MODEL_REVISION,
+                    "model": STANDARD_MODEL_NAME,
+                    "model_revision": STANDARD_MODEL_REVISION,
+                    "tokenizer_revision": STANDARD_MODEL_REVISION,
                     "chat_template_digest": "observed-separately",
                     "backend_version": VLLM_VERSION,
                     "hardware": "1x NVIDIA A10 24GB on Modal",
@@ -470,7 +470,7 @@ def run_phase2_acceptance() -> bytes:
                     "require_latency_improvement": False,
                 },
                 "design": {
-                    "purpose": "Phase 2 compatibility and isolation acceptance only",
+                    "purpose": "Standard-deployment compatibility and isolation acceptance only",
                     "claim_boundary": "No performance or product claim",
                 },
                 "constants": {},
@@ -532,7 +532,7 @@ def run_phase2_acceptance() -> bytes:
         )
         result = run_experiment(manifest, client)
         evidence = {
-            "validation": "phase2-standard-vllm",
+            "validation": "standard-vllm",
             "elapsed_seconds": time.monotonic() - started,
             "command": command,
             "development_mode": False,
@@ -620,25 +620,25 @@ def pilot(
 
 
 @app.local_entrypoint()
-def phase2(
-    output: str = "reports/phase2-standard-vllm-acceptance.json",
+def standard_acceptance(
+    output: str = "reports/standard-vllm-acceptance.json",
 ) -> None:
-    """Run the approved bounded Phase 2 acceptance and save raw evidence."""
+    """Run the approved bounded standard-deployment acceptance and save raw evidence."""
 
     output_path = Path(output).resolve()
     if output_path.exists():
         raise FileExistsError(f"refusing to overwrite existing evidence: {output_path}")
-    compressed = run_phase2_acceptance.remote()
+    compressed = run_standard_acceptance.remote()
     raw = gzip.decompress(compressed)
     evidence = json.loads(raw)
     capabilities = evidence.get("capabilities", {})
     if not isinstance(capabilities, dict) or "experiment_modes" not in capabilities:
-        raise RuntimeError("remote Phase 2 acceptance returned invalid evidence")
+        raise RuntimeError("remote standard-deployment acceptance returned invalid evidence")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = output_path.with_name(output_path.name + ".tmp")
     temporary.write_bytes(raw + b"\n")
     temporary.replace(output_path)
     print(
-        "wrote Phase 2 acceptance evidence to "
+        "wrote standard-deployment acceptance evidence to "
         f"{output_path} ({evidence['elapsed_seconds']:.1f}s remote elapsed)"
     )

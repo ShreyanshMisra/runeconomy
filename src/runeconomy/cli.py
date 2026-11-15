@@ -1,4 +1,4 @@
-"""Command-line interface for local trace analysis."""
+"""Command-line interface for RunEconomy."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from .experiments import (
 )
 from .importers import (
     import_openinference,
-    import_prefixwise_jsonl,
+    import_ledger_jsonl,
     import_vllm_jsonl,
 )
 from .models import Trace, TraceValidationError
@@ -133,12 +133,12 @@ def _build_parser() -> argparse.ArgumentParser:
     import_oi.add_argument("--backend", default="unknown")
     import_oi.add_argument("--block-size", type=int, default=16)
 
-    import_prefixwise = subparsers.add_parser(
-        "import-prefixwise-jsonl",
-        help="convert Prefixwise ledger exports into structured findings",
+    import_ledger = subparsers.add_parser(
+        "import-ledger-jsonl",
+        help="convert cache-ledger JSONL exports into structured findings",
     )
-    import_prefixwise.add_argument("export", type=Path)
-    import_prefixwise.add_argument("--output", type=Path, required=True)
+    import_ledger.add_argument("export", type=Path)
+    import_ledger.add_argument("--output", type=Path, required=True)
 
     capture = subparsers.add_parser(
         "capture-vllm", help="render and execute one vLLM request"
@@ -152,7 +152,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default="responses",
     )
     capture.add_argument("--timeout", type=float, default=300.0)
-    capture.add_argument("--startup-timeout", type=float, default=600.0)
+    capture.add_argument(
+        "--startup-timeout",
+        type=float,
+        default=0.0,
+        help="seconds to keep retrying while a cold server starts (default: 0)",
+    )
     capture.add_argument("--output", type=Path)
     capture.add_argument(
         "--append-trace-jsonl",
@@ -233,7 +238,12 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("manifest", type=Path)
     run.add_argument("--output", type=Path, required=True)
     run.add_argument("--timeout", type=float, default=300.0)
-    run.add_argument("--startup-timeout", type=float, default=600.0)
+    run.add_argument(
+        "--startup-timeout",
+        type=float,
+        default=0.0,
+        help="seconds to keep retrying while a cold server starts (default: 0)",
+    )
     run.add_argument(
         "--checkpoint",
         type=Path,
@@ -316,6 +326,15 @@ def _progress(message: str) -> None:
         print(f"RunEconomy · {message}", file=sys.stderr, flush=True)
 
 
+def _startup_retry_notice(remaining_seconds: float) -> None:
+    print(
+        "RunEconomy · the server is not accepting requests yet; retrying for up "
+        f"to {remaining_seconds:.0f} more seconds (--startup-timeout)",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
 def _append_jsonl(path: Path, payload: Mapping[str, Any]) -> None:
     try:
         with path.open("a", encoding="utf-8") as handle:
@@ -376,24 +395,28 @@ def _format_capabilities(base_url: str, capabilities: Mapping[str, Any]) -> str:
         "Experiment modes:",
     ]
     for mode in capabilities["experiment_modes"]:
-        safety = "safe" if mode["safe"] else "manual/private only"
-        lines.append(f"  {mode['mode']}: {mode['status']} ({safety})")
+        if mode["status"] != "supported":
+            lines.append(f"  {mode['mode']}: {mode['status']}")
+        else:
+            safety = "safe" if mode["safe"] else "manual/private only"
+            lines.append(f"  {mode['mode']}: {mode['status']} ({safety})")
         lines.append(f"    {mode['note']}")
     lines.extend(["", "What to do next"])
+    # Only actions that change what the operator can do are listed here. The
+    # complete per-capability and identity guidance stays in the JSON output.
     actions = list(readiness.get("next_actions") or [])
-    for label, key in capability_labels:
-        capability = capabilities[key]
-        if capability["status"] != "supported" and capability.get("next_action"):
-            actions.append(f"{label}: {capability['next_action']}")
-    for label, identity in capabilities.get("identity", {}).items():
-        if identity["status"] != "supported":
-            actions.append(f"{label.replace('_', ' ').title()}: {identity['next_action']}")
+    if readiness["status"] != "ready":
+        for label, key in capability_labels[:5]:
+            capability = capabilities[key]
+            if capability["status"] == "unknown" and capability.get("next_action"):
+                actions.append(f"{label}: {capability['next_action']}")
     if not actions:
         actions.append(
             "Record the detected identities in the manifest, then validate the experiment before execution."
         )
     actions = list(dict.fromkeys(actions))
     lines.extend(f"  {index}. {action}" for index, action in enumerate(actions, 1))
+    lines.append("  Run with --json for guidance on every capability and identity field.")
     lines.extend(
         [
             "",
@@ -537,8 +560,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"What to do next: run `runeconomy analyze {args.output}`.")
             return 0
 
-        if args.command == "import-prefixwise-jsonl":
-            payload = import_prefixwise_jsonl(args.export)
+        if args.command == "import-ledger-jsonl":
+            payload = import_ledger_jsonl(args.export)
             _write_json(args.output, payload)
             print(
                 f"RunEconomy import · wrote {len(payload['findings'])} imported findings to {args.output}"
@@ -557,6 +580,7 @@ def main(argv: list[str] | None = None) -> int:
                 timeout_seconds=args.timeout,
                 startup_retry_seconds=args.startup_timeout,
                 api_dialect=args.api_dialect,
+                on_startup_retry=_startup_retry_notice,
             )
             capture_result = client.capture(request).to_dict()
             rendered = json.dumps(capture_result, indent=2)
@@ -724,6 +748,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=args.timeout,
             startup_retry_seconds=args.startup_timeout,
             api_dialect=manifest.backend.api_dialect,
+            on_startup_retry=_startup_retry_notice,
         )
         checkpoint = args.checkpoint or args.output.with_name(
             args.output.name + ".trials.jsonl"

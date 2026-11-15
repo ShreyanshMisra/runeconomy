@@ -1,6 +1,6 @@
 # Real-agent compatibility trial
 
-This is the historical Phase 5 integration fixture. It validates the
+This is the original closed-loop integration fixture. It validates the
 `runeconomy compare` contract; it is separate from the later reliable-agent
 calibration and frozen 40-task proof.
 

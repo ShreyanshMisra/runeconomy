@@ -4,6 +4,7 @@ Install the locked development environment from a repository checkout:
 
 ```bash
 uv sync --locked
+uv run ruff check .
 uv run pytest -q
 ```
 
@@ -15,6 +16,26 @@ uv run runeconomy analyze examples/traces/repository-unused-tools.json
 uv run runeconomy experiment validate \
   examples/experiments/timestamp-placement.json
 ```
+
+## Documentation site
+
+The site under [`site/`](../site/) renders these Markdown sources:
+
+```bash
+cd site
+npm ci
+npm run build
+npm run check
+```
+
+The alpha version on the home page comes from `pyproject.toml`. The stable
+version and release-note dates come from the GitHub release list at build
+time, with repository values as the fallback when GitHub cannot be reached.
+Set `RUNECONOMY_SKIP_RELEASE_LOOKUP=1` for a build without network access.
+
+Article thumbnails are 1280 by 800 PNG files in `site/assets/thumbnails/`,
+rendered from the SVG sources in `site/assets/thumbnail-sources/`. Render the
+PNG again after editing a source.
 
 ## Modal validation
 

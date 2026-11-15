@@ -682,7 +682,7 @@ def import_openinference(
     return normalized
 
 
-_PREFIXWISE_EVIDENCE_FIELDS = {
+_LEDGER_EVIDENCE_FIELDS = {
     "session_id",
     "agent_id",
     "provider",
@@ -721,7 +721,7 @@ _PREFIXWISE_EVIDENCE_FIELDS = {
 }
 
 
-def _prefixwise_template(cause: str) -> tuple[str, str, str, str]:
+def _ledger_template(cause: str) -> tuple[str, str, str, str]:
     mappings = {
         "tool_reserialize": (
             "prompt.canonicalize_tools",
@@ -745,8 +745,8 @@ def _prefixwise_template(cause: str) -> tuple[str, str, str, str]:
     return mappings.get(cause, ("", "cache_reuse", "cached_tokens", "increase"))
 
 
-def import_prefixwise_jsonl(path: Path) -> dict[str, Any]:
-    """Import Prefixwise ledger exports as findings, preserving only ledger evidence."""
+def import_ledger_jsonl(path: Path) -> dict[str, Any]:
+    """Import cache-ledger JSONL exports as findings, preserving only ledger evidence."""
 
     findings: list[dict[str, Any]] = []
     sessions: set[str] = set()
@@ -754,27 +754,27 @@ def import_prefixwise_jsonl(path: Path) -> dict[str, Any]:
         cause = row.get("cause")
         if not isinstance(cause, str) or not cause or cause in {"none", "first_write"}:
             continue
-        request_id = str(row.get("request_id") or f"prefixwise-row-{index + 1}")
+        request_id = str(row.get("request_id") or f"ledger-row-{index + 1}")
         session_id = row.get("session_id")
         if isinstance(session_id, str):
             sessions.add(session_id)
         identity = f"{session_id or ''}\0{request_id}\0{cause}"
         finding_id = "finding-" + hashlib.sha256(identity.encode()).hexdigest()[:16]
-        template, target, metric, direction = _prefixwise_template(cause)
+        template, target, metric, direction = _ledger_template(cause)
         evidence = {
             key: value
             for key, value in row.items()
-            if key in _PREFIXWISE_EVIDENCE_FIELDS
+            if key in _LEDGER_EVIDENCE_FIELDS
             and isinstance(value, (str, int, float, bool, type(None)))
         }
         avoidable = _integer(row.get("avoidable_tokens"))
         findings.append(
             {
                 "finding_id": finding_id,
-                "rule_id": f"prefixwise.{cause}",
+                "rule_id": f"ledger.{cause}",
                 "request_id": request_id,
                 "affected_request_ids": [request_id],
-                "title": f"Prefixwise classified the request as {cause}",
+                "title": f"The imported ledger classified the request as {cause}",
                 "evidence_level": "imported",
                 "confidence": "source_reported",
                 "summary": str(row.get("detail") or row.get("evidence") or cause),
@@ -788,25 +788,25 @@ def import_prefixwise_jsonl(path: Path) -> dict[str, Any]:
                 "experiment_parameters": {"source_evidence": evidence},
                 "required_capabilities": ["task_evaluator", "replayable_workload"],
                 "unsupported_reason": (
-                    "Prefixwise exports hashes, counts, and conclusions rather than a "
+                    "The ledger export contains hashes, counts, and conclusions rather than a "
                     "replayable request; supply the baseline request, candidate change, "
                     "backend, sampling, acceptance gates, and evaluator."
                 ),
                 "causal_mechanism": str(
                     row.get("detail")
-                    or f"Prefixwise attributed cache waste to {cause}."
+                    or f"The imported ledger attributed cache waste to {cause}."
                 ),
                 "predicted_metric": metric,
                 "predicted_direction": direction,
                 "attribution_quality": "block_level" if row.get("divergence_role") else "unknown",
-                "source": "prefixwise_ledger_export",
+                "source": "cache_ledger_export",
             }
         )
     return {
         "artifact_type": "runeconomy.imported_findings",
         "artifact_version": "0.1",
-        "source": "prefixwise",
-        "trace_id": next(iter(sessions)) if len(sessions) == 1 else "prefixwise-import",
+        "source": "cache_ledger",
+        "trace_id": next(iter(sessions)) if len(sessions) == 1 else "ledger-import",
         "findings": findings,
         "limitations": [
             "No raw prompts or token arrays were reconstructed from hashes or counts.",

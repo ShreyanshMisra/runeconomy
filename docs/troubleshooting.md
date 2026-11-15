@@ -10,6 +10,13 @@ Confirm that `--base-url` points to the OpenAI-compatible vLLM root, the server
 is running, and the machine running RunEconomy can reach it. Increase
 `--timeout` only when the endpoint is healthy but slow to return metadata.
 
+## A cold server is still starting
+
+`capture-vllm` and `experiment run` fail immediately when the server does not
+accept the connection. For a deployment that needs time to load a model, pass
+`--startup-timeout SECONDS`. RunEconomy then retries until the server responds
+or the time runs out, and prints one notice while it waits.
+
 ## Authentication failed
 
 Keep the key outside shell history and manifests:

@@ -50,8 +50,8 @@ def _manifest() -> dict:
                 "case_id": "case-1",
                 "evaluator": {"kind": "exact", "expected": "PASS"},
                 "variants": {
-                    "baseline": {"request": {"input": "baseline {{AID_TRIAL_ID}}"}},
-                    "candidate": {"request": {"input": "candidate {{AID_TRIAL_ID}}"}},
+                    "baseline": {"request": {"input": "baseline {{RUNECONOMY_TRIAL_ID}}"}},
+                    "candidate": {"request": {"input": "candidate {{RUNECONOMY_TRIAL_ID}}"}},
                 },
             }
         ],
@@ -256,6 +256,22 @@ class ExperimentTests(unittest.TestCase):
             result["provenance"]["environment_identity"]["drift"],
         )
 
+    def test_earlier_trial_placeholder_name_remains_supported(self) -> None:
+        payload = _manifest()
+        variants = payload["cases"][0]["variants"]
+        for variant in variants.values():
+            variant["request"]["input"] = variant["request"]["input"].replace(
+                "RUNECONOMY_TRIAL_ID", "AID_TRIAL_ID"
+            )
+        client = _FakeClient()
+        run_experiment(ExperimentManifest.from_dict(payload), client)
+
+        self.assertNotIn("{{", client.requests[0]["input"])
+        self.assertEqual(
+            client.requests[2]["input"].removeprefix("baseline "),
+            client.requests[3]["input"].removeprefix("candidate "),
+        )
+
     def test_warm_experiment_alternates_and_builds_paired_effects(self) -> None:
         manifest = ExperimentManifest.from_dict(_manifest())
         client = _FakeClient()
@@ -271,7 +287,7 @@ class ExperimentTests(unittest.TestCase):
         self.assertTrue(
             all(request["model"] == "example/model" for request in client.requests)
         )
-        self.assertNotIn("{{AID_TRIAL_ID}}", client.requests[0]["input"])
+        self.assertNotIn("{{RUNECONOMY_TRIAL_ID}}", client.requests[0]["input"])
         self.assertEqual(
             client.requests[2]["input"].removeprefix("baseline "),
             client.requests[3]["input"].removeprefix("candidate "),

@@ -4,5 +4,10 @@
   "outputDirectory": "site/dist",
   "framework": null,
   "cleanUrls": true,
-  "trailingSlash": true
+  "trailingSlash": true,
+  "redirects": [
+    { "source": "/getting-started/", "destination": "/start/", "permanent": true },
+    { "source": "/skill/", "destination": "/agents/", "permanent": true },
+    { "source": "/how-it-works/", "destination": "/articles/how-runeconomy-works/", "permanent": true }
+  ]
 }

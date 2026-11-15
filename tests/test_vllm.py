@@ -6,7 +6,7 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from runeconomy.vllm import VLLMClient, VLLMHTTPError
+from runeconomy.vllm import VLLMClient, VLLMError, VLLMHTTPError
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -272,6 +272,67 @@ class VLLMClientTests(unittest.TestCase):
             _Handler.do_POST = original
         self.assertEqual(result.status, "incomplete")
         self.assertEqual(result.output_tokens, 8)
+
+
+
+class _StalledStreamHandler(BaseHTTPRequestHandler):
+    release = threading.Event()
+
+    def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
+        length = int(self.headers.get("Content-Length", "0"))
+        self.rfile.read(length)
+        if self.path == "/v1/chat/completions/render":
+            body = json.dumps({"prompt_token_ids": [1, 2, 3]}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        partial = b'data: {"choices":[{"delta":{"content":"par"}}]}\n\n'
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        self.wfile.write(partial)
+        self.wfile.flush()
+        # Stop sending without closing: the client's read stalls mid-stream.
+        self.release.wait(timeout=10)
+        self.close_connection = True
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+
+class InterruptedStreamTests(unittest.TestCase):
+    def test_stream_stalled_mid_response_is_an_actionable_error(self) -> None:
+        _StalledStreamHandler.release.clear()
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _StalledStreamHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            client = VLLMClient(
+                f"http://127.0.0.1:{server.server_port}",
+                api_dialect="chat_completions",
+                timeout_seconds=0.3,
+            )
+            with self.assertRaises(VLLMError) as caught:
+                client.capture({"model": "example/model", "messages": []})
+        finally:
+            _StalledStreamHandler.release.set()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+        message = str(caught.exception)
+        self.assertIn("timed out", message)
+        self.assertIn("incomplete", message)
+        self.assertNotIn("127.0.0.1", message)
+
+    def test_unreachable_server_fails_immediately_by_default(self) -> None:
+        notices: list[float] = []
+        client = VLLMClient("http://127.0.0.1:9", on_startup_retry=notices.append)
+        with self.assertRaises(VLLMError):
+            client.render({"model": "example/model", "input": "x"})
+        self.assertEqual(notices, [])
 
 
 if __name__ == "__main__":

@@ -26,8 +26,8 @@ All 80 attempts completed with valid traces. The quality gate, not
 infrastructure, rejected the apparent speedup. The workload is consumed and
 cannot be reused or retuned as fresh held-out evidence.
 
-[Read the complete public proof](docs/public-proof.md) ·
-[Inspect the aggregate evidence](src/runeconomy/data/public-proof-rejection.json)
+[Read the complete public proof](https://runeconomy.vercel.app/proof/) ·
+[Inspect the aggregate evidence](https://github.com/ShreyanshMisra/runeconomy/blob/main/src/runeconomy/data/public-proof-rejection.json)
 
 ## Install and see it in five minutes
 
@@ -50,10 +50,10 @@ runeconomy doctor \
 `doctor` reports supported, unsupported, and unknown capabilities, safe
 experiment modes, and an exact next action. Use `--json` for automation.
 
-[Follow the complete quickstart](docs/getting-started.md) ·
-[Read the compatibility guide](docs/doctor.md) ·
-[CLI reference](docs/cli-reference.md) ·
-[Troubleshoot setup](docs/troubleshooting.md)
+[Follow the complete quickstart](https://runeconomy.vercel.app/start/) ·
+[Read the compatibility guide](https://runeconomy.vercel.app/doctor/) ·
+[CLI reference](https://runeconomy.vercel.app/cli/) ·
+[Troubleshoot setup](https://runeconomy.vercel.app/troubleshooting/)
 
 ## Choose the right experiment
 
@@ -63,22 +63,23 @@ experiment modes, and an exact next action. Use `--json` for automation.
   with variant-local state, explicit dependencies, real tool time, task-level
   pairing, and durable OpenTelemetry/OpenInference evidence.
 - Importers accept exact-token vLLM captures, structural
-  OpenInference/OpenTelemetry traces, and evidence present in Prefixwise JSONL
-  exports without inventing missing prompts, tokens, timing, or dependencies.
+  OpenInference/OpenTelemetry traces, and evidence present in cache-ledger
+  JSONL exports without inventing missing prompts, tokens, timing, or
+  dependencies.
 
-[Static experiment format](docs/experiment-format.md) ·
-[Closed-loop comparison](docs/closed-loop-comparison.md) ·
-[Trace format](docs/trace-format.md) ·
-[How RunEconomy works](docs/how-it-works.md)
+[Static experiment format](https://runeconomy.vercel.app/experiments/) ·
+[Closed-loop comparison](https://runeconomy.vercel.app/compare/) ·
+[Trace format](https://runeconomy.vercel.app/traces/) ·
+[How RunEconomy works](https://runeconomy.vercel.app/articles/how-runeconomy-works/)
 
 ## Give your coding agent the same contract
 
-The canonical [RunEconomy agent skill](skills/runeconomy/SKILL.md) teaches an
+The canonical [RunEconomy agent skill](https://github.com/ShreyanshMisra/runeconomy/blob/main/skills/runeconomy/SKILL.md) teaches an
 agent how to inspect compatibility, acquire evidence, prepare an experiment,
 preserve workflow state, interpret verdicts, protect private material, and stop
 before destructive or external operations.
 
-[Install the skill for Codex, Claude Code, or adapt it for Cursor](docs/agent-skill.md)
+[Install the skill for Codex, Claude Code, or adapt it for Cursor](https://runeconomy.vercel.app/agents/)
 
 ## Alpha boundaries
 
@@ -88,10 +89,11 @@ framework-specific SDK, automatic resume, SGLang runner, or broad diagnosis
 catalog. Raw prompts, traces, evaluator data, and experiment artifacts remain
 the operator's responsibility.
 
-[Alpha and migration notes](docs/alpha-release.md) ·
-[Development and validation](docs/development.md) ·
+[Alpha and migration notes](https://runeconomy.vercel.app/alpha/) ·
+[Development and validation](https://github.com/ShreyanshMisra/runeconomy/blob/main/docs/development.md) ·
+[Documentation](https://runeconomy.vercel.app/) ·
 [PyPI](https://pypi.org/project/runeconomy/) ·
 [GitHub](https://github.com/ShreyanshMisra/runeconomy)
 
-The local static documentation site is generated from these version-controlled
-sources under [`site/`](site/). It is prepared for Vercel but is not deployed.
+The [documentation site](https://runeconomy.vercel.app/) is generated from these version-controlled
+sources under [`site/`](https://github.com/ShreyanshMisra/runeconomy/tree/main/site).

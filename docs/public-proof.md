@@ -110,14 +110,14 @@ Each task gave the agent a code clue and a bounded set of repository files. The 
 
 | Field | Recorded value |
 |---|---|
-| trace_and_environment_identity | Passed. Threshold: every attempt has an explicit complete DAG and each variant has complete, stable environment identity. Observed: {'baseline': {'complete_dag_count': 40, 'complete_dag_rate': 1.0, 'environment_identity_complete': True, 'environment_identity_stable': True, 'valid_trace_count': 40}, 'candidate': {'complete_dag_count': 40, 'complete_dag_rate': 1.0, 'environment_identity_complete': True, 'environment_identity_stable': True, 'valid_trace_count': 40}} |
-| baseline_minimum_task_success | Failed. Threshold: 0.8. Observed: [0.7961352512671009, 0.9842578201489585] |
-| candidate_minimum_task_success | Passed. Threshold: 0.8. Observed: [0.8308031360405823, 0.9938863534006492] |
-| task_success_noninferiority | Failed. Threshold: -0.1. Observed: {'candidate_minus_baseline_mean': 0.025, 'confidence_interval': [-0.14498205538583642, 0.18780457959853636], 'confidence_level': 0.95, 'method': 'exact marginal binomial bounds with Bonferroni coverage', 'one_sided_lower_bound': -0.12547221188341495, 'outcome_counts': {'baseline_only': 1, 'both_failure': 1, 'both_success': 36, 'candidate_only': 2}, 'paired_count': 40} |
+| trace_and_environment_identity | Passed. Threshold: every attempt has an explicit complete DAG and each variant has complete, stable environment identity. Observed: Baseline: complete DAG count 40, complete DAG rate 1.0, environment identity complete yes, environment identity stable yes, valid trace count 40. Candidate: complete DAG count 40, complete DAG rate 1.0, environment identity complete yes, environment identity stable yes, valid trace count 40 |
+| baseline_minimum_task_success | Failed. Threshold: 0.8. Observed: 0.7961352512671009 to 0.9842578201489585 |
+| candidate_minimum_task_success | Passed. Threshold: 0.8. Observed: 0.8308031360405823 to 0.9938863534006492 |
+| task_success_noninferiority | Failed. Threshold: -0.1. Observed: candidate minus baseline mean 0.025, confidence interval -0.14498205538583642 to 0.18780457959853636, confidence level 0.95, method exact marginal binomial bounds with Bonferroni coverage, one sided lower bound -0.12547221188341495, outcome counts (baseline only 1, both failure 1, both success 36, candidate only 2), paired count 40 |
 | baseline_completion | Passed. Threshold: 1.0. Observed: 1.0 |
 | candidate_completion | Passed. Threshold: 1.0. Observed: 1.0 |
-| successful_task_workflow_latency_improvement | Passed. Threshold: upper bound of paired 95% Student-t interval < 0. Observed: {'available': True, 'candidate_minus_baseline_mean': -62.43227297222221, 'confidence_interval': [-123.85694821653173, -1.0075977279126818], 'confidence_level': 0.95, 'method': 'paired Student-t interval', 'paired_count': 36} |
-| successful_task_workflow_latency_non_regression | Passed. Threshold: lower bound of paired 95% Student-t interval <= 0. Observed: {'available': True, 'candidate_minus_baseline_mean': -62.43227297222221, 'confidence_interval': [-123.85694821653173, -1.0075977279126818], 'confidence_level': 0.95, 'method': 'paired Student-t interval', 'paired_count': 36} |
+| successful_task_workflow_latency_improvement | Passed. Threshold: upper bound of paired 95% Student-t interval < 0. Observed: available yes, candidate minus baseline mean -62.43227297222221, confidence interval -123.85694821653173 to -1.0075977279126818, confidence level 0.95, method paired Student-t interval, paired count 36 |
+| successful_task_workflow_latency_non_regression | Passed. Threshold: lower bound of paired 95% Student-t interval <= 0. Observed: available yes, candidate minus baseline mean -62.43227297222221, confidence interval -123.85694821653173 to -1.0075977279126818, confidence level 0.95, method paired Student-t interval, paired count 36 |
 
 </details>
 

@@ -95,7 +95,7 @@ Credentials are read only from the environment variable named by
   unique, unrecorded random `cache_salt` per trial. It prevents cross-trial
   prefix reuse but does not physically clear cached blocks, recover capacity,
   or remove eviction effects.
-- `arrival_pattern` is pinned to `sequential` in version `0.1`.
+- `arrival_pattern` currently supports only `sequential`.
 - Every case contains exactly a `baseline` and `candidate` request.
 - Each case may define a deterministic evaluator. Set
   `execution.require_evaluation` to reject unevaluated cases.
@@ -134,7 +134,7 @@ Credentials are read only from the environment variable named by
   sorts the same catalog by function name and canonical JSON. Both operate on
   a copy and preserve tool definitions.
 
-Any string in a request may contain the reserved `{{AID_TRIAL_ID}}`
+Any string in a request may contain the reserved `{{RUNECONOMY_TRIAL_ID}}`
 placeholder. The runner replaces it with the same deterministic value for both
 members of a pair and a different value for every case/repetition. This models
 timestamps, correlation IDs, and other per-run data without making the two
@@ -153,10 +153,10 @@ for a complete manifest.
 ## Commands
 
 ```bash
-PYTHONPATH=src python3 -m runeconomy experiment validate \
+runeconomy experiment validate \
   examples/experiments/timestamp-placement.json
 
-PYTHONPATH=src python3 -m runeconomy experiment run \
+runeconomy experiment run \
   examples/experiments/timestamp-placement.json \
   --output reports/timestamp-placement.json \
   --require-verified
@@ -165,7 +165,7 @@ PYTHONPATH=src python3 -m runeconomy experiment run \
 For adapter smoke-testing, one request can be captured directly:
 
 ```bash
-PYTHONPATH=src python3 -m runeconomy capture-vllm request.json \
+runeconomy capture-vllm request.json \
   --base-url http://127.0.0.1:8000 \
   --api-key-env VLLM_API_KEY
 ```
@@ -183,7 +183,7 @@ does not imply a true 100% success rate or prove a zero-regression margin.
 
 Client TTFT, server TTFT, and their difference remain separate. End-to-end
 workflow latency is the product outcome when selected as `primary_metric`.
-server TTFT is a serving-mechanism metric, and the client/server gap exposes
+Server TTFT is a serving-mechanism metric, and the client/server gap exposes
 network, proxy, and streaming-delivery overhead.
 
 Supported evaluator kinds are `exact`, `regex`, `json_schema`, `python`,
@@ -239,7 +239,7 @@ manifest.
 Render a shareable Markdown report from a raw result:
 
 ```bash
-PYTHONPATH=src python3 -m runeconomy experiment report result.json \
+runeconomy experiment report result.json \
   --output experiment-report.md
 ```
 
