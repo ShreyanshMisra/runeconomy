@@ -30,8 +30,7 @@ raw traces, credentials, private endpoints and unsanitized result artifacts. It
 also requires explicit approval before paid compute, cache reset, development
 endpoint changes, publication or production infrastructure changes.
 
-The compatible upcoming package version is `0.2.0a3`. That package has not been
-published yet.
+The skill targets RunEconomy `0.2.0a3`.
 
 ## Codex
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.error
 import urllib.parse
@@ -241,16 +242,6 @@ class BackendCapabilities:
         return result
 
 
-def sanitized_target(base_url: str) -> str:
-    """Return a display-safe origin without credentials, path, query, or fragment."""
-
-    parsed = urllib.parse.urlsplit(base_url)
-    hostname = parsed.hostname or "unknown-host"
-    if parsed.port is not None:
-        hostname = f"{hostname}:{parsed.port}"
-    return urllib.parse.urlunsplit((parsed.scheme, hostname, "", "", ""))
-
-
 def _capability(paths: set[str], path: str, *, openapi: bool) -> Capability:
     if openapi:
         if path in paths:
@@ -299,7 +290,12 @@ def _json_get(
                 ),
             ) from exc
         return exc.code, None
-    except (urllib.error.URLError, TimeoutError) as exc:
+    except (
+        urllib.error.URLError,
+        TimeoutError,
+        ConnectionError,
+        http.client.HTTPException,
+    ) as exc:
         reason = getattr(exc, "reason", exc)
         timed_out = isinstance(reason, TimeoutError)
         raise BackendProbeError(
@@ -361,7 +357,12 @@ def _post_probe(
             return response.status, payload
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read(2048).decode("utf-8", errors="replace")
-    except (urllib.error.URLError, TimeoutError) as exc:
+    except (
+        urllib.error.URLError,
+        TimeoutError,
+        ConnectionError,
+        http.client.HTTPException,
+    ) as exc:
         reason = getattr(exc, "reason", exc)
         timed_out = isinstance(reason, TimeoutError)
         raise BackendProbeError(

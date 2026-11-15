@@ -21,6 +21,11 @@ from .evaluators import EvaluatorError, evaluate_output, validate_evaluator_spec
 from .vllm import CapturedResponse
 
 
+# Manifests written before 0.2.0a3 used the second name; both resolve to the
+# same per-trial value so existing manifests keep working.
+_TRIAL_ID_PLACEHOLDERS = ("RUNECONOMY_TRIAL_ID", "AID_TRIAL_ID")
+
+
 class ExperimentValidationError(ValueError):
     pass
 
@@ -761,9 +766,17 @@ def _materialize_trial(value: Any, replacements: Mapping[str, Any]) -> Any:
     return value
 
 
-def _validate_manifest_placeholders(manifest: ExperimentManifest) -> None:
+def _trial_replacements(
+    manifest: ExperimentManifest, trial_id: str
+) -> dict[str, Any]:
     replacements = dict(manifest.constants)
-    replacements["AID_TRIAL_ID"] = "validation-trial"
+    for name in _TRIAL_ID_PLACEHOLDERS:
+        replacements[name] = trial_id
+    return replacements
+
+
+def _validate_manifest_placeholders(manifest: ExperimentManifest) -> None:
+    replacements = _trial_replacements(manifest, "validation-trial")
     for case in manifest.cases:
         for variant, request in (
             ("baseline", case.baseline),
@@ -1526,8 +1539,7 @@ def _prepared_request(
     warmup: bool,
 ) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
     trial_id = f"{'warmup' if warmup else 'measured'}-{case.case_id}-{repetition:04d}"
-    replacements = dict(manifest.constants)
-    replacements["AID_TRIAL_ID"] = trial_id
+    replacements = _trial_replacements(manifest, trial_id)
     request = _materialize_trial(
         case.baseline if variant == "baseline" else case.candidate,
         replacements,

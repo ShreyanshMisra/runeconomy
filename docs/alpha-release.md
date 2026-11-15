@@ -1,21 +1,17 @@
 # RunEconomy 0.2.0a3 alpha guide
 
-`0.2.0a3` is an invited-tester release candidate. It has not been published. It
-is not a production service or a general benchmark suite. RunEconomy remains a
-local CLI and Python package.
+`0.2.0a3` is an invited-tester alpha. It is not a production service or a
+general benchmark suite. RunEconomy remains a local CLI and Python package.
 
 ## Install the prerelease
 
-After the alpha is published, install it with:
+`0.2.0a3` is a prerelease, so request it explicitly:
 
 ```bash
 python -m pip install --pre runeconomy==0.2.0a3
 runeconomy --help
 runeconomy demo --open
 ```
-
-Production PyPI currently serves stable `0.1.0`. Do not use the prerelease
-command until `0.2.0a3` is available.
 
 The default demo is the aggregate-only frozen rejection proof. Use
 `runeconomy demo --case historical` to render the earlier static-request case.
@@ -42,8 +38,9 @@ gating order, evidence, limitations, and frozen hashes.
   skeleton instead of guessing requests, evaluators, or thresholds.
 - `import-openinference` preserves structural OpenTelemetry/OpenInference
   evidence without inventing exact token boundaries or workflow dependencies.
-- `import-prefixwise-jsonl` imports the conclusions and evidence available in a
-  Prefixwise export without reconstructing prompts or tokens from hashes.
+- `import-ledger-jsonl` imports the conclusions and evidence available in a
+  cache-ledger JSONL export without reconstructing prompts or tokens from
+  hashes.
 - `compare` executes real baseline and candidate agent processes with
   variant-local state, task-level pairing, deterministic evaluation, explicit
   failure classes, imported traces, DAG reconstruction, and joint quality and
@@ -59,11 +56,14 @@ gating order, evidence, limitations, and frozen hashes.
 - A build-only static documentation site renders the repository Markdown
   sources. It is not deployed by the package or CLI.
 
-## Migration from 0.1.0
+## Migration from the stable release
 
 There are no intentional Python API removals in this alpha. Existing static
 experiment manifests remain supported. The prerelease command alias formerly
-used for static experiments has been removed. Use `runeconomy experiment`.
+used for static experiments has been removed. Use `runeconomy experiment`. The
+ledger importer is now `runeconomy import-ledger-jsonl`, and the per-trial
+placeholder is now `{{RUNECONOMY_TRIAL_ID}}`. Manifests that use the earlier
+placeholder name still run.
 
 Behavioral changes to review:
 
@@ -71,7 +71,7 @@ Behavioral changes to review:
 2. `compare` is reserved for executing complete baseline and candidate agent
    processes. It is not an alias for static request replay.
 3. `runeconomy demo` now renders the frozen quality-gated rejection. Select
-   `--case historical` for the 0.1.0-era bundled report.
+   `--case historical` for the earlier bundled report.
 4. Verdicts can be `verified`, `regression`, `inconclusive`, or `invalid`.
    Missing or incomplete evidence is not coerced to zero merely to produce a
    verdict.
@@ -89,7 +89,7 @@ Behavioral changes to review:
 - OpenInference imports may provide structural evidence without exact rendered
   token IDs. Parent-child nesting alone is not treated as an explicit workflow
   dependency.
-- Prefixwise exports often contain hashes and counts rather than replayable
+- Cache-ledger exports often contain hashes and counts rather than replayable
   prompts. Experiments generated from them may therefore remain unresolved.
 - `compare` requires the agent to export a durable trace file. RunEconomy does
   not yet provide an OTLP network collector, automatic resume, or

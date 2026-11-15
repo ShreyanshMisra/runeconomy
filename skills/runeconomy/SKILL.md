@@ -68,7 +68,7 @@ that matches available evidence:
 runeconomy import-openinference otlp.json --output trace.json
 runeconomy import-vllm-jsonl captures.jsonl --output trace.json \
   --trace-id TRACE --model MODEL
-runeconomy import-prefixwise-jsonl ledger.jsonl --output findings.json
+runeconomy import-ledger-jsonl ledger.jsonl --output findings.json
 ```
 
 Use instrumentation when imports lack the workflow relationships required by

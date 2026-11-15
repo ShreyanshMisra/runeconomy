@@ -8,10 +8,12 @@ tokenizer and chat template rather than reproducing it locally.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from typing import Any, Callable, Iterator, Mapping
 
@@ -31,6 +33,24 @@ class VLLMHTTPError(VLLMError):
 
     def __reduce__(self) -> tuple[Any, tuple[str, int, str]]:
         return (type(self), (self.path, self.status, self.body))
+
+
+@contextmanager
+def _interrupted_connection(action: str) -> Iterator[None]:
+    """Report a dropped or stalled connection as an actionable vLLM error.
+
+    urllib wraps failures while connecting, but a timeout or reset while the
+    response is being read surfaces as a raw socket or HTTP exception.
+    """
+
+    try:
+        yield
+    except (TimeoutError, ConnectionError, http.client.HTTPException) as exc:
+        reason = "timed out" if isinstance(exc, TimeoutError) else "was interrupted"
+        raise VLLMError(
+            f"the connection to vLLM {reason} while {action} "
+            f"({type(exc).__name__}); the response is incomplete"
+        ) from exc
 
 
 @dataclass(frozen=True)
@@ -153,6 +173,7 @@ class VLLMClient:
         startup_retry_seconds: float = 0.0,
         api_dialect: str = "responses",
         clock: Callable[[], float] = time.perf_counter,
+        on_startup_retry: Callable[[float], None] | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -162,6 +183,7 @@ class VLLMClient:
             raise ValueError("api_dialect must be 'responses' or 'chat_completions'")
         self.api_dialect = api_dialect
         self._clock = clock
+        self._on_startup_retry = on_startup_retry
 
     def _headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json", "Content-Type": "application/json"}
@@ -177,19 +199,31 @@ class VLLMClient:
             method="POST",
         )
         retry_deadline = time.monotonic() + self.startup_retry_seconds
+        notified = False
+
+        def wait_for_startup() -> None:
+            nonlocal notified
+            if not notified and self._on_startup_retry is not None:
+                self._on_startup_retry(max(retry_deadline - time.monotonic(), 0.0))
+            notified = True
+            time.sleep(2)
+
         while True:
             try:
-                return urllib.request.urlopen(request, timeout=self.timeout_seconds)
+                with _interrupted_connection(f"opening {path}"):
+                    return urllib.request.urlopen(
+                        request, timeout=self.timeout_seconds
+                    )
             except urllib.error.HTTPError as exc:
                 if exc.code in {502, 503} and time.monotonic() < retry_deadline:
                     exc.close()
-                    time.sleep(2)
+                    wait_for_startup()
                     continue
                 body = exc.read(2048).decode("utf-8", errors="replace")
                 raise VLLMHTTPError(path, exc.code, body) from exc
             except urllib.error.URLError as exc:
                 if time.monotonic() < retry_deadline:
-                    time.sleep(2)
+                    wait_for_startup()
                     continue
                 raise VLLMError(
                     f"cannot reach vLLM at {self.base_url}: {exc.reason}"
@@ -198,7 +232,8 @@ class VLLMClient:
     def _post_json(self, path: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         with self._open(path, payload) as response:
             try:
-                result = json.load(response)
+                with _interrupted_connection(f"reading {path}"):
+                    result = json.load(response)
             except (json.JSONDecodeError, UnicodeDecodeError) as exc:
                 raise VLLMError(f"vLLM {path} returned invalid JSON") from exc
         if not isinstance(result, dict):
@@ -268,8 +303,12 @@ class VLLMClient:
             return self.tokenize_chat(request_body)
 
     def capture(self, request_body: Mapping[str, Any]) -> CapturedResponse:
-        if self.api_dialect == "chat_completions":
-            return self._capture_chat_completions(request_body)
+        with _interrupted_connection("streaming the generation response"):
+            if self.api_dialect == "chat_completions":
+                return self._capture_chat_completions(request_body)
+            return self._capture_responses(request_body)
+
+    def _capture_responses(self, request_body: Mapping[str, Any]) -> CapturedResponse:
         token_ids = self.prompt_token_ids(request_body)
         payload = dict(request_body)
         payload["stream"] = True

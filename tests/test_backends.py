@@ -15,7 +15,6 @@ from runeconomy.backends import (
     _post_probe,
     _render_capability,
     discover_vllm_capabilities,
-    sanitized_target,
 )
 
 
@@ -91,12 +90,6 @@ class BackendCapabilityTests(unittest.TestCase):
         self.assertTrue(salt_mode["supported"])
         self.assertEqual(salt_mode["physical_cache_state"], "unchanged")
         self.assertEqual(result["readiness"]["status"], "ready")
-
-    def test_sanitized_target_removes_credentials_path_and_query(self) -> None:
-        display = sanitized_target(self.url)
-        self.assertNotIn("password", display)
-        self.assertNotIn("token", display)
-        self.assertNotIn("private", display)
 
     def test_advertised_but_runtime_disabled_render_is_not_supported(self) -> None:
         original = _DoctorHandler.do_POST

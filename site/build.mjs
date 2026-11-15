@@ -1,11 +1,12 @@
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { marked } from "marked";
 
 import { articles } from "./articles.mjs";
 import { siteConfig } from "./config.mjs";
+import { fetchReleases, formatReleaseDate } from "./releases.mjs";
 
 const siteDir = dirname(fileURLToPath(import.meta.url));
 const root = resolve(siteDir, "..");
@@ -80,13 +81,34 @@ const referencePages = [
 const homePage = {
   route: "",
   source: "site/content/index.md",
-  title: "Know if the optimization worked",
+  title: "Verify your inference optimizations",
   description: "RunEconomy connects inference evidence to complete workflow latency and task success.",
   active: "home",
   kind: "home",
 };
 
-const articlePages = articles.map((article) => ({
+const notFoundPage = {
+  route: "404",
+  outputFile: "404.html",
+  markdown: "# Page not found\n\nThis page does not exist or has moved. [Start with RunEconomy](/start/), read the [public proof](/proof/) or return to the [home page](/).",
+  title: "Page not found",
+  description: "This RunEconomy page does not exist or has moved.",
+  active: "",
+  kind: "not-found",
+};
+
+const releases = await fetchReleases(siteConfig.repository);
+const stableVersion = releases.find((release) => !release.prerelease)?.version
+  || siteConfig.fallbackStableVersion;
+
+// A release-notes article takes its date from the matching GitHub release when
+// one exists, so a newly published version is dated without editing this site.
+const resolvedArticles = articles.map((article) => {
+  const date = releases.find((release) => release.version === article.releaseVersion)?.date || article.date;
+  return date ? { ...article, date, dateLabel: formatReleaseDate(date) } : article;
+});
+
+const articlePages = resolvedArticles.map((article) => ({
   ...article,
   active: article.primaryPage ? article.slug : "",
   kind: article.primaryPage ? "primary" : "article",
@@ -108,10 +130,20 @@ function absoluteUrl(path) {
   return new URL(path, `${siteConfig.siteUrl.replace(/\/$/, "")}/`).toString();
 }
 
-function rewriteLinks(markdown) {
-  return markdown.replace(/\]\(([^)#]+\.md)(#[^)]+)?\)/g, (match, source, hash = "") => {
-    const target = routeBySource.get(source.replace(/^\.\//, ""));
-    return target ? `](${target}${hash})` : match;
+// Links between published documents become site routes. Every other relative
+// link points at a repository file that the site does not host, so it is
+// rewritten to that file on GitHub instead of resolving to a missing page.
+function rewriteLinks(markdown, source) {
+  const sourceDirectory = posix.dirname(source);
+  return markdown.replace(/\]\(([^)\s]+)\)/g, (match, link) => {
+    if (/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(link)) return match;
+    const [target, hash = ""] = link.split("#", 2);
+    const anchor = hash ? `#${hash}` : "";
+    const route = routeBySource.get(target.replace(/^\.\//, ""));
+    if (route) return `](${route}${anchor})`;
+    const repositoryPath = posix.normalize(posix.join(sourceDirectory, target));
+    if (repositoryPath.startsWith("..")) return match;
+    return `](${siteConfig.repository}/blob/main/${repositoryPath}${anchor})`;
   });
 }
 
@@ -121,8 +153,8 @@ function icon(name) {
     github: '<path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.87c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.64-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.6 9.6 0 0 1 12 6.82a9.6 9.6 0 0 1 2.5.34c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.77c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/>',
     package: '<path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="m4 7 8 4 8-4v10l-8 4-8-4V7Z"/><path d="M12 11v10"/>',
     download: '<path d="M12 3v12m0 0 5-5m-5 5-5-5"/><path d="M4 20h16"/>',
-    x: '<path d="M5 4l14 16M19 4 5 20"/>',
-    linkedin: '<rect x="4" y="9" width="4" height="11"/><path d="M6 4v.1M12 20v-6a5 5 0 0 1 8 0v6M12 9v11"/>',
+    twitter: '<path d="M22 4.5a9.6 9.6 0 0 1-2.8 1.36 4 4 0 0 0-7 2.68v.9A9.5 9.5 0 0 1 4 5.4s-3.6 8 4.5 11.6A10.4 10.4 0 0 1 2 18.8c8.1 4.5 18 0 18-10.3a4 4 0 0 0-.07-.74A6.9 6.9 0 0 0 22 4.5Z"/>',
+    linkedin: '<path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6Z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/>',
     arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>',
   };
   return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths[name]}</svg>`;
@@ -139,7 +171,7 @@ function sidebar(active) {
     <div class="sidebar-secondary">
       <a href="${siteConfig.repository}">GitHub</a>
       <a href="${siteConfig.pypi}">PyPI</a>
-      <span>${siteConfig.upcomingVersion} upcoming</span>
+      <span>v${siteConfig.alphaVersion}</span>
     </div>
   </aside>`;
 }
@@ -171,13 +203,13 @@ function enhanceCodeBlocks(html) {
 }
 
 function articleRail() {
-  const cards = articles.filter((article) => article.rail).map((article) => {
-    const marker = article.dateLabel || article.status;
+  const cards = resolvedArticles.filter((article) => article.rail).map((article) => {
+    const date = article.date ? `<time datetime="${article.date}">${article.dateLabel}</time>` : "";
     return `<article class="rail-card">
       <a href="/${article.route}/" aria-label="${article.title}">
         <img src="${article.thumbnail}" alt="${article.thumbnailAlt}" width="640" height="400">
         <div class="rail-card-body">
-          <div class="rail-card-meta"><span>${article.type}</span><span>${marker}</span></div>
+          <div class="rail-card-meta"><span>${article.type}</span>${date}</div>
           <h3>${article.title}</h3>
           <p>${article.description}</p>
           <span class="text-link">Read article ${icon("arrow")}</span>
@@ -201,18 +233,18 @@ function installStrip() {
   return `<section class="install-section" aria-labelledby="install-heading">
     <div class="install-copy">
       <p class="eyebrow" id="install-heading">Install</p>
-      <p>Production PyPI currently serves stable ${siteConfig.stableVersion}. The upcoming alpha remains local until it is published.</p>
+      <p>The stable release installs by default. The alpha is a prerelease with the newest features, so request it explicitly.</p>
     </div>
     <div class="install-options">
       <div class="install-command">
-        <span class="command-label">Stable ${siteConfig.stableVersion}</span>
+        <span class="command-label">Stable ${stableVersion}</span>
         <code>pip install runeconomy</code>
         <button type="button" class="copy-button" data-copy data-copy-text="pip install runeconomy" aria-label="Copy stable install command">${icon("copy")}<span data-copy-label aria-live="polite">Copy</span></button>
       </div>
-      <div class="install-command install-command-upcoming">
-        <span class="command-label">Alpha ${siteConfig.upcomingVersion}, upcoming</span>
-        <code>python -m pip install --pre runeconomy==${siteConfig.upcomingVersion}</code>
-        <button type="button" class="copy-button" data-copy data-copy-text="python -m pip install --pre runeconomy==${siteConfig.upcomingVersion}" aria-label="Copy upcoming alpha install command">${icon("copy")}<span data-copy-label aria-live="polite">Copy</span></button>
+      <div class="install-command">
+        <span class="command-label">Alpha ${siteConfig.alphaVersion}</span>
+        <code>python -m pip install --pre runeconomy==${siteConfig.alphaVersion}</code>
+        <button type="button" class="copy-button" data-copy data-copy-text="python -m pip install --pre runeconomy==${siteConfig.alphaVersion}" aria-label="Copy alpha install command">${icon("copy")}<span data-copy-label aria-live="polite">Copy</span></button>
       </div>
     </div>
     <div class="install-links" aria-label="Package links">
@@ -226,7 +258,7 @@ function homeFooter() {
   return `<footer class="home-footer">
     <p>Maintained by Shrey</p>
     <nav aria-label="Shrey's profiles">
-      <a href="${siteConfig.owner.x}">${icon("x")}<span>X</span></a>
+      <a href="${siteConfig.owner.x}">${icon("twitter")}<span>Twitter</span></a>
       <a href="${siteConfig.owner.github}">${icon("github")}<span>GitHub</span></a>
       <a href="${siteConfig.owner.linkedin}">${icon("linkedin")}<span>LinkedIn</span></a>
     </nav>
@@ -258,8 +290,9 @@ function sourceLink(page) {
 }
 
 function head(page) {
-  const canonical = absoluteUrl(`/${page.route ? `${page.route}/` : ""}`);
-  const ogImage = page.thumbnail ? absoluteUrl(page.thumbnail) : null;
+  const notFound = page.kind === "not-found";
+  const canonical = notFound ? null : absoluteUrl(`/${page.route ? `${page.route}/` : ""}`);
+  const socialImage = absoluteUrl(page.thumbnail || siteConfig.defaultSocialImage);
   return `<head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -270,7 +303,12 @@ function head(page) {
   <meta property="og:title" content="${page.title}">
   <meta property="og:description" content="${page.description}">
   ${canonical ? `<link rel="canonical" href="${canonical}"><meta property="og:url" content="${canonical}">` : ""}
-  ${ogImage ? `<meta property="og:image" content="${ogImage}">` : ""}
+  ${notFound ? '<meta name="robots" content="noindex">' : ""}
+  ${socialImage ? `<meta property="og:image" content="${socialImage}"><meta property="og:image:width" content="1280"><meta property="og:image:height" content="800">` : ""}
+  <meta name="twitter:card" content="${socialImage ? "summary_large_image" : "summary"}">
+  <meta name="twitter:title" content="${page.title}">
+  <meta name="twitter:description" content="${page.description}">
+  ${socialImage ? `<meta name="twitter:image" content="${socialImage}">` : ""}
   <title>${page.title} · RunEconomy</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/site.css">
@@ -308,7 +346,7 @@ ${head(page)}
 </html>`;
 }
 
-function redirectPage(from, target) {
+function redirectPage(target) {
   const absolute = absoluteUrl(target);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="0; url=${target}">${absolute ? `<link rel="canonical" href="${absolute}">` : ""}<title>Moved · RunEconomy</title></head><body><main><h1>This page moved</h1><p><a href="${target}">Continue to the new page</a>.</p></main></body></html>`;
 }
@@ -323,21 +361,28 @@ await cp(join(siteDir, "assets", "thumbnails"), join(output, "assets", "thumbnai
 
 for (const page of pages) {
   const markdown = await readFile(join(root, page.source), "utf8");
-  const rendered = await marked.parse(rewriteLinks(markdown), { gfm: true });
+  const rendered = await marked.parse(rewriteLinks(markdown, page.source), { gfm: true });
   const content = enhanceCodeBlocks(rendered);
   const directory = page.route ? join(output, page.route) : output;
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, "index.html"), layout(page, content));
 }
 
-for (const [from, target] of [
+// Vercel serves a root 404.html for any path that does not match a page.
+await writeFile(
+  join(output, notFoundPage.outputFile),
+  layout(notFoundPage, await marked.parse(notFoundPage.markdown, { gfm: true })),
+);
+
+const redirects = [
   ["getting-started", "/start/"],
   ["skill", "/agents/"],
   ["how-it-works", "/articles/how-runeconomy-works/"],
-]) {
+];
+for (const [from, target] of redirects) {
   const directory = join(output, from);
   await mkdir(directory, { recursive: true });
-  await writeFile(join(directory, "index.html"), redirectPage(from, target));
+  await writeFile(join(directory, "index.html"), redirectPage(target));
 }
 
-console.log(`Built ${pages.length} pages and 3 redirects in ${output}`);
+console.log(`Built ${pages.length} pages, a 404 page and ${redirects.length} redirects in ${output}`);

@@ -95,14 +95,6 @@ def _interval(effect: Mapping[str, Any], digits: int = 1) -> str:
     return f"{float(interval[0]):.{digits}f} to {float(interval[1]):.{digits}f}"
 
 
-def _percent_interval(interval: Any, digits: int = 2) -> str:
-    if not isinstance(interval, list) or len(interval) != 2:
-        return "Unknown"
-    if interval[0] is None or interval[1] is None:
-        return "Unknown"
-    return f"{float(interval[0]) * 100:.{digits}f}% to {float(interval[1]) * 100:.{digits}f}%"
-
-
 def _percentage_points(value: Any, digits: int = 2) -> str:
     if value is None:
         return "Unknown"
@@ -230,6 +222,50 @@ def _markdown_table(rows: Sequence[tuple[str, str]], headings: tuple[str, str]) 
     return "\n".join(lines)
 
 
+def _recorded_label(key: Any) -> str:
+    words = str(key).replace("_", " ").split()
+    return " ".join("DAG" if word == "dag" else word for word in words)
+
+
+def _recorded_value(value: Any, *, nested: bool = False) -> str:
+    """Describe a recorded gate value in words without changing its numbers.
+
+    Gate thresholds and observations are stored as numbers, intervals, and
+    nested objects. Numbers keep their full recorded precision so the report
+    remains auditable against the result file.
+    """
+
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if value is None:
+        return "unknown"
+    if isinstance(value, Mapping):
+        if not value:
+            return "none recorded"
+        if not nested and all(isinstance(item, Mapping) for item in value.values()):
+            return ". ".join(
+                f"{_recorded_label(key).capitalize()}: "
+                f"{_recorded_value(item, nested=True)}"
+                for key, item in value.items()
+            )
+        parts = []
+        for key, item in value.items():
+            text = _recorded_value(item, nested=True)
+            if isinstance(item, Mapping):
+                text = f"({text})"
+            parts.append(f"{_recorded_label(key)} {text}")
+        return ", ".join(parts)
+    if isinstance(value, (list, tuple)):
+        scalars = all(
+            isinstance(item, (int, float)) and not isinstance(item, bool)
+            for item in value
+        )
+        if len(value) == 2 and scalars:
+            return f"{value[0]} to {value[1]}"
+        return ", ".join(_recorded_value(item, nested=True) for item in value)
+    return _prose(value)
+
+
 def _technical_sections_for_public(
     result: Mapping[str, Any],
 ) -> tuple[TechnicalSection, ...]:
@@ -237,7 +273,9 @@ def _technical_sections_for_public(
     check_rows = tuple(
         (
             str(item.get("name", "unknown")),
-            f"{'Passed' if item.get('passed') else 'Failed'}. Threshold: {_prose(item.get('threshold', 'unknown'))}. Observed: {_prose(item.get('observed', 'unknown'))}",
+            f"{'Passed' if item.get('passed') else 'Failed'}. "
+            f"Threshold: {_recorded_value(item.get('threshold'))}. "
+            f"Observed: {_recorded_value(item.get('observed'))}",
         )
         for item in checks
     )

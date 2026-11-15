@@ -6,23 +6,13 @@ vLLM server.
 
 ## 1. Install
 
-RunEconomy requires Python 3.11 or newer. Production PyPI currently serves
-stable `0.1.0`. The `0.2.0a3` experience documented here is upcoming and has not
-been published.
-
-For the published stable package:
-
-```bash
-python -m pip install runeconomy
-```
-
-After `0.2.0a3` is published, the prerelease command will be:
+RunEconomy requires Python 3.11 or newer. This guide describes the `0.2.0a3`
+alpha. It is a prerelease, so request it explicitly:
 
 ```bash
 python -m pip install --pre runeconomy==0.2.0a3
+runeconomy --version
 ```
-
-Do not use the upcoming command until the release is available.
 
 ## 2. Run the bundled demo
 
@@ -63,7 +53,7 @@ Use the importer that matches evidence you actually possess:
 runeconomy import-openinference otlp.json --output trace.json
 runeconomy import-vllm-jsonl captures.jsonl --output trace.json \
   --trace-id TRACE --model MODEL
-runeconomy import-prefixwise-jsonl ledger.jsonl --output findings.json
+runeconomy import-ledger-jsonl ledger.jsonl --output findings.json
 ```
 
 Then analyze a normalized trace:

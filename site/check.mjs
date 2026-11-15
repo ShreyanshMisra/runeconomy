@@ -41,7 +41,7 @@ const requiredRoutes = [
   "/compare/", "/traces/", "/cli/", "/troubleshooting/", "/alpha/",
   "/articles/0-2-0a2/", "/articles/0-2-0a3/",
   "/articles/how-runeconomy-works/", "/getting-started/", "/skill/",
-  "/how-it-works/",
+  "/how-it-works/", "/404.html",
 ];
 for (const route of requiredRoutes) {
   if (!routes.has(route)) failures.push(`missing required route ${route}`);
@@ -57,9 +57,19 @@ for (const file of files) {
   if (prose.includes("—")) failures.push(`${route}: em dash in visible prose`);
   if (prose.includes(";")) failures.push(`${route}: semicolon in visible prose`);
   if (/\b(INVALID|VERIFIED|REGRESSION|INCONCLUSIVE)\b/.test(prose)) failures.push(`${route}: all-caps verdict`);
+  if (/\bupcoming\b/i.test(html)) failures.push(`${route}: describes something as upcoming`);
   if (/docs\/internal|artifacts\/|modal\.direct|\/Users\/|Authorization:\s*Bearer/i.test(html)) failures.push(`${route}: private path or endpoint marker`);
   if (/source-note|Repository source:/.test(html)) failures.push(`${route}: obsolete global source note`);
-  if (/<(?:script|link|img)[^>]+(?:src|href)="https?:/i.test(html)) failures.push(`${route}: remote runtime asset`);
+  if (/<(?:script|img)[^>]+src="https?:|<link(?![^>]*rel="canonical")[^>]+href="https?:/i.test(html)) failures.push(`${route}: remote runtime asset`);
+  for (const match of html.matchAll(/<meta (?:property="og:image"|name="twitter:image") content="([^"]+)"/g)) {
+    const image = new URL(match[1]);
+    if (!image.pathname.endsWith(".png")) failures.push(`${route}: social image must be a PNG`);
+    try {
+      await access(join(output, image.pathname.slice(1)));
+    } catch {
+      failures.push(`${route}: missing social image ${image.pathname}`);
+    }
+  }
   if (/@import\s+url|googletagmanager|analytics/i.test(html)) failures.push(`${route}: remote font or tracker`);
   const primary = html.match(/<nav class="primary-nav"[\s\S]*?<\/nav>/)?.[0];
   if (!route.includes("getting-started") && !route.includes("skill/") && !route.includes("how-it-works")) {
@@ -69,7 +79,10 @@ for (const file of files) {
   for (const match of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
     const target = match[1].split("#", 1)[0];
     if (!target || target.startsWith("http") || target.startsWith("mailto:") || target.startsWith("data:")) continue;
-    if (!target.startsWith("/")) continue;
+    if (!target.startsWith("/")) {
+      failures.push(`${route}: relative link ${target} does not resolve on the site`);
+      continue;
+    }
     if (target.startsWith("/assets/") || target === "/favicon.svg") {
       try {
         await access(join(output, target.slice(1)));
@@ -116,9 +129,12 @@ const release = articles.find((article) => article.slug === "release-0-2-0a2");
 if (release?.date !== "2026-11-14" || release?.dateLabel !== "November 14, 2026") {
   failures.push("0.2.0a2 release date differs from the GitHub release");
 }
-const upcoming = articles.find((article) => article.slug === "release-0-2-0a3");
-if (upcoming?.date || upcoming?.status !== "Upcoming, not published") {
-  failures.push("0.2.0a3 must remain undated and upcoming");
+const notFound = await readFile(join(output, "404.html"), "utf8");
+if (!notFound.includes('content="noindex"') || notFound.includes('rel="canonical"')) {
+  failures.push("404: must be excluded from indexing and carry no canonical URL");
+}
+if (!home.includes(`Alpha ${siteConfig.alphaVersion}`) || !home.includes(`runeconomy==${siteConfig.alphaVersion}`)) {
+  failures.push("home: alpha install command differs from the package version");
 }
 
 for (const [route, target] of [["getting-started", "/start/"], ["skill", "/agents/"], ["how-it-works", "/articles/how-runeconomy-works/"]]) {

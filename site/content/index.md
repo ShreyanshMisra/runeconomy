@@ -1,4 +1,4 @@
-# Know if the optimization worked.
+# Verify your inference optimizations.
 
 Agents make several model calls to complete one task. A serving change can
 improve cache reuse, time to first token or another inference metric without

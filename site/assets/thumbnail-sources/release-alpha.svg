@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" role="img" aria-labelledby="title desc">
-  <title id="title">Upcoming report release</title><desc id="desc">An editorial report layout with an upcoming release marker.</desc>
+  <title id="title">Alpha report release</title><desc id="desc">An editorial report layout with an alpha release marker.</desc>
   <rect width="640" height="400" fill="#fbfaf6"/><g stroke="#cbc9c1"><path d="M0 80h640M0 160h640M0 240h640M0 320h640"/><path d="M128 0v400M256 0v400M384 0v400M512 0v400"/></g>
   <g transform="translate(64 48)"><rect width="386" height="304" fill="#f4f1ea" stroke="#171a19"/><path d="M28 42h214M28 62h126" stroke="#171a19" stroke-width="6"/><path d="M28 108h330" stroke="#9d9c95"/><rect x="28" y="132" width="96" height="72" fill="#dce8e2" stroke="#236b5b"/><rect x="136" y="132" width="96" height="72" fill="#ecece7" stroke="#9d9c95"/><rect x="244" y="132" width="96" height="72" fill="#ecece7" stroke="#9d9c95"/><path d="M28 238h312M28 258h248M28 278h286" stroke="#9d9c95" stroke-width="4"/></g>
-  <g transform="translate(416 118)"><rect width="168" height="94" fill="#236b5b"/><text x="20" y="39" fill="#fbfaf6" font-family="ui-monospace,monospace" font-size="13">0.2.0a3</text><text x="20" y="66" fill="#fbfaf6" font-family="ui-sans-serif,sans-serif" font-size="16" font-weight="600">Upcoming</text></g>
+  <g transform="translate(416 118)"><rect width="168" height="94" fill="#236b5b"/><text x="20" y="39" fill="#fbfaf6" font-family="ui-monospace,monospace" font-size="13">0.2.0a3</text><text x="20" y="66" fill="#fbfaf6" font-family="ui-sans-serif,sans-serif" font-size="16" font-weight="600">Alpha</text></g>
 </svg>

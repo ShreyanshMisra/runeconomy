@@ -1,7 +1,7 @@
 # RunEconomy 0.2.0a2 release notes
 
-RunEconomy `0.2.0a2` was published as a GitHub prerelease on November 14, 2026.
-It focused on trustworthy first use for invited testers.
+RunEconomy `0.2.0a2` was published as a prerelease on GitHub and PyPI on
+November 14, 2026. It focused on trustworthy first use for invited testers.
 
 ## What changed
 
@@ -25,15 +25,20 @@ private evidence outside shareable reports.
 
 ## Installation
 
-`0.2.0a2` is a historical GitHub prerelease. It is not the version currently
-served by production PyPI. Inspect the
-[tagged source](https://github.com/ShreyanshMisra/runeconomy/releases/tag/v0.2.0a2)
-rather than assuming `pip install runeconomy` installs this release.
+`0.2.0a2` is a prerelease. A plain `pip install runeconomy` skips prereleases,
+so request this version explicitly:
+
+```bash
+python -m pip install --pre runeconomy==0.2.0a2
+```
+
+The [tagged source](https://github.com/ShreyanshMisra/runeconomy/releases/tag/v0.2.0a2)
+is available on GitHub.
 
 ## Compatibility and migration
 
 The release added `doctor`, Chat Completions support, structured findings,
-OpenInference and Prefixwise import paths, closed-loop `compare`, and the
+OpenInference and cache-ledger import paths, closed-loop `compare`, and the
 versioned attempt-status protocol. The current documentation may describe
 later prerelease changes.
 

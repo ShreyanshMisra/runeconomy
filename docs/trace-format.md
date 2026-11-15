@@ -86,7 +86,7 @@ silently reported as a zero-length match.
 
 `ttft_ms` is the server-reported time to first token. `client_ttft_ms` is the
 driver-observed time to the first non-empty output delta. Either may be null.
-their difference is meaningful only when both refer to the same request.
+Their difference is meaningful only when both refer to the same request.
 
 Attribution quality is explicit:
 
@@ -110,8 +110,9 @@ revision, chat-template digest, block size, and cache-salt digest.
 
 `available_tools` records the unique tool names exposed to the model for that
 inference request. `invoked_tools` records the subset selected by the resulting
-model output. When at least half of a catalog of four or more tools is unused,
-the analyzer emits a medium-confidence `tools.unused_exposure` finding. This is
+model output. When a request exposes four or more tools and leaves at least
+three of them, and at least half of the catalog, unused, the analyzer emits a
+medium-confidence `tools.unused_exposure` finding. This is
 observed evidence for a scoped-tool experiment, not proof that the unused tools
 are unnecessary on every representative task.
 
@@ -190,7 +191,7 @@ OpenInference normally does not contain the server's rendered token sequence,
 so imported LLM requests are explicitly `count_only` or `unknown` and semantic
 segments are `structural`. An instrumentation source may provide the extension
 attribute `runeconomy.prompt_token_ids` as an integer array or JSON array string.
-only then is the request marked exact. This extension is not an OpenInference
+Only then is the request marked exact. This extension is not an OpenInference
 standard.
 
 ```bash
@@ -208,16 +209,15 @@ retained work span declares that attribute. Otherwise the dependency evidence
 is `partial_explicit` or `absent` and must not be presented as a reconstructed
 workflow DAG.
 
-## Importing Prefixwise evidence
+## Importing cache-ledger evidence
 
-Prefixwise documents `prefixwise export --format jsonl` as raw ledger rows.
-Those rows contain causes, counts, costs, divergence roles/indexes, and other
-evidence, while Prefixwise intentionally stores hashes and counts rather than
-prompt text. RunEconomy imports them as structured finding evidence:
+Some prompt-cache analysis tools export a JSONL ledger with one row per
+request. Each row records a classified `cause` together with counts, costs,
+divergence roles and indexes, and hashes instead of prompt text. RunEconomy
+imports those rows as structured finding evidence:
 
 ```bash
-prefixwise export --format jsonl > prefixwise.jsonl
-runeconomy import-prefixwise-jsonl prefixwise.jsonl \
+runeconomy import-ledger-jsonl ledger.jsonl \
   --output findings.json
 runeconomy experiment init \
   --from-finding findings.json \

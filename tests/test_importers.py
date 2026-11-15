@@ -9,7 +9,7 @@ from runeconomy.analysis import analyze_trace
 from runeconomy.experiment_init import initialize_experiment, select_finding
 from runeconomy.importers import (
     import_openinference,
-    import_prefixwise_jsonl,
+    import_ledger_jsonl,
     import_vllm_jsonl,
 )
 from runeconomy.models import Trace, TraceValidationError
@@ -228,7 +228,7 @@ class ImporterTests(unittest.TestCase):
         self.assertEqual(trace.requests[0].prompt_token_ids, (4, 5, 6))
         self.assertEqual(trace.requests[0].token_evidence_quality, "exact")
 
-    def test_prefixwise_import_preserves_evidence_but_not_raw_prompt(self) -> None:
+    def test_ledger_import_preserves_evidence_but_not_raw_prompt(self) -> None:
         row = {
             "session_id": "session-1",
             "request_id": "request-4",
@@ -244,9 +244,9 @@ class ImporterTests(unittest.TestCase):
             "body": {"messages": [{"content": "secret"}]},
         }
         with TemporaryDirectory() as directory:
-            path = Path(directory) / "prefixwise.jsonl"
+            path = Path(directory) / "ledger.jsonl"
             path.write_text(json.dumps(row) + "\n", encoding="utf-8")
-            artifact = import_prefixwise_jsonl(path)
+            artifact = import_ledger_jsonl(path)
         finding = artifact["findings"][0]
         self.assertEqual(finding["experiment_template_id"], "prompt.canonicalize_tools")
         self.assertEqual(finding["estimated_reducible_tokens"], 3072)

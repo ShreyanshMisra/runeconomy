@@ -1,10 +1,7 @@
 # RunEconomy 0.2.0a3 release notes
 
-Status: Upcoming. This prerelease has not been published.
-
-RunEconomy `0.2.0a3` focuses on report clarity and one consistent experiment
-workflow. Its contents may be reviewed locally, but it must not be presented as
-an available release yet.
+RunEconomy `0.2.0a3` is a prerelease focused on report clarity and one
+consistent experiment workflow.
 
 ## What changed
 
@@ -17,6 +14,10 @@ an available release yet.
 - HTML and Markdown reports share one evidence-derived view model across
   verified, regression, inconclusive and invalid outcomes.
 - `runeconomy experiment` is the sole static-experiment command.
+- `doctor` lists only the next actions that change what you can run. The
+  complete per-capability guidance remains in `--json`.
+- A connection that drops or stalls in the middle of a response now produces
+  the structured CLI error instead of a traceback.
 - The documentation site now presents a concise onboarding path, read-only
   compatibility guidance and the canonical coding-agent skill.
 
@@ -28,13 +29,11 @@ understand while keeping the failed gates and claim boundary explicit.
 
 ## Installation
 
-Do not run the command below until `0.2.0a3` is published:
+`0.2.0a3` is a prerelease, so request it explicitly:
 
 ```bash
 python -m pip install --pre runeconomy==0.2.0a3
 ```
-
-Production PyPI currently serves stable `0.1.0`.
 
 ## Compatibility and migration
 
@@ -46,6 +45,14 @@ runeconomy experiment validate
 runeconomy experiment run
 runeconomy experiment report
 ```
+
+`capture-vllm` and `experiment run` now fail immediately when the server
+cannot be reached. Pass `--startup-timeout SECONDS` to keep retrying while a
+cold server starts.
+
+The ledger importer is now `runeconomy import-ledger-jsonl`. The per-trial
+request placeholder is now `{{RUNECONOMY_TRIAL_ID}}`, and manifests that use
+the earlier placeholder name still run.
 
 Existing static experiment manifests remain supported. The frozen proof was not
 rerun or retuned.

@@ -55,14 +55,14 @@
       "variants": {
         "baseline": {
           "request": {
-            "instructions": "Request timestamp: {{AID_TRIAL_ID}}\nYou are an incident-response assistant. Answer in exactly one sentence of no more than 25 words.",
+            "instructions": "Request timestamp: {{RUNECONOMY_TRIAL_ID}}\nYou are an incident-response assistant. Answer in exactly one sentence of no more than 25 words.",
             "input": "The API error rate exceeded 5%. What should the on-call engineer check first?"
           }
         },
         "candidate": {
           "request": {
             "instructions": "You are an incident-response assistant. Answer in exactly one sentence of no more than 25 words.",
-            "input": "Request timestamp: {{AID_TRIAL_ID}}\nThe API error rate exceeded 5%. What should the on-call engineer check first?"
+            "input": "Request timestamp: {{RUNECONOMY_TRIAL_ID}}\nThe API error rate exceeded 5%. What should the on-call engineer check first?"
           }
         }
       }

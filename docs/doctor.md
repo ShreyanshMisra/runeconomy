@@ -38,22 +38,52 @@ Generic capability paths such as `/openapi.json` may appear as evidence. Use
 Unknown is not zero. It is also not automatically a blocker. Cache telemetry
 and server timing often remain unknown until a real request is captured.
 
-## Sanitized human output
+## Read the output
+
+The first line reports overall readiness:
+
+| Readiness | Meaning |
+| --- | --- |
+| `READY` | At least one safe experiment mode is supported. |
+| `UNKNOWN` | Metadata was too limited to establish a safe mode. |
+| `BLOCKED` | No safe experiment mode is available. |
+
+This abridged example comes from a local test server that advertises Chat
+Completions and `/tokenize` only. It does not describe a real deployment.
 
 ```text
-RunEconomy doctor
-Readiness: Ready with limitations
+RunEconomy doctor · READY
+Safe modes available: warm-cache.
+Target details: redacted
+Backend: vLLM 0.33.0
+Models: example/model
 
-Capability                 State         Next action
-Chat Completions           Supported     No action required
-Exact tokenization         Supported     No action required
-Cache telemetry            Unknown       Capture one measured request
-Physical cache reset       Unsupported   Use warm-cache or salt isolation
+Capability                  Status      Evidence
+--------------------------  ----------  ----------------------------------------
+Responses API               unsupported absent from /openapi.json
+Chat Completions API        supported   advertised by /openapi.json
+Responses render            unsupported absent from /openapi.json
+Chat Completions render     unsupported absent from /openapi.json
+Tokenize                    supported   advertised by /openapi.json
+Cache telemetry             unknown     requires a completed generation response
+Per-request timing          unknown     requires a completed generation response
+Cache reset                 unsupported absent from /openapi.json
+Cache salt                  unsupported cache_salt is absent from the OpenAPI schema
 
-Safe modes: warm-cache, salt-isolated
+Experiment modes:
+  warm-cache: supported (safe)
+  salt-isolated: unsupported
+  physical-reset: unsupported
+
+What to do next
+  1. Run one non-production smoke capture, then inspect whether cached-token and server-timing fields are present.
+  Run with --json for guidance on every capability and identity field.
 ```
 
-The example is illustrative. It does not describe a real endpoint.
+The full output also explains each experiment mode and reminds you which
+identity fields to pin in the experiment manifest. The human output lists only
+the actions that change what you can run. `--json` carries a next action for
+every capability and identity field.
 
 ## Choose a safe experiment mode
 
