@@ -1,17 +1,21 @@
 # RunEconomy 0.2.0a3 alpha guide
 
-`0.2.0a3` is an invited-tester release candidate. It is not a production service or a
-general benchmark suite. RunEconomy remains a local CLI and Python package.
+`0.2.0a3` is an invited-tester release candidate. It has not been published. It
+is not a production service or a general benchmark suite. RunEconomy remains a
+local CLI and Python package.
 
 ## Install the prerelease
 
-Install the published alpha:
+After the alpha is published, install it with:
 
 ```bash
 python -m pip install --pre runeconomy==0.2.0a3
 runeconomy --help
 runeconomy demo --open
 ```
+
+Production PyPI currently serves stable `0.1.0`. Do not use the prerelease
+command until `0.2.0a3` is available.
 
 The default demo is the aggregate-only frozen rejection proof. Use
 `runeconomy demo --case historical` to render the earlier static-request case.

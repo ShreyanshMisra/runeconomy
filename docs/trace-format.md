@@ -85,7 +85,7 @@ token-evidence quality, so unsupported prefix analysis is visible rather than
 silently reported as a zero-length match.
 
 `ttft_ms` is the server-reported time to first token. `client_ttft_ms` is the
-driver-observed time to the first non-empty output delta. Either may be null;
+driver-observed time to the first non-empty output delta. Either may be null.
 their difference is meaningful only when both refer to the same request.
 
 Attribution quality is explicit:
@@ -125,7 +125,7 @@ machine-readable experiment intent to every finding. Important fields include:
 - `affected_request_ids`, `evidence_level`, `confidence`, and
   `on_critical_path`.
 - `estimated_reducible_tokens` and `estimated_reducible_ms`. Unknown estimates
-  remain `null`; RunEconomy does not derive milliseconds from tokens without a
+  remain `null`. RunEconomy does not derive milliseconds from tokens without a
   measured model.
 - `optimization_target`, `experiment_template_id`, and
   `experiment_parameters`.
@@ -139,7 +139,7 @@ structured fields, not that prose, drive `runeconomy experiment init`.
 predecessor span IDs and defines a directed acyclic graph. The analyzer computes
 the longest duration-weighted path through that graph. Nested tracing spans may
 be retained by an importer, but must be normalized into non-overlapping work
-steps before entering this field; otherwise parent and child time would be
+steps before entering this field. Otherwise parent and child time would be
 double-counted.
 
 ## Importing vLLM capture records
@@ -152,7 +152,7 @@ with `capture`, the original `request`, and optional `request_id`,
 importer models the records as sequential inference spans.
 
 If an envelope supplies `segments`, those claims are validated normally. A
-source may instead supply `rendered_segments`, each with `token_ids`; the
+source may instead supply `rendered_segments`, each with `token_ids`. The
 importer accepts exact boundaries only when those arrays concatenate exactly
 to the complete captured prompt. Otherwise, the importer derives structural
 blocks from message roles, tool definitions, retrieved-context fields, and
@@ -189,7 +189,7 @@ and cache-read counts. Message content is not copied into the normalized trace.
 OpenInference normally does not contain the server's rendered token sequence,
 so imported LLM requests are explicitly `count_only` or `unknown` and semantic
 segments are `structural`. An instrumentation source may provide the extension
-attribute `runeconomy.prompt_token_ids` as an integer array or JSON array string;
+attribute `runeconomy.prompt_token_ids` as an integer array or JSON array string.
 only then is the request marked exact. This extension is not an OpenInference
 standard.
 
@@ -204,7 +204,7 @@ dependencies from nested telemetry parents. `depends_on` therefore stays empty
 unless spans provide the RunEconomy extension attribute
 `runeconomy.depends_on`, containing an array or JSON array string of direct
 predecessor span IDs. Critical-path results are available only when every
-retained work span declares that attribute; otherwise the dependency evidence
+retained work span declares that attribute. Otherwise the dependency evidence
 is `partial_explicit` or `absent` and must not be presented as a reconstructed
 workflow DAG.
 

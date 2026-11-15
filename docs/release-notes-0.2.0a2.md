@@ -1,36 +1,54 @@
-# RunEconomy 0.2.0a2 release-note draft
+# RunEconomy 0.2.0a2 release notes
 
-RunEconomy `0.2.0a2` is a private-tester alpha focused on trustworthy first use.
+RunEconomy `0.2.0a2` was published as a GitHub prerelease on November 14, 2026.
+It focused on trustworthy first use for invited testers.
 
 ## What changed
 
-- The frozen rejection proof is now a deterministic public case study linked
-  directly from the README and bundled report.
-- `doctor` now gives a clear readiness verdict, capability table, safe
-  experiment modes, exact next actions, structured error JSON, and documented
-  exit codes without invoking inference or cache reset.
-- Common CLI failures explain what failed, why, whether output may be
-  incomplete, and the next corrective action.
-- A canonical quickstart connects installation, the proof, compatibility
-  diagnosis, trace analysis, `experiment init`, and manifest validation.
-- The official RunEconomy coding-agent skill documents safe inspection,
-  evidence acquisition, experiment design, comparison, verdict semantics, and
-  privacy boundaries.
-- A small static documentation site can be built locally from repository
-  Markdown sources for later Vercel deployment.
+- The frozen rejection proof became a deterministic public case study linked
+  from the README and bundled report.
+- `doctor` gained a clear readiness verdict, capability table, safe modes,
+  structured JSON errors and documented exit codes.
+- Common CLI failures began explaining what failed, whether evidence could be
+  incomplete and what to do next.
+- The quickstart connected installation, the proof, compatibility diagnosis,
+  trace analysis, experiment initialization and validation.
+- The official coding-agent skill documented safe evidence acquisition,
+  experiment design, verdict semantics and privacy boundaries.
+- A small static documentation site began rendering repository Markdown.
 
-## Flagship proof
+## Why it matters
 
-The candidate improved cache reuse, server TTFT, and successful-pair workflow
-latency, but RunEconomy returned `invalid` because the frozen task-quality gates
-did not pass. This release does not change or rerun that consumed experiment.
+The release reduced setup ambiguity without weakening experiment validity.
+Unsupported and unknown capabilities remained distinct, and the CLI kept
+private evidence outside shareable reports.
 
-## Alpha limitations
+## Installation
 
-RunEconomy remains a CLI for invited testers. There is no hosted dashboard,
-managed OTLP collector, framework-specific SDK, automatic resume, SGLang
-runner, or broad diagnosis catalog. Operators must protect raw prompts, traces,
-model output, evaluator data, private endpoints, and experiment artifacts.
+`0.2.0a2` is a historical GitHub prerelease. It is not the version currently
+served by production PyPI. Inspect the
+[tagged source](https://github.com/ShreyanshMisra/runeconomy/releases/tag/v0.2.0a2)
+rather than assuming `pip install runeconomy` installs this release.
 
-The documentation site is prepared locally but is not part of this package
-release and is not deployed automatically.
+## Compatibility and migration
+
+The release added `doctor`, Chat Completions support, structured findings,
+OpenInference and Prefixwise import paths, closed-loop `compare`, and the
+versioned attempt-status protocol. The current documentation may describe
+later prerelease changes.
+
+## Known limitations
+
+RunEconomy remained a local CLI for invited testers. It did not include a hosted
+dashboard, managed OTLP collector, framework-specific SDK, automatic resume,
+SGLang runner or broad diagnosis catalog.
+
+Raw prompts, traces, model output, evaluator data, private endpoints and
+experiment artifacts remained the operator's responsibility.
+
+## Documentation
+
+- [Start with RunEconomy](getting-started.md)
+- [Check vLLM compatibility](doctor.md)
+- [Read the public proof](public-proof.md)
+- [Review alpha boundaries](alpha-release.md)

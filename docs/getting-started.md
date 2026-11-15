@@ -1,30 +1,45 @@
-# Getting started
+# Start with RunEconomy
 
-RunEconomy identifies inference waste on an agent workflow's critical path and
-tests whether a proposed change improves successful-task performance. It is an
-alpha command-line tool for engineers using self-hosted vLLM.
+Move from a clean installation to a quality-gated experiment. The bundled demo
+works offline. A real experiment requires your own evidence and a compatible
+vLLM server.
 
-## Install the private-tester alpha
+## 1. Install
 
-Use an isolated Python 3.11 or newer environment:
+RunEconomy requires Python 3.11 or newer. Production PyPI currently serves
+stable `0.1.0`. The `0.2.0a3` experience documented here is upcoming and has not
+been published.
+
+For the published stable package:
+
+```bash
+python -m pip install runeconomy
+```
+
+After `0.2.0a3` is published, the prerelease command will be:
 
 ```bash
 python -m pip install --pre runeconomy==0.2.0a3
-runeconomy --help
 ```
 
-## Run the bundled proof
+Do not use the upcoming command until the release is available.
+
+## 2. Run the bundled demo
 
 ```bash
 runeconomy demo --open
 ```
 
-The default report is deliberately not a success story. A candidate improved
-cache reuse, server TTFT, and successful-pair workflow latency, but RunEconomy
-returned `invalid` because the frozen task-quality gates did not pass. Read the
-[complete public proof](public-proof.md) before using its measurements.
+The demo opens a self-contained experiment report. It uses sanitized aggregate
+evidence and makes no network or GPU calls. It does not rerun the proof
+experiment.
 
-## Diagnose a vLLM server
+The report deliberately shows a rejected result. Cache reuse and measured
+latency looked better, but the frozen task-quality requirements did not pass.
+Read the [complete public proof](public-proof.md) before quoting its conditional
+measurements.
+
+## 3. Check your server with doctor
 
 Keep authentication in an environment variable:
 
@@ -35,24 +50,14 @@ runeconomy doctor \
   --api-key-env VLLM_API_KEY
 ```
 
-`doctor` is read-only. It uses metadata and non-inference render probes and
-never generates text or invokes cache-reset endpoints. Exit codes are:
+`doctor` is read-only. It checks metadata and safe render capabilities. It does
+not generate text or reset caches. Continue with the
+[vLLM compatibility guide](doctor.md) when a capability is unsupported or
+unknown.
 
-- `0`: at least one safe experiment mode is supported.
-- `1`: diagnosis completed, but no safe mode was established.
-- `2`: diagnosis failed because of configuration, authentication, connection,
-  timeout, or malformed-response problems.
+## 4. Import or instrument evidence
 
-Use `--json` or `--format json` for automation. See
-[vLLM compatibility](doctor.md) for the
-capability and safety model.
-
-The complete command and exit-code contract is in the
-[CLI reference](cli-reference.md).
-
-## Import or instrument evidence
-
-Choose the importer that matches evidence you actually possess:
+Use the importer that matches evidence you actually possess:
 
 ```bash
 runeconomy import-openinference otlp.json --output trace.json
@@ -67,26 +72,34 @@ Then analyze a normalized trace:
 runeconomy analyze trace.json --format json --output analysis.json
 ```
 
-Importers preserve unknown values rather than inventing prompts, token arrays,
-boundaries, timing, or dependencies. See the [trace format](trace-format.md).
+Importers preserve unknown values instead of inventing prompts, token arrays,
+timing or dependencies. The [trace format](trace-format.md) explains the
+evidence boundary.
 
-## Initialize and validate an experiment
+## 5. Initialize an experiment
 
 ```bash
 runeconomy experiment init \
   --from-finding analysis.json \
   --finding-id FINDING_ID \
   --output experiment.json
+```
 
+Some findings produce runnable manifests. Others produce an unresolved
+skeleton because RunEconomy cannot safely invent the application change,
+workload or evaluator. Resolve only fields supported by real evidence.
+
+## 6. Validate before execution
+
+```bash
 runeconomy experiment validate experiment.json
 ```
 
-Some findings can produce runnable manifests. Others produce an unresolved
-skeleton because RunEconomy cannot safely synthesize the application change.
-Resolve every named field, freeze the quality and performance gates, and
-validate again. See the [experiment format](experiment-format.md).
+Review the evaluator, task-quality gates, performance metric, cache treatment,
+model identity and cost ceiling before running anything. See the
+[experiment format](experiment-format.md) for the complete contract.
 
-Run and report a static request experiment with:
+## 7. Run and report
 
 ```bash
 runeconomy experiment run experiment.json --output result.json
@@ -94,16 +107,22 @@ runeconomy experiment report result.json --output report.html
 ```
 
 Use `runeconomy compare` only when executing complete baseline and candidate
-agent processes. See [closed-loop comparison](closed-loop-comparison.md).
+agent processes. The [closed-loop comparison guide](closed-loop-comparison.md)
+documents that integration.
 
-## Interpret the result
+## 8. Read the verdict
 
-Read task-quality gates before conditional performance measurements:
+- `verified` means the declared quality and performance criteria passed.
+- `regression` means a declared candidate guardrail failed.
+- `inconclusive` means the evidence was usable but insufficient for the claim.
+- `invalid` means the experiment or baseline did not establish valid evidence.
 
-- `verified`: declared quality and performance criteria passed.
-- `regression`: a declared candidate guardrail failed.
-- `inconclusive`: evidence was valid but insufficient to establish the claim.
-- `invalid`: the experiment or baseline did not establish valid evidence.
+A favorable cache, token or latency measurement is not a verified improvement
+unless the declared gates pass.
 
-Never convert a favorable cache, token, TTFT, or successful-pair measurement
-into a verified improvement when the verdict is not `verified`.
+## When something fails
+
+Start with [Troubleshooting](troubleshooting.md), then use the
+[CLI reference](cli-reference.md) for exit codes and machine-readable output.
+Review the [alpha boundaries](alpha-release.md) before relying on RunEconomy in
+an unattended workflow.
