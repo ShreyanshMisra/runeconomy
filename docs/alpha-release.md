@@ -1,6 +1,6 @@
-# RunEconomy 0.2.0a2 alpha guide
+# RunEconomy 0.2.0a3 alpha guide
 
-`0.2.0a2` is an invited-tester release. It is not a production service or a
+`0.2.0a3` is an invited-tester release candidate. It is not a production service or a
 general benchmark suite. RunEconomy remains a local CLI and Python package.
 
 ## Install the prerelease
@@ -8,7 +8,7 @@ general benchmark suite. RunEconomy remains a local CLI and Python package.
 Install the published alpha:
 
 ```bash
-python -m pip install --pre runeconomy==0.2.0a2
+python -m pip install --pre runeconomy==0.2.0a3
 runeconomy --help
 runeconomy demo --open
 ```
@@ -58,13 +58,12 @@ gating order, evidence, limitations, and frozen hashes.
 ## Migration from 0.1.0
 
 There are no intentional Python API removals in this alpha. Existing static
-experiment manifests and the `negative-split` command alias remain supported.
+experiment manifests remain supported. The prerelease command alias formerly
+used for static experiments has been removed. Use `runeconomy experiment`.
 
 Behavioral changes to review:
 
-1. `experiment` is the primary name for static request experiments;
-   `negative-split` is a compatibility alias. NegativeSplit remains the method
-   and report name.
+1. `experiment` is the sole command for static request experiments and reports.
 2. `compare` is reserved for executing complete baseline and candidate agent
    processes. It is not an alias for static request replay.
 3. `runeconomy demo` now renders the frozen quality-gated rejection. Select

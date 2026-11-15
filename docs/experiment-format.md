@@ -8,7 +8,7 @@ carry generated state into a later agent step, or include live tool time. Use
 
 The `0.1`, `0.2`, and `0.3` experiment formats define a paired
 baseline/candidate replay against one vLLM backend. Versions `0.1` and `0.2`
-remain readable for legacy manifests; new experiments should use `0.3`, which
+remain readable for legacy manifests. New experiments should use `0.3`, which
 defaults the absolute task-success floor to 80%. The runner is
 intentionally narrow today: requests use either vLLM's Responses or Chat
 Completions API, run sequentially, and contain their complete history inline.
@@ -29,13 +29,13 @@ The subsequent generation request uses the matching Responses or Chat
 Completions endpoint and is streamed. The driver measures client time to the
 first non-empty delta and total latency, then reads cached tokens and optional
 server timing metrics from the completed response. Generated content is not
-saved; the raw result contains a SHA-256 digest of the response output for
+saved. The raw result contains a SHA-256 digest of the response output for
 later evaluator wiring.
 
 ## Required vLLM configuration
 
 Run `runeconomy doctor --base-url URL` before preparing a manifest. A normal
-server can run warm-cache or salt-isolated experiments; a dedicated trusted
+server can run warm-cache or salt-isolated experiments. A dedicated trusted
 benchmark server can additionally provide physical resets, cached-token
 details, and per-request metrics:
 
@@ -63,7 +63,7 @@ The checked-in manifests use `https://vllm.example.invalid` deliberately so
 they cannot contact a private deployment. Copy a manifest and replace
 `backend.base_url` with your authenticated vLLM endpoint before a live run.
 Credentials are read only from the environment variable named by
-`backend.api_key_env`; the examples use `VLLM_API_KEY`.
+`backend.api_key_env`. The examples use `VLLM_API_KEY`.
 
 ## Manifest fields
 
@@ -73,17 +73,17 @@ Credentials are read only from the environment variable named by
   recorded engine configuration.
 - `backend.api_dialect` is `responses` by default or `chat_completions` for a
   native Chat Completions request. Request and sampling field names must match
-  the selected dialect; RunEconomy does not silently translate between APIs.
+  the selected dialect. RunEconomy does not silently translate between APIs.
 - `sampling` is merged into every request, preventing either variant from
   silently changing decoding parameters.
-- `execution.repetitions` controls measured pairs; warmups are retained in raw
+- `execution.repetitions` controls measured pairs. Warmups are retained in raw
   results but excluded from the comparison.
 - `execution.order` is `alternating` or seeded `randomized`.
 - `execution.cases_form_workflow` treats every case as a sequential
   critical-path inference step. Workflow token and latency metrics are summed
   per repetition, while workflow success requires every case to pass.
 - Cases may declare `workflow_id` when `cases_form_workflow` is enabled. When
-  present, every case must declare it; cases sharing an ID form one sequential
+  present, every case must declare it. Cases sharing an ID form one sequential
   workflow unit, and uncertainty is calculated across the resulting workflow
   units rather than across individual steps. Manifests without `workflow_id`
   retain the legacy behavior of treating all cases as one workflow.
@@ -110,7 +110,7 @@ Credentials are read only from the environment variable named by
   manifests and `0.8` in `0.3`. New verification experiments should set a
   workload-appropriate absolute success floor explicitly. Both variants'
   exact 95% Clopper-Pearson lower bounds must
-  clear it; a weak baseline makes the experiment invalid, while a candidate
+  clear it. A weak baseline makes the experiment invalid, while a candidate
   below the floor is a regression. Non-inferiority alone is insufficient when
   both variants perform poorly.
 - `acceptance.require_environment_identity` invalidates a run unless all pinned
@@ -122,7 +122,7 @@ Credentials are read only from the environment variable named by
 - `acceptance.optimization_target` is `cache_reuse` by default. Set it to
   `input_tokens` with `min_input_token_reduction` when verifying interventions
   such as task-specific tool exposure or context pruning. The paired
-  input-token interval must clear that threshold; cache gain is then reported
+  input-token interval must clear that threshold. Cache gain is then reported
   but is not a required gate.
 - `text_fixtures` loads large UTF-8 files relative to the manifest and verifies
   their SHA-256 digest before use. Their names become request placeholders such
@@ -130,7 +130,7 @@ Credentials are read only from the environment variable named by
 - `json_fixtures` loads and verifies structured JSON. A complete fixture can be
   inserted without string conversion using `{"$fixture": "INCIDENT_TOOLS"}`.
 - A variant may define a seeded `request_transform`. `shuffle_tools` models an
-  application that emits an unstable tool-list order; `canonicalize_tools`
+  application that emits an unstable tool-list order. `canonicalize_tools`
   sorts the same catalog by function name and canonical JSON. Both operate on
   a copy and preserve tool definitions.
 
@@ -139,7 +139,7 @@ placeholder. The runner replaces it with the same deterministic value for both
 members of a pair and a different value for every case/repetition. This models
 timestamps, correlation IDs, and other per-run data without making the two
 variants semantically different. A timestamp-position experiment must use this
-placeholder; a literal timestamp would become reusable after its first replay
+placeholder. A literal timestamp would become reusable after its first replay
 and invalidate the intended test.
 
 Stateful Responses fields such as `previous_response_id` and `background` are
@@ -182,15 +182,15 @@ exact marginal binomial bounds rather than a bootstrap, which would collapse to
 does not imply a true 100% success rate or prove a zero-regression margin.
 
 Client TTFT, server TTFT, and their difference remain separate. End-to-end
-workflow latency is the product outcome when selected as `primary_metric`;
+workflow latency is the product outcome when selected as `primary_metric`.
 server TTFT is a serving-mechanism metric, and the client/server gap exposes
 network, proxy, and streaming-delivery overhead.
 
 Supported evaluator kinds are `exact`, `regex`, `json_schema`, `python`,
-`command`, and `all`. Python evaluators use `module:function`; command
+`command`, and `all`. Python evaluators use `module:function`. Command
 evaluators receive generated text on standard input and never invoke a shell.
 Both are local-code execution features and should only be used with trusted
-manifests. The CLI rejects them by default; after reviewing a trusted manifest,
+manifests. The CLI rejects them by default. After reviewing a trusted manifest,
 pass `--allow-exec-evaluators` to `validate` and `run`.
 
 An evaluator infrastructure failure (for example, a missing executable, import
@@ -200,10 +200,10 @@ unknown, and the experiment cannot receive a verified decision.
 
 The CLI writes each completed trial to a durable JSONL checkpoint before
 starting the next request. By default this is
-`RESULT.json.trials.jsonl`; `--checkpoint` selects another path. Resume an
+`RESULT.json.trials.jsonl`. `--checkpoint` selects another path. Resume an
 interrupted deterministic schedule with `--resume`. Cold-cache trials already
 in the checkpoint are skipped. For a warm-cache experiment, completed requests
-are replayed after a cache reset to reconstruct cache state; their saved
+are replayed after a cache reset to reconstruct cache state. Their saved
 measurements are retained and the replayed token IDs must match before the run
 continues.
 
@@ -225,7 +225,7 @@ hardware, engine configuration, or acceptance settings.
 
 The optional `design` object is included in both fingerprints and copied into
 result provenance. Use it for predeclared hypotheses, calibration-split
-evidence, predicted direction, and claim boundaries; it is not interpreted as
+evidence, predicted direction, and claim boundaries. It is not interpreted as
 an acceptance gate.
 
 When `cases_form_workflow` is enabled, the decision uses aggregate workflow
@@ -243,9 +243,7 @@ PYTHONPATH=src python3 -m runeconomy experiment report result.json \
   --output experiment-report.md
 ```
 
-`experiment` is the primary public command. `negative-split` remains a
-backward-compatible alias and NegativeSplit remains the methodology/report
-name.
+`experiment` is the sole public command for static controlled comparisons.
 
 ## Initializing from a diagnosis
 
@@ -274,7 +272,7 @@ dataset, or an evaluator.
 Generated manifests store the source finding, expected causal mechanism, and
 predicted metric direction under `design.hypothesis`. The final report compares
 that prediction with the paired 95% interval. A prediction is marked supported
-only when the interval lies wholly in the predeclared direction; otherwise it
+only when the interval lies wholly in the predeclared direction. Otherwise it
 is reported as not established or contradicted.
 
 ## Current claim boundary
@@ -282,5 +280,5 @@ is reported as not established or contradicted.
 The runner verifies inference behavior and applies a workload-specific task
 evaluator. Output digests remain a byte-equivalence diagnostic, not a semantic
 quality metric. A `verified` decision therefore means the configured evaluator
-and performance gates passed for this workload; it is not evidence that the
+and performance gates passed for this workload. It is not evidence that the
 candidate preserves quality outside the represented cases.

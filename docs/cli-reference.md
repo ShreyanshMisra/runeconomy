@@ -2,7 +2,7 @@
 
 Run `runeconomy COMMAND --help` for complete flags. Human output is plain text,
 does not rely on color, respects non-interactive streams, and uses no animation.
-Set `NO_COLOR=1` when standardizing a wider toolchain; RunEconomy itself emits
+Set `NO_COLOR=1` when standardizing a wider toolchain. RunEconomy itself emits
 no ANSI color in this alpha.
 
 ## First use
@@ -32,12 +32,11 @@ no ANSI color in this alpha.
 | `experiment init` | Generate a manifest or honest unresolved skeleton from a finding. |
 | `experiment validate` | Validate schema, identities, execution controls, and evaluators. |
 | `experiment run` | Execute a static paired request experiment. |
-| `experiment report` | Render a NegativeSplit HTML or Markdown report. |
+| `experiment report` | Render an HTML or Markdown experiment report. |
 | `compare` | Execute complete baseline and candidate agent processes. |
 
-`negative-split` remains a backward-compatible alias for `experiment`.
-NegativeSplit is the methodology and report name. `compare` is reserved for
-closed-loop agent execution.
+`experiment` is the sole command for static controlled comparisons. `compare`
+is reserved for closed-loop agent execution.
 
 ## Exit codes
 

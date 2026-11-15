@@ -11,7 +11,7 @@ and tests whether a change improves successful-task performance.
 Import real workflow evidence, turn a structured finding into a controlled
 baseline/candidate experiment, and evaluate task quality before performance.
 RunEconomy sits between agent observability and self-hosted inference
-infrastructure; it is not another trace dashboard or cache router.
+infrastructure. It is not another trace dashboard or cache router.
 
 ## The flagship result is a rejection
 

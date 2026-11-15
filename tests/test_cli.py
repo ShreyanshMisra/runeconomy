@@ -68,13 +68,12 @@ class CLITests(unittest.TestCase):
                 json.dumps(load_demo_result("historical")), encoding="utf-8"
             )
             self.assertEqual(
-                main(
-                    ["negative-split", "report", str(source), "--output", str(output)]
-                ),
+                main(["experiment", "report", str(source), "--output", str(output)]),
                 0,
             )
             rendered = output.read_text(encoding="utf-8")
-            self.assertIn("Generated from recorded RunEconomy aggregate", rendered)
+            self.assertIn("RunEconomy Experiment Report", rendered)
+            self.assertIn("Intervention Tested", rendered)
             self.assertNotIn("fixture-backed repository-analysis replay", rendered)
 
     def test_executable_evaluators_require_explicit_opt_in(self) -> None:
@@ -86,11 +85,11 @@ class CLITests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             manifest = Path(directory) / "manifest.json"
             manifest.write_text(json.dumps(payload), encoding="utf-8")
-            self.assertEqual(main(["negative-split", "validate", str(manifest)]), 2)
+            self.assertEqual(main(["experiment", "validate", str(manifest)]), 2)
             self.assertEqual(
                 main(
                     [
-                        "negative-split",
+                        "experiment",
                         "validate",
                         str(manifest),
                         "--allow-exec-evaluators",
@@ -111,7 +110,7 @@ class CLITests(unittest.TestCase):
             ):
                 exit_code = main(
                     [
-                        "negative-split",
+                        "experiment",
                         "run",
                         str(manifest),
                         "--output",
@@ -128,9 +127,7 @@ class CLITests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             output = Path(directory) / "demo.html"
             with patch("runeconomy.cli.webbrowser.open") as opened:
-                self.assertEqual(
-                    main(["demo", "--output", str(output), "--open"]), 0
-                )
+                self.assertEqual(main(["demo", "--output", str(output), "--open"]), 0)
             opened.assert_called_once_with(output.resolve().as_uri())
 
     def test_demo_open_failure_preserves_report_and_gives_next_action(self) -> None:
@@ -141,9 +138,7 @@ class CLITests(unittest.TestCase):
                 patch("runeconomy.cli.webbrowser.open", return_value=False),
                 redirect_stderr(stderr),
             ):
-                self.assertEqual(
-                    main(["demo", "--output", str(output), "--open"]), 0
-                )
+                self.assertEqual(main(["demo", "--output", str(output), "--open"]), 0)
             self.assertTrue(output.is_file())
             self.assertIn("report was written", stderr.getvalue())
             self.assertIn("What to do next", stderr.getvalue())
@@ -166,9 +161,8 @@ class CLITests(unittest.TestCase):
                     0,
                 )
             rendered = output.read_text(encoding="utf-8")
-            self.assertIn("Runner decision:</strong> inconclusive", rendered)
-            self.assertIn("INCONCLUSIVE proof", stdout.getvalue())
-            self.assertNotIn("INVALID proof", stdout.getvalue())
+            self.assertIn("Verdict: Inconclusive", rendered)
+            self.assertIn("Verdict: Inconclusive", stdout.getvalue())
 
     def test_doctor_json_does_not_echo_base_url_or_api_key(self) -> None:
         capabilities = {
@@ -314,9 +308,7 @@ class CLITests(unittest.TestCase):
             redirect_stdout(stdout),
         ):
             discover.return_value.to_dict.return_value = capabilities
-            self.assertEqual(
-                main(["doctor", "--base-url", "http://localhost:8000"]), 0
-            )
+            self.assertEqual(main(["doctor", "--base-url", "http://localhost:8000"]), 0)
         rendered = stdout.getvalue()
         self.assertIn("RunEconomy doctor · READY", rendered)
         self.assertIn("What to do next", rendered)

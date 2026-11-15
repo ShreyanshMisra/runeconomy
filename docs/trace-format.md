@@ -133,7 +133,7 @@ machine-readable experiment intent to every finding. Important fields include:
 - `causal_mechanism`, `predicted_metric`, and `predicted_direction`.
 
 `suggested_experiment` remains for backward-compatible human output. The
-structured fields—not that prose—drive `runeconomy experiment init`.
+structured fields, not that prose, drive `runeconomy experiment init`.
 
 `spans` are non-nested executable workflow steps. `depends_on` contains direct
 predecessor span IDs and defines a directed acyclic graph. The analyzer computes

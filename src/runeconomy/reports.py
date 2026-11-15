@@ -4,210 +4,1104 @@ from __future__ import annotations
 
 import html
 import json
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from importlib.resources import files
-from typing import Any, Mapping
+from typing import Any
+
+
+@dataclass(frozen=True)
+class ReportCard:
+    label: str
+    value: str
+    description: str
+
+
+@dataclass(frozen=True)
+class QualityRequirement:
+    question: str
+    rows: tuple[tuple[str, str], ...]
+    explanation: str
+    passed: bool
+
+
+@dataclass(frozen=True)
+class TechnicalSection:
+    label: str
+    body_html: str
+    body_markdown: str
+
+
+@dataclass(frozen=True)
+class ReportView:
+    experiment_id: str
+    status: str
+    status_label: str
+    primary_message: str
+    verdict_explanation: str
+    invalid_explanation: str | None
+    recommendation: str
+    badges: tuple[str, ...]
+    intervention_intro: str
+    intervention_baseline: str
+    intervention_candidate: str
+    intervention_why: str
+    intervention_control: str
+    intervention_kind: str
+    result_cards: tuple[ReportCard, ...]
+    result_qualification: str
+    outcome_items: tuple[tuple[str, str], ...]
+    cache_position_items: tuple[tuple[str, str], ...]
+    quality_requirements: tuple[QualityRequirement, ...]
+    decision_path: tuple[tuple[str, str], ...]
+    later_checks: tuple[str, ...]
+    experiment_intro: str
+    experiment_facts: tuple[tuple[str, str], ...]
+    controls: str
+    technical_sections: tuple[TechnicalSection, ...]
 
 
 def _number(value: Any, digits: int = 1) -> str:
-    return "unknown" if value is None else f"{float(value):.{digits}f}"
+    return "Unknown" if value is None else f"{float(value):.{digits}f}"
 
 
 def _percent(value: Any, digits: int = 1) -> str:
-    return "unknown" if value is None else f"{float(value) * 100:.{digits}f}%"
+    return "Unknown" if value is None else f"{float(value) * 100:.{digits}f}%"
 
 
-def _percentage_points(value: Any, digits: int = 1) -> str:
-    return (
-        "unknown"
-        if value is None
-        else f"{float(value) * 100:.{digits}f} percentage points"
-    )
+def _prose(value: Any) -> str:
+    """Normalize recorded prose to the report's punctuation contract."""
+
+    text = str(value).replace(" — ", ". ").replace("—", "-")
+    parts = [part.strip() for part in text.split(";")]
+    normalized = []
+    for part in parts:
+        if not part:
+            continue
+        normalized.append(part[0].upper() + part[1:] if normalized else part)
+    return ". ".join(normalized)
+
+
+def _escape(value: Any) -> str:
+    return html.escape(_prose(value))
 
 
 def _interval(effect: Mapping[str, Any], digits: int = 1) -> str:
-    interval = effect.get("bootstrap_95_ci")
-    if not isinstance(interval, list) or len(interval) != 2:
-        return "unknown"
-    return f"[{_number(interval[0], digits)}, {_number(interval[1], digits)}]"
-
-
-def _percent_interval(effect: Mapping[str, Any]) -> str:
     interval = effect.get("confidence_interval", effect.get("bootstrap_95_ci"))
     if not isinstance(interval, list) or len(interval) != 2:
-        return "unknown"
+        return "Unknown"
     if interval[0] is None or interval[1] is None:
-        return "unknown"
-    return f"[{float(interval[0]) * 100:.1f}, {float(interval[1]) * 100:.1f}] pp"
+        return "Unknown"
+    return f"{float(interval[0]):.{digits}f} to {float(interval[1]):.{digits}f}"
 
 
-def render_experiment_markdown(result: Mapping[str, Any]) -> str:
-    if not isinstance(result.get("summary"), dict) or not isinstance(
-        result.get("decision"), dict
+def _percent_interval(interval: Any, digits: int = 2) -> str:
+    if not isinstance(interval, list) or len(interval) != 2:
+        return "Unknown"
+    if interval[0] is None or interval[1] is None:
+        return "Unknown"
+    return f"{float(interval[0]) * 100:.{digits}f}% to {float(interval[1]) * 100:.{digits}f}%"
+
+
+def _percentage_points(value: Any, digits: int = 2) -> str:
+    if value is None:
+        return "Unknown"
+    return f"{float(value) * 100:.{digits}f} percentage points"
+
+
+def _status_copy(status: str, reason: str) -> tuple[str, str, str | None, str]:
+    normalized = status.lower()
+    if normalized == "verified":
+        return (
+            "Improvement verified",
+            "The declared task-quality and performance requirements passed. The candidate is eligible for deployment review.",
+            None,
+            "Review operational risk and production safeguards before deploying the candidate.",
+        )
+    if normalized == "regression":
+        return (
+            "Candidate regressed",
+            "A declared candidate guardrail failed. The recorded evidence does not support shipping this change.",
+            None,
+            "Do not ship the candidate. Revise or reject the change before a new experiment.",
+        )
+    if normalized == "inconclusive":
+        return (
+            "Result inconclusive",
+            "The evidence was usable, but it was not sufficient to establish the declared performance claim.",
+            None,
+            "Gather more paired evidence under a new frozen design before making a performance claim.",
+        )
+    if normalized == "invalid":
+        return (
+            "Result not verified",
+            "The candidate may have favorable measurements, but this experiment did not establish the evidence required for a verified claim.",
+            "Invalid does not mean the candidate was slower. It means the attractive measurements were not eligible to become a verified improvement or regression claim.",
+            "Repair the decisive evidence or baseline-quality problem, then use a new frozen held-out workload.",
+        )
+    return (
+        "No verdict available",
+        _prose(reason or "The result did not contain a recognized verdict."),
+        None,
+        "Inspect the result and complete the missing experiment evidence.",
+    )
+
+
+def _generic_recommendation(status: str, decision: Mapping[str, Any]) -> str:
+    reason = str(decision.get("reason", "")).lower()
+    decisive = str(decision.get("decisive_stage", "")).lower()
+    if status == "verified":
+        return "The candidate is eligible for deployment review. Review operational risk and production safeguards first."
+    if status == "regression":
+        return "Do not ship the candidate. Reject or revise the change before a new experiment."
+    if status == "inconclusive":
+        return "Gather more paired evidence under a new frozen design before making a performance claim."
+    if status == "invalid" and any(
+        marker in reason or marker in decisive
+        for marker in ("baseline", "task success", "task_success", "quality")
     ):
-        raise ValueError("result must contain summary and decision objects")
-    experiment_id = result.get("experiment_id", "unknown-experiment")
-    decision = result["decision"]
-    raw_summary = result["summary"]
-    summary = raw_summary.get("workflow", raw_summary)
-    variants = summary["variants"]
-    effects = summary["effects"]
-    provenance = result.get("provenance", {})
+        return "Stabilize the workload, evaluator or baseline, then test under a new frozen design."
+    if status == "invalid":
+        return "Repair the instrumentation or environment-identity evidence, then run a new frozen experiment."
+    return "Inspect the result and complete the missing experiment evidence."
 
-    metrics = (
-        ("input_tokens", "Input tokens", 1),
-        ("cached_tokens", "Cached tokens", 1),
-        ("cache_coverage", "Cache coverage", 3),
-        ("server_ttft_ms", "Server TTFT (ms)", 1),
-        ("client_ttft_ms", "Client TTFT (ms)", 1),
-        ("client_server_ttft_gap_ms", "Client − server TTFT gap (ms)", 1),
-        ("total_latency_ms", "Total latency (ms)", 1),
-        ("output_tokens", "Output tokens", 1),
-        ("task_success", "Task success", 3),
-    )
-    lines = [
-        f"# NegativeSplit report: {experiment_id}",
-        "",
-        f"**Decision: {str(decision.get('status', 'unknown')).upper()}**",
-        "",
-        str(decision.get("reason", "No decision reason recorded.")),
-        "",
-        "## Environment",
-        "",
-        f"- Model: `{provenance.get('model', 'unknown')}`",
-        f"- Model revision: `{provenance.get('model_revision', 'unknown')}`",
-        f"- Backend: vLLM `{provenance.get('backend_version', 'unknown')}`",
-        f"- API dialect: `{provenance.get('api_dialect', 'unknown')}`",
-        f"- Hardware: {provenance.get('hardware', 'unknown')}",
-        f"- Cache treatment: `{provenance.get('cache_treatment', 'unknown')}`",
-        f"- Cache isolation: `{provenance.get('cache_isolation', 'unknown')}`",
-        f"- Trial order: `{provenance.get('order', 'unknown')}`",
-        f"- Optimization target: `{provenance.get('acceptance', {}).get('optimization_target', 'cache_reuse')}`",
-        f"- Reproducibility manifest SHA-256: `{provenance.get('reproducibility_manifest_sha256', provenance.get('manifest_sha256', 'unknown'))}`",
-        "",
-        "## Outcomes",
-        "",
-        "| Variant | Completion rate | Task-success rate | Exact 95% CI | Evaluated trials |",
-        "|---|---:|---:|---:|---:|",
-    ]
-    for variant in ("baseline", "candidate"):
-        outcomes = variants[variant]["outcomes"]
-        lines.append(
-            f"| {variant.title()} | {_percent(outcomes.get('completed_rate'))} | "
-            f"{_percent(outcomes.get('task_success_rate'))} | "
-            f"{_percent_interval({'confidence_interval': outcomes.get('task_success_95_ci')})} | "
-            f"{outcomes.get('evaluated_count', 0)} |"
+
+def _metric_effect(
+    effects: Mapping[str, Any], *names: str
+) -> tuple[str | None, Mapping[str, Any]]:
+    for name in names:
+        value = effects.get(name)
+        if isinstance(value, Mapping):
+            return name, value
+    return None, {}
+
+
+def _card(
+    label: str,
+    effect: Mapping[str, Any],
+    *,
+    positive_is_more: bool = False,
+    unit: str = "",
+) -> ReportCard:
+    delta = effect.get("candidate_minus_baseline_mean")
+    if delta is None:
+        return ReportCard(label, "Unknown", "This metric was not available.")
+    number = float(delta)
+    magnitude = abs(number)
+    rounded = f"{magnitude:.0f}"
+    if positive_is_more:
+        value = f"+{rounded}" if number > 0 else f"-{rounded}" if number < 0 else "0"
+        description = (
+            "More prompt tokens were served from cache."
+            if number > 0
+            else "Fewer prompt tokens were served from cache."
+            if number < 0
+            else "Mean cached prompt tokens did not change."
         )
-    lines.extend(
-        [
-            "",
-            "## Inference results",
-            "",
-            "| Metric | Baseline mean | Candidate mean | Candidate − baseline | 95% interval |",
-            "|---|---:|---:|---:|---:|",
-        ]
+    else:
+        value = f"{rounded} {unit} lower" if number < 0 else f"{rounded} {unit} higher"
+        description = (
+            "The first token arrived sooner at the server."
+            if label == "Server time to first token" and number < 0
+            else "The first token arrived later at the server."
+            if label == "Server time to first token"
+            else "Successful task pairs completed sooner."
+            if number < 0
+            else "Successful task pairs completed later."
+        )
+    return ReportCard(label, value.strip(), description)
+
+
+def _html_table(rows: Sequence[tuple[str, str]], headings: tuple[str, str]) -> str:
+    body = "".join(
+        f'<tr><th scope="row">{_escape(label)}</th><td>{_escape(value)}</td></tr>'
+        for label, value in rows
     )
-    for key, label, digits in metrics:
-        if (
-            key not in variants["baseline"]
-            or key not in variants["candidate"]
-            or key not in effects
-        ):
+    return (
+        '<div class="table-wrap"><table><thead><tr>'
+        f"<th>{_escape(headings[0])}</th><th>{_escape(headings[1])}</th>"
+        f"</tr></thead><tbody>{body}</tbody></table></div>"
+    )
+
+
+def _markdown_table(rows: Sequence[tuple[str, str]], headings: tuple[str, str]) -> str:
+    lines = [f"| {headings[0]} | {headings[1]} |", "|---|---|"]
+    lines.extend(f"| {_prose(label)} | {_prose(value)} |" for label, value in rows)
+    return "\n".join(lines)
+
+
+def _technical_sections_for_public(
+    result: Mapping[str, Any],
+) -> tuple[TechnicalSection, ...]:
+    checks = result["gates"]["checks"]
+    check_rows = tuple(
+        (
+            str(item.get("name", "unknown")),
+            f"{'Passed' if item.get('passed') else 'Failed'}. Threshold: {_prose(item.get('threshold', 'unknown'))}. Observed: {_prose(item.get('observed', 'unknown'))}",
+        )
+        for item in checks
+    )
+    effects = result["conditional_effects"]
+    effect_rows = tuple(
+        (
+            name.replace("_", " ").title(),
+            f"Mean candidate minus baseline: {_number(item.get('candidate_minus_baseline_mean'), 3)}. 95% interval: {_interval(item, 3)}. Pairs: {item.get('paired_count', 0)}",
+        )
+        for name, item in sorted(effects.items())
+    )
+    paired = result["paired_success"]
+    paired_interval = paired.get("confidence_interval") or [None, None]
+    effect_rows += (
+        (
+            "Paired task success",
+            f"Mean candidate minus baseline: {_percentage_points(paired.get('candidate_minus_baseline_mean'))}. 95% interval: {_percentage_points(paired_interval[0])} to {_percentage_points(paired_interval[1])}. One-sided lower bound: {_percentage_points(paired.get('one_sided_lower_bound'))}. Method: {_prose(paired.get('method', 'unknown'))}",
+        ),
+    )
+    position_rows = tuple(
+        (
+            item.get("label", "Unknown call"),
+            f"Baseline mean: {_number(item.get('baseline_mean'), 2)}. Candidate mean: {_number(item.get('candidate_mean'), 2)}. Difference: {_number(item.get('candidate_minus_baseline_mean'), 2)} cached tokens. Pairs: {item.get('paired_count', 0)}",
+        )
+        for item in result.get("request_position_effects", [])
+    )
+    if position_rows:
+        effect_rows += position_rows
+    provenance = result["provenance"]
+    environment_rows = tuple(
+        (
+            key.replace("_", " ").title(),
+            json.dumps(value, sort_keys=True)
+            if isinstance(value, Mapping)
+            else str(value),
+        )
+        for key, value in sorted(provenance.items())
+    ) + tuple(
+        (f"{name.replace('_', ' ').title()} hash", str(value))
+        for name, value in sorted(result["frozen_hashes"].items())
+    )
+    evidence = result["evidence_integrity"]
+    failure = result["failure_categories"]
+    evidence_rows = tuple(
+        (key.replace("_", " ").title(), str(value))
+        for key, value in sorted(evidence.items())
+    ) + tuple(
+        (key.replace("_", " ").title(), str(value))
+        for key, value in sorted(failure.items())
+    )
+    claim = result["claim_boundary"]
+    limitation_rows = (
+        ("Supported claim", str(claim.get("supported", "unknown"))),
+        (
+            "Claims not supported",
+            ", ".join(str(item) for item in claim.get("not_supported", [])),
+        ),
+        ("Limitations", " ".join(str(item) for item in result.get("limitations", []))),
+        ("Artifact source", "src/runeconomy/data/public-proof-rejection.json"),
+    )
+    return tuple(
+        TechnicalSection(
+            label,
+            _html_table(rows, ("Field", "Recorded value")),
+            _markdown_table(rows, ("Field", "Recorded value")),
+        )
+        for label, rows in (
+            ("Acceptance checks", check_rows),
+            ("Statistical details", effect_rows),
+            ("Environment and provenance", environment_rows),
+            ("Evidence integrity", evidence_rows),
+            ("Limitations", limitation_rows),
+        )
+    )
+
+
+def _generic_summary(
+    result: Mapping[str, Any],
+) -> tuple[Mapping[str, Any], Mapping[str, Any], Mapping[str, Any]]:
+    raw = result.get("summary")
+    if not isinstance(raw, Mapping):
+        raise ValueError("result must contain a summary object")
+    summary = raw.get("workflow", raw)
+    if not isinstance(summary, Mapping):
+        raise ValueError("result summary must be an object")
+    variants = summary.get("variants")
+    effects = summary.get("effects")
+    if not isinstance(variants, Mapping) or not isinstance(effects, Mapping):
+        raise ValueError("result summary must contain variants and effects objects")
+    if not all(
+        isinstance(variants.get(name), Mapping) for name in ("baseline", "candidate")
+    ):
+        raise ValueError("result summary must contain baseline and candidate variants")
+    return raw, variants, effects
+
+
+def _generic_outcomes(variants: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
+    items: list[tuple[str, str]] = []
+    for name in ("baseline", "candidate"):
+        outcomes = variants[name].get("outcomes", {})
+        if not isinstance(outcomes, Mapping):
+            outcomes = {}
+        count = outcomes.get("task_success_count")
+        attempts = outcomes.get("attempt_count", outcomes.get("evaluated_count"))
+        if attempts == 0:
+            items.append((name.title(), "Task success was not evaluated."))
             continue
-        baseline = variants["baseline"][key]["mean"]
-        candidate = variants["candidate"][key]["mean"]
-        effect = effects[key]
-        if key in {"cache_coverage", "task_success"}:
-            baseline_text = _percent(baseline)
-            candidate_text = _percent(candidate)
-            delta = effect.get("candidate_minus_baseline_mean")
-            delta_text = "unknown" if delta is None else f"{float(delta) * 100:.1f} pp"
-            interval_text = _percent_interval(effect)
+        if count is None and outcomes.get("task_success_rate") is not None and attempts:
+            count = round(float(outcomes["task_success_rate"]) * int(attempts))
+        if count is None or attempts is None:
+            value = f"Success rate: {_percent(outcomes.get('task_success_rate'))}"
         else:
-            baseline_text = _number(baseline, digits)
-            candidate_text = _number(candidate, digits)
-            delta_text = _number(effect.get("candidate_minus_baseline_mean"), digits)
-            interval_text = _interval(effect, digits)
-        lines.append(
-            f"| {label} | {baseline_text} | {candidate_text} | "
-            f"{delta_text} | {interval_text} |"
-        )
+            value = f"{count} of {attempts} tasks succeeded."
+        items.append((name.title(), value))
+    return tuple(items)
 
-    prediction = summary.get("prediction_vs_observation", {})
-    predeclared = raw_summary.get("predeclared_prediction")
-    lines.extend(
-        [
-            "",
-            "## Prediction versus observation",
-            "",
-            f"- Predicted cached-token delta: {_number(prediction.get('predicted_candidate_minus_baseline_cached_tokens'))}",
-            f"- Observed cached-token delta: {_number(prediction.get('observed_candidate_minus_baseline_cached_tokens'))}",
-            f"- Realization ratio: {_number(prediction.get('realization_ratio'), 3)}",
-        ]
+
+def _generic_technical_sections(
+    result: Mapping[str, Any], effects: Mapping[str, Any]
+) -> tuple[TechnicalSection, ...]:
+    decision = result.get("decision", {})
+    checks = decision.get("checks", []) if isinstance(decision, Mapping) else []
+    check_rows = (
+        (
+            "Recorded decision reason",
+            str(decision.get("reason", "No reason recorded.")),
+        ),
+    ) + tuple(
+        (
+            str(item.get("name", "unknown")),
+            f"{'Passed' if item.get('passed') else 'Failed'}. Required: {'yes' if item.get('required', True) else 'no'}",
+        )
+        for item in checks
+        if isinstance(item, Mapping)
+    ) or (("Checks", "No acceptance checks were recorded."),)
+    effect_rows = tuple(
+        (
+            str(name).replace("_", " ").title(),
+            f"Mean candidate minus baseline: {_number(item.get('candidate_minus_baseline_mean'), 3)}. 95% interval: {_interval(item, 3)}. Pairs: {item.get('paired_count', 'unknown')}",
+        )
+        for name, item in sorted(effects.items())
+        if isinstance(item, Mapping)
+    ) or (("Effects", "No paired effects were recorded."),)
+    raw_summary = result.get("summary", {})
+    predeclared = (
+        raw_summary.get("predeclared_prediction")
+        if isinstance(raw_summary, Mapping)
+        else None
     )
     if isinstance(predeclared, Mapping):
-        lines.extend(
-            [
-                "",
-                "## Predeclared hypothesis",
-                "",
-                f"- Mechanism: {predeclared.get('causal_mechanism', 'unknown')}",
-                f"- Prediction: `{predeclared.get('metric', 'unknown')}` should "
-                f"`{predeclared.get('direction', 'unknown')}`",
-                f"- Assessment: **{str(predeclared.get('status', 'unknown')).upper()}**",
-                f"- Observed candidate − baseline: "
-                f"{_number(predeclared.get('candidate_minus_baseline_mean'))}",
-                f"- Paired 95% interval: "
-                f"{predeclared.get('confidence_interval', 'unknown')}",
-            ]
+        effect_rows += (
+            (
+                "Predeclared hypothesis",
+                f"Mechanism: {predeclared.get('causal_mechanism', 'unknown')}. Metric: {predeclared.get('metric', 'unknown')}. Expected direction: {predeclared.get('direction', 'unknown')}. Assessment: {predeclared.get('status', 'unknown')}",
+            ),
         )
-    lines.extend(
-        [
-            "",
-            "## Verification checks",
-            "",
-            "| Check | Required | Passed |",
-            "|---|---:|---:|",
-        ]
+    provenance = result.get("provenance", {})
+    if not isinstance(provenance, Mapping):
+        provenance = {}
+    environment_rows = tuple(
+        (
+            str(key).replace("_", " ").title(),
+            json.dumps(value, sort_keys=True)
+            if isinstance(value, Mapping)
+            else str(value),
+        )
+        for key, value in sorted(provenance.items())
+    ) or (("Environment", "No environment identity was recorded."),)
+    integrity_rows = (
+        (
+            "Evaluator infrastructure errors",
+            str(len(result.get("evaluator_errors", []))),
+        ),
+        ("Generated content", "Generated output is not embedded in this report."),
     )
-    for check in decision.get("checks", []):
-        required = check.get("required", True)
-        lines.append(
-            f"| `{check.get('name', 'unknown')}` | "
-            f"{'yes' if required else 'no'} | "
-            f"{'yes' if check.get('passed') else 'no'} |"
+    limitations = result.get("limitations", [])
+    limitation_rows = (
+        (
+            "Claim boundary",
+            "The verdict applies only to the recorded workload, backend, hardware and acceptance rules.",
+        ),
+        (
+            "Limitations",
+            " ".join(str(item) for item in limitations)
+            or "No additional limitations were recorded.",
+        ),
+    )
+    return tuple(
+        TechnicalSection(
+            label,
+            _html_table(rows, ("Field", "Recorded value")),
+            _markdown_table(rows, ("Field", "Recorded value")),
         )
-    if summary is not raw_summary:
-        lines.extend(
-            [
-                "",
-                "## Workflow aggregation",
-                "",
-                f"- Sequential inference steps: {summary.get('step_count', 'unknown')}",
-                f"- Claim: {summary.get('claim', 'unknown')}",
-            ]
+        for label, rows in (
+            ("Acceptance checks", check_rows),
+            ("Statistical details", effect_rows),
+            ("Environment and provenance", environment_rows),
+            ("Evidence integrity", integrity_rows),
+            ("Limitations", limitation_rows),
         )
-    evaluated_count = sum(
+    )
+
+
+def _quality_question(name: str) -> str:
+    labels = {
+        "baseline_minimum_task_success": "Was the baseline workload reliable enough?",
+        "candidate_minimum_task_success": "Did the candidate meet absolute task quality?",
+        "minimum_task_success_rate": "Did the variants meet the task-quality floor?",
+        "task_success_noninferior": "Did the candidate preserve task quality?",
+        "task_success_noninferiority": "Did the candidate preserve task quality?",
+    }
+    return labels.get(name, name.replace("_", " ").capitalize())
+
+
+def _build_public_proof_view(result: Mapping[str, Any]) -> ReportView:
+    if result.get("decision", {}).get("status") != "invalid":
+        raise ValueError("the flagship public proof must retain an invalid verdict")
+    experiment = result["experiment"]
+    outcomes = result["outcomes"]
+    effects = result["conditional_effects"]
+    paired = result["paired_success"]
+    provenance = result["provenance"]
+    acceptance = result["gates"]["predeclared"]
+    primary, _, invalid_explanation, _ = _status_copy("invalid", "")
+    outcome_counts = paired["outcome_counts"]
+    baseline_lower = outcomes["baseline"]["task_success_95_ci"][0]
+    paired_lower = paired["one_sided_lower_bound"]
+    min_success = acceptance["min_task_success_rate"]
+    max_regression = acceptance["max_task_success_regression"]
+    baseline_shortfall = min_success - baseline_lower
+    paired_shortfall = (-max_regression) - paired_lower
+    task_count = experiment["task_count"]
+    attempt_count = result["evidence_integrity"]["attempt_count"]
+    model = str(provenance["model"]).split("/")[-1]
+    return ReportView(
+        experiment_id="frozen-public-proof",
+        status="invalid",
+        status_label="Invalid",
+        primary_message=primary,
+        verdict_explanation=(
+            "The candidate showed better cache reuse and lower measured latency, but this experiment did not establish the task-quality evidence required for a verified performance claim."
+        ),
+        invalid_explanation=invalid_explanation,
+        recommendation=(
+            "Do not present this candidate as a verified latency improvement. Establish a more reliable baseline and test the intervention on a new, sufficiently powered held-out workload. The current 40-task workload has been consumed and cannot be reused as fresh evidence."
+        ),
+        badges=(
+            model,
+            f"vLLM {provenance['backend_version']}",
+            str(provenance["hardware"]),
+            f"{task_count} paired tasks",
+            f"{attempt_count} attempts",
+        ),
+        intervention_intro=(
+            "vLLM can reuse cached prompt tokens while a new prompt matches a previous prompt from the beginning. In the baseline, changing metadata appeared first, so the shared prefix ended immediately. The candidate moved that metadata after the stable instructions."
+        ),
+        intervention_baseline="Changing run metadata appeared before stable system instructions.",
+        intervention_candidate="The same changing metadata moved after stable system instructions.",
+        intervention_why="A longer stable prefix may allow more prompt tokens to be reused from cache.",
+        intervention_control="The prompt content stayed the same. Only the block order changed.",
+        intervention_kind="prefix-order",
+        result_cards=(
+            _card(
+                "Cached input tokens",
+                effects["cached_input_tokens"],
+                positive_is_more=True,
+            ),
+            _card("Server time to first token", effects["server_ttft_ms"], unit="ms"),
+            _card("Workflow latency", effects["workflow_latency_ms"], unit="ms"),
+        ),
+        result_qualification=(
+            "Measured across the 36 task pairs where both variants succeeded. These measurements are not a verified improvement until the quality requirements pass."
+        ),
+        outcome_items=(
+            ("Baseline", "37 of 40 tasks succeeded."),
+            ("Candidate", "38 of 40 tasks succeeded."),
+            ("Both succeeded", f"{outcome_counts['both_success']} pairs"),
+            ("Baseline only succeeded", f"{outcome_counts['baseline_only']} pair"),
+            ("Candidate only succeeded", f"{outcome_counts['candidate_only']} pairs"),
+            ("Both failed", f"{outcome_counts['both_failure']} pair"),
+        ),
+        cache_position_items=tuple(
+            (
+                item["label"],
+                f"Baseline {_number(item['baseline_mean'], 2)}, candidate {_number(item['candidate_mean'], 2)}, difference {_number(item['candidate_minus_baseline_mean'], 2)} cached tokens",
+            )
+            for item in result.get("request_position_effects", [])
+        ),
+        quality_requirements=(
+            QualityRequirement(
+                "Was the baseline workload reliable enough?",
+                (
+                    ("Required lower confidence bound", _percent(min_success, 2)),
+                    ("Observed baseline lower bound", _percent(baseline_lower, 2)),
+                    (
+                        "Result",
+                        f"Failed by {baseline_shortfall * 100:.2f} percentage points",
+                    ),
+                ),
+                "The baseline succeeded on 37 of 40 tasks. With only 40 tasks, the lower confidence bound remained slightly below the required threshold.",
+                False,
+            ),
+            QualityRequirement(
+                "Did the candidate preserve task quality?",
+                (
+                    (
+                        "Maximum allowed regression",
+                        f"{max_regression * 100:.2f} percentage points",
+                    ),
+                    (
+                        "Observed lower-bound difference",
+                        f"negative {abs(paired_lower) * 100:.2f} percentage points",
+                    ),
+                    (
+                        "Result",
+                        f"Failed by {paired_shortfall * 100:.2f} percentage points",
+                    ),
+                ),
+                "The candidate's observed success rate was higher, but the uncertainty was too wide to rule out a regression larger than the allowed margin.",
+                False,
+            ),
+        ),
+        decision_path=(
+            ("Evidence usable?", "Passed"),
+            ("Baseline reliable enough?", "Failed"),
+            ("Performance claim", "Not eligible for verification"),
+        ),
+        later_checks=(
+            "Candidate absolute quality: Passed",
+            "Paired quality preservation: Failed",
+            "Conditional workflow latency: Favorable but not eligible",
+        ),
+        experiment_intro=(
+            "Each task gave the agent a code clue and a bounded set of repository files. The agent planned a search, used a repository-search tool and identified the enclosing Python function or class."
+        ),
+        experiment_facts=(
+            (
+                "Task families",
+                "13 direct-call lookup tasks, 13 docstring lookup tasks and 14 unique-string lookup tasks",
+            ),
+            ("Paired workload", "40 baseline and candidate pairs, 80 total attempts"),
+            (
+                "Workflow",
+                "2 model calls and 1 repository-search tool call per attempt",
+            ),
+            (
+                "Environment",
+                f"{model}, vLLM {provenance['backend_version']}, Modal {provenance['hardware']}",
+            ),
+            (
+                "Execution",
+                "Chat Completions, colocated driver and sequential execution",
+            ),
+        ),
+        controls=(
+            "The model, backend, hardware, agent, tasks, evaluator and acceptance rules were chosen and locked before the held-out workload was run."
+        ),
+        technical_sections=_technical_sections_for_public(result),
+    )
+
+
+def _build_generic_view(result: Mapping[str, Any]) -> ReportView:
+    _, variants, effects = _generic_summary(result)
+    decision = result.get("decision")
+    if not isinstance(decision, Mapping):
+        raise ValueError("result must contain a decision object")
+    status = str(decision.get("status", "unknown")).lower()
+    reason = str(decision.get("reason", "No reason recorded."))
+    primary, explanation, invalid_explanation, _ = _status_copy(status, reason)
+    recommendation = _generic_recommendation(status, decision)
+    provenance = result.get("provenance", {})
+    if not isinstance(provenance, Mapping):
+        provenance = {}
+    context = result.get("measurement_context", {})
+    if not isinstance(context, Mapping):
+        context = {}
+    _, cached = _metric_effect(effects, "cached_input_tokens", "cached_tokens")
+    _, ttft = _metric_effect(effects, "server_ttft_ms")
+    _, latency = _metric_effect(effects, "workflow_latency_ms", "total_latency_ms")
+    pair_count = latency.get("paired_count", cached.get("paired_count", "the recorded"))
+    evaluated = sum(
         int(variants[name].get("outcomes", {}).get("evaluated_count", 0) or 0)
         for name in ("baseline", "candidate")
     )
-    evaluation_text = (
-        "Generated output text was evaluated locally; generated text was not persisted in "
-        "raw trial records."
-        if evaluated_count
-        else "Task success was not evaluated for this experiment."
+    badges = tuple(
+        str(item)
+        for item in (
+            provenance.get("model"),
+            f"vLLM {provenance['backend_version']}"
+            if provenance.get("backend_version")
+            else None,
+            provenance.get("hardware"),
+            f"{evaluated} evaluated attempts" if evaluated else None,
+        )
+        if item
     )
+    baseline_tools = context.get("baseline_tool_count")
+    candidate_tools = context.get("candidate_tool_count")
+    if baseline_tools is not None and candidate_tools is not None:
+        intervention_intro = "The experiment compared the number of tool definitions attached to each request."
+        baseline_copy = f"Each request exposed {baseline_tools} tool definitions."
+        candidate_copy = f"Each request exposed {candidate_tools} tool definitions."
+        why = "A smaller tool schema may reduce prompt processing work."
+        control = "The recorded manifest identifies the request fields that were held constant."
+    else:
+        intervention = result.get("intervention", {})
+        if not isinstance(intervention, Mapping):
+            intervention = {}
+        intervention_intro = _prose(
+            intervention.get(
+                "summary",
+                "The experiment compared a recorded baseline with a recorded candidate.",
+            )
+        )
+        baseline_copy = _prose(
+            intervention.get("baseline", "The recorded baseline request or workflow.")
+        )
+        candidate_copy = _prose(
+            intervention.get("candidate", "The recorded candidate request or workflow.")
+        )
+        why = _prose(
+            intervention.get(
+                "expected_mechanism",
+                "The candidate was expected to improve the recorded optimization target.",
+            )
+        )
+        control = _prose(
+            intervention.get(
+                "held_constant",
+                "Only the changes declared in the experiment manifest were intended to vary.",
+            )
+        )
+    qualification = (
+        f"Measured across {pair_count} paired observations. The declared quality and performance requirements passed."
+        if status == "verified"
+        else f"Measured across {pair_count} paired observations. These measurements are not a verified improvement until the quality requirements pass."
+    )
+    checks = [item for item in decision.get("checks", []) if isinstance(item, Mapping)]
+    quality_requirements = tuple(
+        QualityRequirement(
+            _quality_question(str(item.get("name", "Recorded acceptance requirement"))),
+            (
+                ("Required", "Yes" if item.get("required", True) else "No"),
+                ("Result", "Passed" if item.get("passed") else "Failed"),
+            ),
+            "See the exact threshold and observed value in Acceptance checks.",
+            bool(item.get("passed")),
+        )
+        for item in checks
+        if "success" in str(item.get("name", ""))
+        or "quality" in str(item.get("name", ""))
+    )
+    facts: list[tuple[str, str]] = []
+    if context.get("measured_workflow_pair_count") is not None:
+        facts.append(
+            (
+                "Paired workload",
+                f"{context['measured_workflow_pair_count']} measured workflow pairs",
+            )
+        )
+    if context.get("workflow_step_count") is not None:
+        facts.append(
+            (
+                "Workflow",
+                f"{context['workflow_step_count']} sequential inference calls per workflow",
+            )
+        )
+    if provenance.get("model"):
+        facts.append(("Model", str(provenance["model"])))
+    if provenance.get("backend_version"):
+        facts.append(("Backend", f"vLLM {provenance['backend_version']}"))
+    if provenance.get("hardware"):
+        facts.append(("Hardware", str(provenance["hardware"])))
+    if not facts:
+        facts.append(("Experiment", str(result.get("experiment_id", "unknown"))))
+    return ReportView(
+        experiment_id=str(result.get("experiment_id", "unknown-experiment")),
+        status=status,
+        status_label=status.title(),
+        primary_message=primary,
+        verdict_explanation=explanation,
+        invalid_explanation=invalid_explanation,
+        recommendation=recommendation,
+        badges=badges,
+        intervention_intro=intervention_intro,
+        intervention_baseline=baseline_copy,
+        intervention_candidate=candidate_copy,
+        intervention_why=why,
+        intervention_control=control,
+        intervention_kind="generic",
+        result_cards=(
+            _card("Cached input tokens", cached, positive_is_more=True),
+            _card("Server time to first token", ttft, unit="ms"),
+            _card("Workflow latency", latency, unit="ms"),
+        ),
+        result_qualification=qualification,
+        outcome_items=_generic_outcomes(variants),
+        cache_position_items=(),
+        quality_requirements=quality_requirements,
+        decision_path=(("Recorded verdict", status.title()),),
+        later_checks=(),
+        experiment_intro=(
+            "This report describes the recorded baseline and candidate comparison without adding evidence that was not present in the result."
+        ),
+        experiment_facts=tuple(facts),
+        controls=(
+            "The report uses only the workload, environment and acceptance rules recorded in the experiment result."
+        ),
+        technical_sections=_generic_technical_sections(result, effects),
+    )
+
+
+def _build_report_view_model(result: Mapping[str, Any]) -> ReportView:
+    """Convert a recorded artifact into a deterministic presentation model."""
+
+    if result.get("artifact_kind") == "runeconomy.public_proof":
+        return _build_public_proof_view(result)
+    return _build_generic_view(result)
+
+
+def _render_header(view: ReportView) -> str:
+    badges = "".join(f"<li>{_escape(item)}</li>" for item in view.badges)
+    return (
+        '<header class="report-header">'
+        "<h1>RunEconomy Experiment Report</h1>"
+        f'<ul class="badges" aria-label="Experiment facts">{badges}</ul>'
+        "</header>"
+    )
+
+
+def _render_intervention(view: ReportView) -> str:
+    if view.intervention_kind == "prefix-order":
+        visual = """
+<figure class="prefix-visual" aria-labelledby="prefix-caption">
+  <div class="variant-row">
+    <strong>Baseline</strong>
+    <div class="attempt"><span class="metadata">Run metadata A</span><span class="stable">Stable instructions</span></div>
+    <div class="attempt"><span class="metadata">Run metadata B</span><span class="stable">Stable instructions</span></div>
+    <p>First tokens differ, so the shared prefix stops early.</p>
+  </div>
+  <div class="variant-row">
+    <strong>Candidate</strong>
+    <div class="attempt"><span class="stable">Stable instructions</span><span class="metadata">Run metadata A</span></div>
+    <div class="attempt"><span class="stable">Stable instructions</span><span class="metadata">Run metadata B</span></div>
+    <p>Stable instructions form a reusable shared prefix.</p>
+  </div>
+  <figcaption id="prefix-caption">Synthetic labels show ordering only. No private prompt content is included.</figcaption>
+</figure>"""
+    else:
+        visual = (
+            '<div class="comparison" role="group" aria-label="Baseline and candidate">'
+            f"<article><h3>Baseline</h3><p>{_escape(view.intervention_baseline)}</p></article>"
+            f"<article><h3>Candidate</h3><p>{_escape(view.intervention_candidate)}</p></article>"
+            "</div>"
+        )
+    return f"""
+<section aria-labelledby="intervention-heading">
+  <h2 id="intervention-heading">Intervention Tested</h2>
+  <p>{_escape(view.intervention_intro)}</p>
+  {visual}
+  <p><strong>Why this might help:</strong> {_escape(view.intervention_why)}</p>
+  <p><strong>Control:</strong> {_escape(view.intervention_control)}</p>
+</section>"""
+
+
+def _render_results(view: ReportView) -> str:
+    cards = "".join(
+        '<article class="result-card">'
+        f"<h3>{_escape(card.label)}</h3>"
+        f'<p class="result-value">{_escape(card.value)}</p>'
+        f"<p>{_escape(card.description)}</p>"
+        "</article>"
+        for card in view.result_cards
+    )
+    outcomes = "".join(
+        f"<li><strong>{_escape(label)}:</strong> {_escape(value)}</li>"
+        for label, value in view.outcome_items
+    )
+    position_breakdown = (
+        '<div class="position-breakdown"><h3>Cache reuse by agent call</h3>'
+        + _html_table(
+            view.cache_position_items,
+            ("Agent call", "Mean cached input tokens across both-successful pairs"),
+        )
+        + "</div>"
+        if view.cache_position_items
+        else ""
+    )
+    return f"""
+<section aria-labelledby="results-heading">
+  <h2 id="results-heading">Results</h2>
+  <div class="result-grid">{cards}</div>
+  <p class="qualification"><strong>Important:</strong> {_escape(view.result_qualification)}</p>
+  <ul class="outcome-grid" aria-label="Task outcomes">{outcomes}</ul>
+  {position_breakdown}
+</section>"""
+
+
+def _render_verdict(view: ReportView) -> str:
+    requirements = "".join(
+        '<article class="quality-card">'
+        f"<h3>{_escape(item.question)}</h3>"
+        f"{_html_table(item.rows, ('Measure', 'Recorded result'))}"
+        f"<p>{_escape(item.explanation)}</p>"
+        "</article>"
+        for item in view.quality_requirements
+    )
+    decision_path = "".join(
+        f"<li><span>{_escape(label)}</span><strong>{_escape(value)}</strong></li>"
+        for label, value in view.decision_path
+    )
+    later = "".join(f"<li>{_escape(item)}</li>" for item in view.later_checks)
+    invalid = (
+        f'<p class="invalid-explanation">{_escape(view.invalid_explanation)}</p>'
+        if view.invalid_explanation
+        else ""
+    )
+    requirements_html = (
+        f'<div class="quality-grid">{requirements}</div>' if requirements else ""
+    )
+    later_html = f'<ul class="later-checks">{later}</ul>' if later else ""
+    return f"""
+<section aria-labelledby="verdict-heading">
+  <h2 id="verdict-heading">Verdict</h2>
+  <div class="verdict verdict-{_escape(view.status)}">
+    <p class="verdict-message">{_escape(view.primary_message)}</p>
+    <p>{_escape(view.verdict_explanation)}</p>
+    <p class="canonical-status">Verdict: {_escape(view.status_label)}</p>
+    {invalid}
+  </div>
+  {requirements_html}
+  <ol class="decision-path" aria-label="Decision path">{decision_path}</ol>
+  {later_html}
+  <p class="recommendation"><strong>Recommended next step:</strong> {_escape(view.recommendation)}</p>
+</section>"""
+
+
+def _render_experiment_details(view: ReportView) -> str:
+    facts = _html_table(view.experiment_facts, ("Experiment fact", "Recorded value"))
+    return f"""
+<section aria-labelledby="details-heading">
+  <h2 id="details-heading">Experiment Details</h2>
+  <p>{_escape(view.experiment_intro)}</p>
+  {facts}
+  <p><strong>Controls:</strong> {_escape(view.controls)}</p>
+</section>"""
+
+
+def _render_technical_details(view: ReportView) -> str:
+    details = "".join(
+        f"<details><summary>{_escape(section.label)}</summary>{section.body_html}</details>"
+        for section in view.technical_sections
+    )
+    return f"""
+<section class="technical" aria-label="Technical details">
+  {details}
+</section>"""
+
+
+_REPORT_CSS = """
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; color: #151515; font: 15px/1.55 Arial, Helvetica, sans-serif; }
+main { width: min(1040px, calc(100% - 32px)); margin: 28px auto 64px; }
+.report-header { border-bottom: 2px solid #1f2933; padding-bottom: 16px; margin-bottom: 28px; }
+h1 { margin: 0; font: 700 28px/1.2 Georgia, "Times New Roman", serif; }
+h2 { margin: 34px 0 12px; font: 700 21px/1.25 Georgia, "Times New Roman", serif; }
+h3 { margin: 0 0 8px; font-size: 15px; }
+p { max-width: 880px; margin: 8px 0; }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; padding: 0; list-style: none; }
+.badges li { border: 1px solid #8b949e; padding: 3px 8px; font-size: 13px; }
+.comparison, .result-grid, .quality-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.comparison article, .result-card, .quality-card { border: 1px solid #9aa1a8; padding: 14px; }
+.result-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.result-value { margin: 5px 0; font: 700 27px/1.15 Georgia, "Times New Roman", serif; font-variant-numeric: tabular-nums; }
+.qualification { border-left: 4px solid #4f5963; padding: 10px 12px; background: #f4f5f6; }
+.outcome-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0; list-style: none; }
+.outcome-grid li { border: 1px solid #b5bac0; padding: 9px; }
+.verdict { border: 2px solid #31383f; padding: 16px; }
+.verdict-message { margin: 0 0 8px; font: 700 24px/1.2 Georgia, "Times New Roman", serif; }
+.canonical-status { font-size: 13px; color: #3f464d; }
+.invalid-explanation { font-weight: 700; }
+.decision-path { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0; list-style: none; counter-reset: path; }
+.decision-path li { border-top: 3px solid #343a40; padding: 10px; }
+.decision-path span, .decision-path strong { display: block; }
+.decision-path span { font-size: 13px; color: #4b535b; }
+.later-checks { margin: 10px 0; }
+.recommendation { border: 1px solid #5d646b; padding: 12px; }
+.prefix-visual { margin: 16px 0; padding: 14px; border: 1px solid #8d959d; }
+.variant-row + .variant-row { border-top: 1px solid #c0c5ca; margin-top: 16px; padding-top: 16px; }
+.attempt { display: flex; min-width: 0; margin: 7px 0; font: 12px/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.attempt span { border: 1px solid #4c545c; padding: 7px; overflow-wrap: anywhere; }
+.attempt .stable { flex: 1; background: #eef1f3; }
+.attempt .metadata { background: #fff; }
+figcaption { color: #4b535b; font-size: 12px; }
+.table-wrap { overflow-x: auto; margin: 10px 0 16px; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { border: 1px solid #a5abb1; padding: 7px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+thead th { background: #eef0f2; }
+code { font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+details { border-top: 1px solid #aeb4ba; padding: 9px 0; }
+summary { cursor: pointer; font-weight: 700; }
+summary:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; }
+@media (max-width: 700px) {
+  main { width: min(100% - 20px, 1040px); margin-top: 18px; }
+  .result-grid, .comparison, .quality-grid, .outcome-grid, .decision-path { grid-template-columns: 1fr; }
+  h1 { font-size: 24px; }
+  .attempt { font-size: 11px; }
+}
+"""
+
+
+def render_experiment_html(result: Mapping[str, Any]) -> str:
+    """Render a self-contained experiment report from recorded evidence."""
+
+    view = _build_report_view_model(result)
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RunEconomy Experiment Report</title>
+<style>{_REPORT_CSS}</style>
+</head>
+<body>
+<main>
+{_render_header(view)}
+{_render_intervention(view)}
+{_render_results(view)}
+{_render_verdict(view)}
+{_render_experiment_details(view)}
+{_render_technical_details(view)}
+</main>
+</body>
+</html>"""
+
+
+def _render_markdown(view: ReportView) -> str:
+    lines = ["# RunEconomy Experiment Report", ""]
+    if view.badges:
+        lines.extend([" · ".join(view.badges), ""])
     lines.extend(
         [
+            "## Intervention Tested",
             "",
-            "## Claim boundary",
+            view.intervention_intro,
             "",
-            f"{evaluation_text} An exact output-digest match is not treated as semantic "
-            "correctness. The decision above applies only to the pinned workload, backend, "
-            "hardware, and acceptance thresholds recorded here.",
+            f"- **Baseline:** {view.intervention_baseline}",
+            f"- **Candidate:** {view.intervention_candidate}",
+            f"- **Why this might help:** {view.intervention_why}",
+            f"- **Control:** {view.intervention_control}",
+            "",
+            "## Results",
             "",
         ]
     )
-    return "\n".join(lines)
+    for card in view.result_cards:
+        lines.extend(
+            [
+                f"### {card.label}",
+                "",
+                f"**{card.value}**",
+                "",
+                card.description,
+                "",
+            ]
+        )
+    lines.extend([f"**Important:** {view.result_qualification}", ""])
+    lines.extend(f"- **{label}:** {value}" for label, value in view.outcome_items)
+    if view.cache_position_items:
+        lines.extend(
+            [
+                "",
+                "### Cache reuse by agent call",
+                "",
+                _markdown_table(
+                    view.cache_position_items,
+                    (
+                        "Agent call",
+                        "Mean cached input tokens across both-successful pairs",
+                    ),
+                ),
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Verdict",
+            "",
+            f"### {view.primary_message}",
+            "",
+            view.verdict_explanation,
+            "",
+            f"Verdict: {view.status_label}",
+            "",
+        ]
+    )
+    if view.invalid_explanation:
+        lines.extend([view.invalid_explanation, ""])
+    for requirement in view.quality_requirements:
+        lines.extend(
+            [
+                f"### {requirement.question}",
+                "",
+                _markdown_table(requirement.rows, ("Measure", "Recorded result")),
+                "",
+                requirement.explanation,
+                "",
+            ]
+        )
+    if view.decision_path:
+        lines.extend(["### Decision path", ""])
+        lines.extend(
+            f"1. **{label}{'' if label.endswith('?') else ':'}** {value}"
+            for label, value in view.decision_path
+        )
+        lines.append("")
+    lines.extend(f"- {item}" for item in view.later_checks)
+    if view.later_checks:
+        lines.append("")
+    lines.extend(
+        [
+            f"**Recommended next step:** {view.recommendation}",
+            "",
+            "## Experiment Details",
+            "",
+            view.experiment_intro,
+            "",
+            _markdown_table(
+                view.experiment_facts, ("Experiment fact", "Recorded value")
+            ),
+            "",
+            f"**Controls:** {view.controls}",
+            "",
+            "## Technical Details",
+            "",
+        ]
+    )
+    for section in view.technical_sections:
+        lines.extend(
+            [
+                "<details>",
+                f"<summary>{section.label}</summary>",
+                "",
+                section.body_markdown,
+                "",
+                "</details>",
+                "",
+            ]
+        )
+    return "\n".join(_prose(line) for line in lines).rstrip() + "\n"
+
+
+def render_experiment_markdown(result: Mapping[str, Any]) -> str:
+    """Render the same report view model as accessible Markdown."""
+
+    return _render_markdown(_build_report_view_model(result))
+
+
+def render_public_proof_markdown(result: Mapping[str, Any]) -> str:
+    """Render the public proof case study from its sanitized artifact."""
+
+    if result.get("artifact_kind") != "runeconomy.public_proof":
+        raise ValueError("result is not a RunEconomy public-proof artifact")
+    return _render_markdown(_build_public_proof_view(result))
 
 
 def load_demo_result(case: str = "rejection") -> dict[str, Any]:
@@ -228,594 +1122,7 @@ def load_demo_result(case: str = "rejection") -> dict[str, Any]:
     return payload
 
 
-def _signed_percent(value: Any) -> str:
-    if value is None:
-        return "unknown"
-    return f"{float(value) * 100:+.1f}%"
-
-
-def render_experiment_html(result: Mapping[str, Any]) -> str:
-    """Render a generic report using only fields recorded in an experiment result."""
-
-    if not isinstance(result.get("summary"), dict) or not isinstance(
-        result.get("decision"), dict
-    ):
-        raise ValueError("result must contain summary and decision objects")
-    raw_summary = result["summary"]
-    summary = raw_summary.get("workflow", raw_summary)
-    variants = summary.get("variants")
-    effects = summary.get("effects")
-    if not isinstance(variants, dict) or not isinstance(effects, dict):
-        raise ValueError("result summary must contain variants and effects objects")
-    if not all(
-        isinstance(variants.get(name), dict) for name in ("baseline", "candidate")
-    ):
-        raise ValueError("result summary must contain baseline and candidate variants")
-
-    metric_specs = (
-        ("input_tokens", "Input tokens", 1, False),
-        ("cached_tokens", "Cached tokens", 1, False),
-        ("cache_coverage", "Cache coverage", 1, True),
-        ("server_ttft_ms", "Server TTFT (ms)", 1, False),
-        ("client_ttft_ms", "Client TTFT (ms)", 1, False),
-        ("client_server_ttft_gap_ms", "Client − server TTFT gap (ms)", 1, False),
-        ("total_latency_ms", "Total latency (ms)", 1, False),
-        ("output_tokens", "Output tokens", 1, False),
-        ("task_success", "Task success", 1, True),
-    )
-    metric_rows: list[str] = []
-    for key, label, digits, percentage in metric_specs:
-        baseline_metric = variants["baseline"].get(key)
-        candidate_metric = variants["candidate"].get(key)
-        effect = effects.get(key)
-        if not all(
-            isinstance(item, dict)
-            for item in (baseline_metric, candidate_metric, effect)
-        ):
-            continue
-        baseline_value = baseline_metric.get("mean")
-        candidate_value = candidate_metric.get("mean")
-        delta = effect.get("candidate_minus_baseline_mean")
-        if percentage:
-            baseline_text = _percent(baseline_value)
-            candidate_text = _percent(candidate_value)
-            delta_text = "unknown" if delta is None else f"{float(delta) * 100:.1f} pp"
-            interval_text = _percent_interval(effect)
-        else:
-            baseline_text = _number(baseline_value, digits)
-            candidate_text = _number(candidate_value, digits)
-            delta_text = _number(delta, digits)
-            interval_text = _interval(effect, digits)
-        metric_rows.append(
-            "<tr>"
-            f"<td>{html.escape(label)}</td>"
-            f'<td class="number">{html.escape(baseline_text)}</td>'
-            f'<td class="number">{html.escape(candidate_text)}</td>'
-            f'<td class="number">{html.escape(delta_text)}</td>'
-            f'<td class="number">{html.escape(interval_text)}</td>'
-            "</tr>"
-        )
-
-    outcome_rows: list[str] = []
-    evaluated_total = 0
-    for name in ("baseline", "candidate"):
-        outcomes = variants[name].get("outcomes", {})
-        if not isinstance(outcomes, dict):
-            outcomes = {}
-        evaluated = int(outcomes.get("evaluated_count", 0) or 0)
-        evaluated_total += evaluated
-        outcome_rows.append(
-            "<tr>"
-            f"<td>{name.title()}</td>"
-            f'<td class="number">{html.escape(_percent(outcomes.get("completed_rate")))}</td>'
-            f'<td class="number">{html.escape(_percent(outcomes.get("task_success_rate")))}</td>'
-            f'<td class="number">{html.escape(_percent_interval({"confidence_interval": outcomes.get("task_success_95_ci")}))}</td>'
-            f'<td class="number">{evaluated}</td>'
-            "</tr>"
-        )
-
-    decision = result["decision"]
-    check_rows = []
-    for check in decision.get("checks", []):
-        if not isinstance(check, dict):
-            continue
-        check_rows.append(
-            "<tr>"
-            f"<td><code>{html.escape(str(check.get('name', 'unknown')))}</code></td>"
-            f"<td>{'yes' if check.get('required', True) else 'no'}</td>"
-            f"<td>{'yes' if check.get('passed') else 'no'}</td>"
-            "</tr>"
-        )
-    provenance = result.get("provenance", {})
-    if not isinstance(provenance, dict):
-        provenance = {}
-    workflow_note = ""
-    if summary is not raw_summary:
-        workflow_note = (
-            "<p><strong>Workflow aggregation:</strong> "
-            f"{html.escape(str(summary.get('step_count', 'unknown')))} sequential "
-            "inference steps per workflow unit.</p>"
-        )
-    evaluation_note = (
-        "Generated output was evaluated locally. Generated text is not stored in the "
-        "trial result."
-        if evaluated_total
-        else "Task success was not evaluated for this experiment."
-    )
-    evaluator_errors = result.get("evaluator_errors", [])
-    error_count = len(evaluator_errors) if isinstance(evaluator_errors, list) else 0
-    error_note = (
-        f"<p><strong>Evaluator infrastructure errors:</strong> {error_count}. "
-        "Affected trials have unknown task success and cannot support a verified decision.</p>"
-        if error_count
-        else ""
-    )
-    experiment_id = html.escape(str(result.get("experiment_id", "unknown")))
-    status = html.escape(str(decision.get("status", "unknown")))
-    reason = html.escape(str(decision.get("reason", "No reason recorded.")))
-    predeclared = raw_summary.get("predeclared_prediction")
-    prediction_note = ""
-    if isinstance(predeclared, Mapping):
-        prediction_note = (
-            "<h2>Predeclared hypothesis</h2><table><tbody>"
-            f"<tr><th>Causal mechanism</th><td>{html.escape(str(predeclared.get('causal_mechanism', 'unknown')))}</td></tr>"
-            f"<tr><th>Prediction</th><td><code>{html.escape(str(predeclared.get('metric', 'unknown')))}</code> should {html.escape(str(predeclared.get('direction', 'unknown')))}</td></tr>"
-            f"<tr><th>Assessment</th><td>{html.escape(str(predeclared.get('status', 'unknown')))}</td></tr>"
-            f"<tr><th>Candidate − baseline</th><td>{html.escape(_number(predeclared.get('candidate_minus_baseline_mean')))}</td></tr>"
-            f"<tr><th>Paired 95% interval</th><td>{html.escape(str(predeclared.get('confidence_interval', 'unknown')))}</td></tr>"
-            "</tbody></table>"
-        )
-
-    return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RunEconomy NegativeSplit report — {experiment_id}</title>
-<style>
-body {{ margin: 0; background: #fff; color: #111; font: 14px/1.45 Arial, sans-serif; }}
-main {{ width: min(980px, calc(100% - 32px)); margin: 32px auto 64px; }}
-header {{ border-bottom: 2px solid #111; padding-bottom: 12px; }}
-h1 {{ margin: 0 0 4px; font: 700 25px/1.2 Georgia, serif; }}
-h2 {{ margin: 26px 0 8px; font: 700 18px/1.2 Georgia, serif; }}
-table {{ width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-variant-numeric: tabular-nums; }}
-th, td {{ border: 1px solid #aaa; padding: 7px 8px; text-align: left; vertical-align: top; }}
-th {{ background: #eee; }} .number {{ text-align: right; white-space: nowrap; }}
-code {{ font: 12px ui-monospace, monospace; overflow-wrap: anywhere; }}
-.note {{ color: #444; }} footer {{ border-top: 1px solid #999; margin-top: 28px; padding-top: 10px; color: #555; }}
-</style></head><body><main>
-<header><h1>RunEconomy NegativeSplit report</h1><div>Experiment: <code>{experiment_id}</code></div></header>
-<h2>Decision</h2><p><strong>{status}</strong> — {reason}</p>{workflow_note}{error_note}
-<h2>Outcomes</h2><table><thead><tr><th>Variant</th><th class="number">Completion rate</th><th class="number">Task-success rate</th><th class="number">Exact 95% CI</th><th class="number">Evaluated trials</th></tr></thead><tbody>{"".join(outcome_rows)}</tbody></table>
-<h2>Inference results</h2><table><thead><tr><th>Metric</th><th class="number">Baseline mean</th><th class="number">Candidate mean</th><th class="number">Candidate − baseline</th><th class="number">95% interval</th></tr></thead><tbody>{"".join(metric_rows)}</tbody></table>
-{prediction_note}
-<h2>Verification checks</h2><table><thead><tr><th>Check</th><th>Required</th><th>Passed</th></tr></thead><tbody>{"".join(check_rows)}</tbody></table>
-<h2>Recorded environment</h2><table><tbody>
-<tr><th>Model</th><td><code>{html.escape(str(provenance.get("model", "unknown")))}</code></td></tr>
-<tr><th>Model revision</th><td><code>{html.escape(str(provenance.get("model_revision", "unknown")))}</code></td></tr>
-<tr><th>Backend</th><td><code>{html.escape(str(provenance.get("backend_kind", "vllm")))} {html.escape(str(provenance.get("backend_version", "unknown")))}</code></td></tr>
-<tr><th>API dialect</th><td><code>{html.escape(str(provenance.get("api_dialect", "unknown")))}</code></td></tr>
-<tr><th>Hardware</th><td>{html.escape(str(provenance.get("hardware", "unknown")))}</td></tr>
-<tr><th>Cache treatment</th><td><code>{html.escape(str(provenance.get("cache_treatment", "unknown")))}</code></td></tr>
-<tr><th>Cache isolation</th><td><code>{html.escape(str(provenance.get("cache_isolation", "unknown")))}</code></td></tr>
-<tr><th>Reproducibility manifest SHA-256</th><td><code>{html.escape(str(provenance.get("reproducibility_manifest_sha256", provenance.get("manifest_sha256", "unknown"))))}</code></td></tr>
-</tbody></table>
-<h2>Claim boundary</h2><p>{html.escape(evaluation_note)} Exact output-digest agreement is not treated as semantic correctness. The decision applies only to the recorded workload, backend, hardware, and acceptance thresholds.</p>
-<footer>Generated from recorded RunEconomy aggregate result fields. No remote scripts, fonts, or network resources are used.</footer>
-</main></body></html>"""
-
-
-def _render_public_proof_html(result: Mapping[str, Any]) -> str:
-    """Render the aggregate-only, quality-gated public proof."""
-
-    if result.get("artifact_kind") != "runeconomy.public_proof":
-        raise ValueError("result is not a RunEconomy public-proof artifact")
-    decision = result.get("decision", {})
-    experiment = result.get("experiment", {})
-    outcomes = result.get("outcomes", {})
-    effects = result.get("conditional_effects", {})
-    gates = result.get("gates", {})
-    provenance = result.get("provenance", {})
-    hashes = result.get("frozen_hashes", {})
-    evidence = result.get("evidence_integrity", {})
-    failures = result.get("failure_categories", {})
-    claim = result.get("claim_boundary", {})
-    paired_success = result.get("paired_success", {})
-    intervention = result.get("intervention", {})
-    limitations = result.get("limitations", [])
-    if decision.get("status") != "invalid":
-        raise ValueError("the flagship public proof must retain an invalid verdict")
-
-    def effect_row(key: str, label: str) -> str:
-        item = effects.get(key, {})
-        interval = item.get("confidence_interval")
-        interval_text = (
-            f"[{_number(interval[0], 2)}, {_number(interval[1], 2)}]"
-            if isinstance(interval, list) and len(interval) == 2
-            else "unavailable"
-        )
-        return (
-            "<tr>"
-            f"<td>{html.escape(label)}</td>"
-            f'<td class="number">{html.escape(_number(item.get("candidate_minus_baseline_mean"), 2))}</td>'
-            f'<td class="number">{html.escape(interval_text)}</td>'
-            f'<td class="number">{html.escape(str(item.get("paired_count", 0)))}</td>'
-            "</tr>"
-        )
-
-    outcome_rows = []
-    for variant in ("baseline", "candidate"):
-        item = outcomes.get(variant, {})
-        interval = item.get("task_success_95_ci") or [None, None]
-        outcome_rows.append(
-            "<tr>"
-            f"<td>{variant.title()}</td>"
-            f'<td class="number">{item.get("task_success_count", "unknown")} / {item.get("attempt_count", "unknown")}</td>'
-            f'<td class="number">{html.escape(_percent(item.get("task_success_rate")))}</td>'
-            f'<td class="number">{html.escape(_percent(interval[0], 2))}–{html.escape(_percent(interval[1], 2))}</td>'
-            f'<td class="number">{html.escape(_percent(item.get("completed_rate")))}</td>'
-            "</tr>"
-        )
-
-    check_rows = []
-    for item in gates.get("checks", []):
-        passed = bool(item.get("passed"))
-        check_rows.append(
-            "<tr>"
-            f"<td><code>{html.escape(str(item.get('name', 'unknown')))}</code></td>"
-            f"<td>{html.escape(str(item.get('threshold', 'unknown')))}</td>"
-            f'<td class="{"met" if passed else "failed"}">{"MET" if passed else "FAILED"}</td>'
-            "</tr>"
-        )
-
-    family_text = ", ".join(
-        f"{html.escape(str(name))}: {count}"
-        for name, count in experiment.get("task_family_counts", {}).items()
-    )
-    failed_names = ", ".join(
-        f"<code>{html.escape(str(name))}</code>"
-        for name in decision.get("failed_quality_gates", [])
-    )
-    not_supported = "".join(
-        f"<li>{html.escape(str(item))}</li>"
-        for item in claim.get("not_supported", [])
-    )
-    gate_order = "".join(
-        "<li>"
-        f"<code>{html.escape(str(item.get('stage', 'unknown')))}</code> — "
-        f"{html.escape(str(item.get('observed_result', 'unknown')))}"
-        f"{' <strong>(decisive)</strong>' if item.get('decisive') else ''}"
-        "</li>"
-        for item in decision.get("gating_order", [])
-    )
-    limitation_items = "".join(
-        f"<li>{html.escape(str(item))}</li>" for item in limitations
-    )
-    hash_rows = "".join(
-        "<tr>"
-        f"<th>{html.escape(str(name).replace('_', ' ').title())}</th>"
-        f"<td><code>{html.escape(str(value))}</code></td>"
-        "</tr>"
-        for name, value in hashes.items()
-    )
-    paired_interval = paired_success.get("confidence_interval") or [None, None]
-    lower_bound = paired_success.get("one_sided_lower_bound")
-    acceptance = gates.get("predeclared", {})
-    noninferiority_margin = acceptance.get("max_task_success_regression")
-
-    return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RunEconomy NegativeSplit — rejected candidate</title>
-<style>
-* {{ box-sizing: border-box; }}
-body {{ margin: 0; background: #fff; color: #111; font: 14px/1.45 Arial, Helvetica, sans-serif; }}
-main {{ width: min(980px, calc(100% - 32px)); margin: 32px auto 64px; }}
-header {{ border-bottom: 3px solid #111; padding-bottom: 14px; }}
-h1 {{ margin: 0 0 5px; font: 700 26px/1.2 Georgia, "Times New Roman", serif; }}
-h2 {{ margin: 28px 0 8px; font: 700 18px/1.25 Georgia, "Times New Roman", serif; }}
-.verdict {{ border: 3px double #111; margin: 22px 0; padding: 14px; }}
-.verdict h2 {{ margin: 0 0 8px; font-size: 22px; }}
-.failed {{ font-weight: 700; text-decoration: underline; }}
-.met {{ font-weight: 700; }}
-.conditional {{ border-left: 5px solid #777; padding-left: 12px; }}
-.note {{ color: #333; }}
-table {{ width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-variant-numeric: tabular-nums; }}
-th, td {{ border: 1px solid #999; padding: 7px 8px; text-align: left; vertical-align: top; }}
-th {{ background: #eee; }} td.number, th.number {{ text-align: right; white-space: nowrap; }}
-code {{ font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }}
-footer {{ border-top: 1px solid #999; margin-top: 30px; padding-top: 10px; color: #555; font-size: 12px; }}
-@media(max-width:700px) {{ body {{ font-size: 13px; }} th,td {{ padding: 5px; }} main {{ width:calc(100% - 20px); }} }}
-</style></head><body><main>
-<header><h1>RunEconomy NegativeSplit</h1><div>Frozen real-agent held-out proof · aggregate-only public artifact</div></header>
-
-<section class="verdict">
-<h2>INVALID — quality gates failed</h2>
-<p><strong>RunEconomy declined to verify this candidate.</strong> {html.escape(str(decision.get("reason", "No reason recorded.")))}.</p>
-<p>Failed predeclared gates: {failed_names or "unknown"}.</p>
-</section>
-
-<h2>Intervention tested</h2>
-<table><tbody>
-<tr><th>Baseline</th><td>{html.escape(str(intervention.get('baseline', 'unknown')))}.</td></tr>
-<tr><th>Candidate</th><td>{html.escape(str(intervention.get('candidate', 'unknown')))}.</td></tr>
-<tr><th>Changed property</th><td>{html.escape(str(intervention.get('changed_property', 'unknown')))}.</td></tr>
-<tr><th>Held constant</th><td>{html.escape(str(intervention.get('held_constant', 'unknown')))}.</td></tr>
-<tr><th>Expected mechanism</th><td>{html.escape(str(intervention.get('expected_mechanism', 'unknown')))}.</td></tr>
-</tbody></table>
-
-<h2>Task-quality result</h2>
-<table><thead><tr><th>Variant</th><th class="number">Successes</th><th class="number">Success rate</th><th class="number">Exact 95% interval</th><th class="number">Process completion</th></tr></thead><tbody>{''.join(outcome_rows)}</tbody></table>
-<p>The paired candidate-minus-baseline success estimate was {_percentage_points(paired_success.get("candidate_minus_baseline_mean"))}; its 95% interval was {_percentage_points(paired_interval[0], 2)} to {_percentage_points(paired_interval[1], 2)}, and the one-sided lower bound was {_percentage_points(lower_bound, 2)}. The predeclared non-inferiority margin was −{_percentage_points(noninferiority_margin, 2)}.</p>
-
-<h2>Predeclared acceptance checks</h2>
-<table><thead><tr><th>Check</th><th>Threshold</th><th>Result</th></tr></thead><tbody>{''.join(check_rows)}</tbody></table>
-
-<h2>Decision gates, in order</h2>
-<ol>{gate_order}</ol>
-<p><strong>Decisive stage:</strong> <code>{html.escape(str(decision.get('decisive_stage', 'unknown')))}</code>. The baseline validity failure made the verdict <code>invalid</code> before successful-pair latency could verify the candidate. Paired non-inferiority also failed independently.</p>
-
-<section class="conditional">
-<h2>Conditional observations only — not verified improvements</h2>
-<p>The candidate increased cache reuse and reduced TTFT and measured successful-task latency in this run. These paired effects use only the {effects.get('workflow_latency_ms', {}).get('paired_count', 'unknown')} task pairs where both variants succeeded. Failures did not enter the latency sample, and the failed quality gates prevent a verified performance claim.</p>
-<table><thead><tr><th>Candidate − baseline metric</th><th class="number">Mean effect</th><th class="number">Paired 95% interval</th><th class="number">Pairs</th></tr></thead><tbody>
-{effect_row('cached_input_tokens', 'Cached input tokens')}
-{effect_row('server_ttft_ms', 'Server TTFT (ms)')}
-{effect_row('client_ttft_ms', 'Client TTFT (ms)')}
-{effect_row('workflow_latency_ms', 'End-to-end workflow latency (ms)')}
-{effect_row('critical_path_ms', 'Critical-path latency (ms)')}
-{effect_row('inference_span_ms', 'Inference-span latency (ms)')}
-</tbody></table>
-</section>
-
-<h2>Frozen experiment design</h2>
-<table><tbody>
-<tr><th>Workload</th><td>{experiment.get('task_count', 'unknown')} frozen held-out tasks; {family_text or 'family counts unavailable'}.</td></tr>
-<tr><th>Order</th><td><code>{html.escape(str(experiment.get('order', 'unknown')))}</code>, seed <code>{html.escape(str(experiment.get('seed', 'unknown')))}</code>.</td></tr>
-<tr><th>Primary outcome</th><td>{html.escape(str(experiment.get('primary_metric', 'unknown')))}.</td></tr>
-<tr><th>Latency population</th><td>{html.escape(str(experiment.get('latency_population', 'unknown')))}.</td></tr>
-<tr><th>Reuse restriction</th><td>This {experiment.get('task_count', 'unknown')}-task held-out workload has been consumed. It cannot be rerun or retuned and presented as fresh held-out evidence.</td></tr>
-</tbody></table>
-
-<h2>Recorded environment</h2>
-<table><tbody>
-<tr><th>Model</th><td><code>{html.escape(str(provenance.get('model', 'unknown')))}</code></td></tr>
-<tr><th>Model revision</th><td><code>{html.escape(str(provenance.get('model_revision', 'unknown')))}</code></td></tr>
-<tr><th>Backend</th><td><code>{html.escape(str(provenance.get('backend', 'unknown')))} {html.escape(str(provenance.get('backend_version', 'unknown')))}</code></td></tr>
-<tr><th>API dialect</th><td><code>{html.escape(str(provenance.get('api_dialect', 'unknown')))}</code></td></tr>
-<tr><th>Hardware</th><td>{html.escape(str(provenance.get('hardware', 'unknown')))}</td></tr>
-<tr><th>Chat-template digest</th><td><code>{html.escape(str(provenance.get('chat_template_digest', 'unknown')))}</code></td></tr>
-</tbody></table>
-
-<h2>Evidence integrity</h2>
-<p>{evidence.get('attempt_count', 'unknown')} attempts retained status evidence; {evidence.get('valid_trace_count', 'unknown')} valid traces and {evidence.get('complete_dag_count', 'unknown')} complete explicit DAGs were recorded. Environment identity was complete and stable: {str(bool(evidence.get('environment_identity_complete') and evidence.get('environment_identity_stable'))).lower()}. Raw attempts and generated content are not included.</p>
-<p>High-level failures: {failures.get('task_quality_failure', 'unknown')} task-quality failures; {failures.get('timeout', 'unknown')} timeouts; {failures.get('process_or_infrastructure_failure', 'unknown')} process/infrastructure failures; {failures.get('evaluator_failure', 'unknown')} evaluator failures; {failures.get('invalid_trace', 'unknown')} invalid traces.</p>
-
-<h2>Frozen hashes</h2><table><tbody>{hash_rows}</tbody></table>
-
-<h2>Claim boundary</h2>
-<p><strong>Supported:</strong> {html.escape(str(claim.get('supported', 'unknown')))}</p>
-<p><strong>Not supported:</strong></p><ul>{not_supported}</ul>
-<h2>Experiment limitations</h2><ul>{limitation_items}</ul>
-<p class="note">The favorable mechanism and latency measurements are conditional observations. This report is not a positive benchmark claim.</p>
-
-<footer>Generated from a checked-in aggregate-only artifact. No prompts, task answers, model output, stderr, credentials, endpoints, local paths, raw traces, or private workload records are embedded. No remote scripts, fonts, or network resources are used.</footer>
-</main></body></html>"""
-
-
 def render_demo_html(result: Mapping[str, Any]) -> str:
-    """Render either the flagship rejection or the historical static demo."""
+    """Render either the flagship rejection or historical experiment result."""
 
-    if result.get("artifact_kind") == "runeconomy.public_proof":
-        return _render_public_proof_html(result)
-    return _render_historical_demo_html(result)
-
-
-def _render_historical_demo_html(result: Mapping[str, Any]) -> str:
-    """Render the repository-agent demonstration from its bundled evidence."""
-
-    if not isinstance(result.get("summary"), dict) or not isinstance(
-        result.get("decision"), dict
-    ):
-        raise ValueError("result must contain summary and decision objects")
-    raw_summary = result["summary"]
-    summary = raw_summary.get("workflow", raw_summary)
-    variants = summary["variants"]
-    effects = summary["effects"]
-    decision = result["decision"]
-    provenance = result.get("provenance", {})
-    sanitization = result.get("sanitization", {})
-    context = result.get("measurement_context", {})
-
-    def mean(variant: str, metric: str) -> Any:
-        return variants[variant][metric]["mean"]
-
-    baseline_input = mean("baseline", "input_tokens")
-    candidate_input = mean("candidate", "input_tokens")
-    baseline_latency = mean("baseline", "total_latency_ms")
-    candidate_latency = mean("candidate", "total_latency_ms")
-    baseline_success = variants["baseline"]["outcomes"]["task_success_rate"]
-    candidate_success = variants["candidate"]["outcomes"]["task_success_rate"]
-    input_effect = effects["input_tokens"]
-    latency_effect = effects["total_latency_ms"]
-    latency_ci = latency_effect.get("bootstrap_95_ci") or [None, None]
-    status = html.escape(str(decision.get("status", "unknown")))
-    experiment_id = html.escape(str(result.get("experiment_id", "unknown")))
-    model = html.escape(str(provenance.get("model", "unknown")))
-    hardware = html.escape(str(provenance.get("hardware", "unknown")))
-    backend = html.escape(str(provenance.get("backend_version", "unknown")))
-    measured_at = html.escape(str(result.get("created_at", "unknown")))
-    raw_trials = html.escape(str(sanitization.get("raw_trial_count", "unknown")))
-    manifest_sha = html.escape(
-        str(provenance.get("reproducibility_manifest_sha256", "unknown"))
-    )
-    legacy_manifest_sha = html.escape(
-        str(provenance.get("legacy_manifest_sha256", "unknown"))
-    )
-    baseline_tools = html.escape(str(context.get("baseline_tool_count", "unknown")))
-    candidate_tools = html.escape(str(context.get("candidate_tool_count", "unknown")))
-    measured_pairs = html.escape(
-        str(
-            context.get(
-                "measured_workflow_pair_count",
-                input_effect.get("paired_count", "unknown"),
-            )
-        )
-    )
-    warmup_pairs = html.escape(
-        str(context.get("warmup_workflow_pair_count", "unknown"))
-    )
-    measured_calls = html.escape(
-        str(context.get("measured_inference_call_count", "unknown"))
-    )
-    warmup_calls = html.escape(
-        str(context.get("warmup_inference_call_count", "unknown"))
-    )
-    evaluator_kind = html.escape(str(context.get("evaluator_kind", "unknown")))
-    candidate_selection = html.escape(
-        str(context.get("candidate_selection", "unknown"))
-    )
-    workflow_steps = html.escape(str(context.get("workflow_step_count", "unknown")))
-    candidate_tool_names = context.get("candidate_tool_names", [])
-    candidate_tools_text = (
-        ", ".join(
-            f"<code>{html.escape(str(name))}</code>" for name in candidate_tool_names
-        )
-        or "not recorded"
-    )
-    changed_fields = context.get("changed_request_fields", [])
-    changed_fields_text = (
-        ", ".join(f"<code>{html.escape(str(name))}</code>" for name in changed_fields)
-        or "not recorded"
-    )
-    raw_result_sha = html.escape(str(sanitization.get("raw_result_sha256", "unknown")))
-
-    server_baseline = mean("baseline", "server_ttft_ms")
-    server_candidate = mean("candidate", "server_ttft_ms")
-    server_effect = effects["server_ttft_ms"]
-    server_ci = server_effect.get("bootstrap_95_ci") or [None, None]
-    client_baseline = mean("baseline", "client_ttft_ms")
-    client_candidate = mean("candidate", "client_ttft_ms")
-    client_effect = effects["client_ttft_ms"]
-    client_ci = client_effect.get("bootstrap_95_ci") or [None, None]
-    success_effect = effects["task_success"]
-    success_ci = success_effect.get("confidence_interval") or [None, None]
-    baseline_success_ci = variants["baseline"]["outcomes"].get(
-        "task_success_95_ci"
-    ) or [None, None]
-    candidate_success_ci = variants["candidate"]["outcomes"].get(
-        "task_success_95_ci"
-    ) or [None, None]
-    baseline_gap = mean("baseline", "client_server_ttft_gap_ms")
-    candidate_gap = mean("candidate", "client_server_ttft_gap_ms")
-
-    check_rows = []
-    for check in decision.get("checks", []):
-        required = check.get("required", True)
-        passed = bool(check.get("passed"))
-        check_rows.append(
-            "<tr>"
-            f"<td><code>{html.escape(str(check.get('name', 'unknown')))}</code></td>"
-            f"<td>{'required' if required else 'informational'}</td>"
-            f'<td class="{"pass" if passed else ""}">'
-            f"{'PASS' if passed else 'NOT MET'}</td>"
-            "</tr>"
-        )
-
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RunEconomy NegativeSplit report — {experiment_id}</title>
-<style>
-* {{ box-sizing: border-box; }}
-body {{ margin: 0; background: #fff; color: #111; font: 14px/1.45 Arial, Helvetica, sans-serif; }}
-main {{ width: min(980px, calc(100% - 32px)); margin: 32px auto 64px; }}
-header {{ border-bottom: 2px solid #111; padding-bottom: 14px; margin-bottom: 24px; }}
-h1 {{ margin: 0 0 4px; font: 700 26px/1.2 Georgia, "Times New Roman", serif; }}
-h2 {{ margin: 28px 0 8px; font: 700 18px/1.25 Georgia, "Times New Roman", serif; }}
-p {{ max-width: 880px; margin: 8px 0; }}
-.subtle {{ color: #555; }}
-.note {{ color: #333; font-size: 13px; }}
-table {{ width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-variant-numeric: tabular-nums; }}
-th, td {{ border: 1px solid #aaa; padding: 7px 8px; text-align: left; vertical-align: top; }}
-th {{ background: #eee; font-weight: 700; }}
-td.number, th.number {{ text-align: right; white-space: nowrap; }}
-code {{ font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }}
-.pass {{ font-weight: 700; }}
-ul {{ margin-top: 6px; padding-left: 22px; }}
-footer {{ border-top: 1px solid #999; margin-top: 30px; padding-top: 10px; color: #555; font-size: 12px; }}
-@media(max-width: 700px) {{ body {{ font-size: 13px; }} th, td {{ padding: 5px; }} main {{ width: calc(100% - 20px); }} }}
-</style>
-</head>
-<body><main>
-<header>
-  <h1>RunEconomy NegativeSplit report</h1>
-  <div>Experiment: <code>{experiment_id}</code></div>
-  <div class="subtle">Recorded at {measured_at}</div>
-</header>
-
-<h2>Result</h2>
-<p><strong>Runner decision:</strong> {status}.</p>
-<p>The runner compared a baseline containing {baseline_tools} tool definitions per request with a candidate containing {candidate_tools}. In this pinned replay, the candidate used fewer input tokens and had lower summed inference latency. Both variants had a {_percent(candidate_success)} workflow evaluator pass rate.</p>
-<p class="note"><strong>Why this is inconclusive:</strong> the measured latency effect is positive evidence, but the candidate allowlist was not selected on a separate calibration workload and fifteen agreeing outcome pairs do not establish a zero-regression task-success margin.</p>
-
-<h2>Measured workflow results</h2>
-<table>
-<thead><tr><th>Metric</th><th class="number">Baseline mean</th><th class="number">Candidate mean</th><th class="number">Candidate − baseline</th><th class="number">Relative change</th><th class="number">95% interval for difference</th></tr></thead>
-<tbody>
-<tr><td>Input tokens, summed over two inference calls</td><td class="number">{_number(baseline_input, 0)}</td><td class="number">{_number(candidate_input, 0)}</td><td class="number">{_number(input_effect.get("candidate_minus_baseline_mean"), 0)}</td><td class="number">{_signed_percent(input_effect.get("relative_change"))}</td><td class="number">[{_number(input_effect.get("bootstrap_95_ci")[0], 0)}, {_number(input_effect.get("bootstrap_95_ci")[1], 0)}]</td></tr>
-<tr><td>Server TTFT, summed (ms)</td><td class="number">{_number(server_baseline, 1)}</td><td class="number">{_number(server_candidate, 1)}</td><td class="number">{_number(server_effect.get("candidate_minus_baseline_mean"), 1)}</td><td class="number">{_signed_percent(server_effect.get("relative_change"))}</td><td class="number">[{_number(server_ci[0], 1)}, {_number(server_ci[1], 1)}]</td></tr>
-<tr><td>Client TTFT, summed (ms)</td><td class="number">{_number(client_baseline, 1)}</td><td class="number">{_number(client_candidate, 1)}</td><td class="number">{_number(client_effect.get("candidate_minus_baseline_mean"), 1)}</td><td class="number">{_signed_percent(client_effect.get("relative_change"))}</td><td class="number">[{_number(client_ci[0], 1)}, {_number(client_ci[1], 1)}]</td></tr>
-<tr><td>Client − server TTFT gap, summed (ms)</td><td class="number">{_number(baseline_gap, 1)}</td><td class="number">{_number(candidate_gap, 1)}</td><td class="number">{_number(effects["client_server_ttft_gap_ms"].get("candidate_minus_baseline_mean"), 1)}</td><td class="number">{_signed_percent(effects["client_server_ttft_gap_ms"].get("relative_change"))}</td><td class="number">{_interval(effects["client_server_ttft_gap_ms"], 1)}</td></tr>
-<tr><td>Inference latency, summed (ms)</td><td class="number">{_number(baseline_latency, 1)}</td><td class="number">{_number(candidate_latency, 1)}</td><td class="number">{_number(latency_effect.get("candidate_minus_baseline_mean"), 1)}</td><td class="number">{_signed_percent(latency_effect.get("relative_change"))}</td><td class="number">[{_number(latency_ci[0], 1)}, {_number(latency_ci[1], 1)}]</td></tr>
-<tr><td>Workflow evaluator pass rate</td><td class="number">{_percent(baseline_success)} (exact CI {_percent(baseline_success_ci[0])}–{_percent(baseline_success_ci[1])})</td><td class="number">{_percent(candidate_success)} (exact CI {_percent(candidate_success_ci[0])}–{_percent(candidate_success_ci[1])})</td><td class="number">{float(success_effect.get("candidate_minus_baseline_mean", 0)) * 100:.1f} percentage points</td><td class="number">{_signed_percent(success_effect.get("relative_change"))}</td><td class="number">[{float(success_ci[0]) * 100:.1f}, {float(success_ci[1]) * 100:.1f}] percentage points</td></tr>
-</tbody></table>
-
-<h2>Experiment design</h2>
-<table><tbody>
-<tr><th>Workflow unit</th><td>{workflow_steps} sequential inference calls treated as critical-path steps. Reported workflow latency is their sum and excludes fixture access and tool runtime.</td></tr>
-<tr><th>Baseline</th><td>{baseline_tools} tool definitions on each request.</td></tr>
-<tr><th>Candidate</th><td>{candidate_tools} tool definitions on each request: {candidate_tools_text}.</td></tr>
-<tr><th>Changed request field</th><td>{changed_fields_text}. Within each case, the baseline and candidate request objects otherwise matched.</td></tr>
-<tr><th>Evaluation</th><td>{evaluator_kind}.</td></tr>
-<tr><th>Candidate selection</th><td><code>{candidate_selection}</code>; no held-out evaluation workload was recorded.</td></tr>
-<tr><th>Measured sample</th><td>{measured_pairs} paired workflows = {measured_calls} measured inference calls.</td></tr>
-<tr><th>Warmup sample</th><td>{warmup_pairs} paired workflows = {warmup_calls} warmup inference calls.</td></tr>
-<tr><th>Total retained before sanitization</th><td>{raw_trials} inference trial records.</td></tr>
-</tbody></table>
-
-<h2>Acceptance checks</h2>
-<table><thead><tr><th>Check</th><th>Role in decision</th><th>Recorded result</th></tr></thead>
-<tbody>{"".join(check_rows)}</tbody></table>
-
-<h2>Recorded environment</h2>
-<table><tbody>
-<tr><th>Model</th><td><code>{model}</code></td></tr>
-<tr><th>Model revision</th><td><code>{html.escape(str(provenance.get("model_revision", "unknown")))}</code></td></tr>
-<tr><th>Backend</th><td>vLLM <code>{backend}</code></td></tr>
-<tr><th>Hardware</th><td>{hardware}</td></tr>
-<tr><th>Cache treatment</th><td><code>{html.escape(str(provenance.get("cache_treatment", "unknown")))}</code></td></tr>
-<tr><th>Trial order</th><td><code>{html.escape(str(provenance.get("order", "unknown")))}</code></td></tr>
-<tr><th>Reproducibility manifest fingerprint</th><td><code>{manifest_sha}</code></td></tr>
-<tr><th>Legacy private-manifest fingerprint</th><td><code>{legacy_manifest_sha}</code></td></tr>
-</tbody></table>
-
-<h2>Provenance note</h2>
-<p>The checked-in recorded manifest preserves the measured prompt and fixture content while replacing the private endpoint and credential-variable name. The reproducibility fingerprint excludes only those transport locations. The legacy fingerprint remains recorded for the original private resolved manifest.</p>
-
-<h2>Limitations and claim boundary</h2>
-<ul>
-  <li>The workload was a fixture-backed repository-analysis replay, not a live autonomous agent executing arbitrary tools.</li>
-  <li>The workflow evaluator used two deterministic regex checks. “100% pass rate” refers to those checks, not an independent assessment of general answer quality.</li>
-  <li>The exact 95% interval for each 15/15 pass rate extends below 100%, and the conservative paired interval includes a material regression; agreement is not proof of zero failure probability.</li>
-  <li>The three-tool candidate allowlist was not shown to be predeclared or selected on a separate calibration workload.</li>
-  <li>The measurement used one pinned small model, one A10 GPU, sequential traffic, and cold-cache treatment.</li>
-  <li>Client TTFT exceeded server TTFT by {_number(baseline_gap, 1)} ms for the baseline and {_number(candidate_gap, 1)} ms for the candidate on average, so proxy and network overhead remain visible.</li>
-  <li>The latency metric sums two inference calls and excludes fixture access and tool runtime.</li>
-  <li>The experiment does not establish behavior under high concurrency, multiple replicas, larger models, SGLang, or other workloads.</li>
-</ul>
-
-<h2>Sanitization</h2>
-<p>This HTML was generated from a checked-in aggregate derived from the local raw result. Performance measurements are recomputed from the raw trials; the task-success intervals, evidence review, and verdict use the repaired post-measurement methodology. Per-trial records, prompt token IDs, output digests, generated output, and request content are not embedded in this report.</p>
-<p>Local raw-result SHA-256 recorded during sanitization: <code>{raw_result_sha}</code>.</p>
-
-<footer>No remote scripts, fonts, or network resources are used.</footer>
-</main></body></html>"""
+    return render_experiment_html(result)

@@ -12,7 +12,6 @@ from runeconomy.experiments import ExperimentManifest, ExperimentValidationError
 from runeconomy.models import Trace
 from tests.test_experiments import _manifest
 
-
 ROOT = Path(__file__).parents[1]
 
 
@@ -42,9 +41,7 @@ class ExperimentInitTests(unittest.TestCase):
         artifact = initialize_experiment(finding)
 
         self.assertEqual(artifact["generation_status"], "unresolved")
-        self.assertEqual(
-            artifact["artifact_type"], "runeconomy.experiment_skeleton"
-        )
+        self.assertEqual(artifact["artifact_type"], "runeconomy.experiment_skeleton")
         paths = {item["path"] for item in artifact["unresolved_fields"]}
         self.assertIn("finding.unsupported_reason", paths)
         self.assertIn("experiment_parameters.baseline_request", paths)
@@ -145,15 +142,16 @@ class ExperimentInitTests(unittest.TestCase):
             artifact = json.loads(output.read_text())
             self.assertEqual(artifact["generation_status"], "unresolved")
 
-    def test_experiment_is_primary_command_and_legacy_alias_remains(self) -> None:
+    def test_experiment_is_the_only_static_experiment_command(self) -> None:
         help_text = _build_parser().format_help()
-        self.assertIn("experiment (negative-split)", help_text)
+        self.assertIn("experiment", help_text)
         with TemporaryDirectory() as directory:
             manifest = Path(directory) / "manifest.json"
             manifest.write_text(json.dumps(_manifest()), encoding="utf-8")
-            self.assertEqual(
-                main(["negative-split", "validate", str(manifest)]), 0
-            )
+            self.assertEqual(main(["experiment", "validate", str(manifest)]), 0)
+            with self.assertRaises(SystemExit) as raised:
+                main(["negative" + "-split", "validate", str(manifest)])
+            self.assertEqual(raised.exception.code, 2)
 
 
 if __name__ == "__main__":

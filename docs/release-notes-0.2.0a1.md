@@ -14,7 +14,7 @@ Highlights:
   explicit failure classes, DAG/critical-path reconstruction, and paired
   quality and latency statistics.
 - A versioned attempt-status protocol for durable partial evidence.
-- A new default NegativeSplit demo in which cache reuse, TTFT, and conditional
+- A new default experiment demo in which cache reuse, TTFT, and conditional
   successful-task latency improved, but RunEconomy returned `invalid` because
   the frozen task-quality gates failed.
 

@@ -1,118 +1,209 @@
-# Public proof: RunEconomy rejected an apparently faster candidate
+# RunEconomy Experiment Report
 
-This is the canonical RunEconomy proof for the frozen
-40-task held-out run.
-The verdict is **`invalid`**, not verified. Every number below is generated
-from the checked-in aggregate artifact; private tasks, answers, model output,
-stderr, endpoints, and raw traces are not published.
+Qwen2.5-7B-Instruct · vLLM 0.33.0 · A10 · 40 paired tasks · 80 attempts
 
-## What changed
+## Intervention Tested
 
-- Baseline: dynamic run metadata before the static system instructions.
-- Candidate: the same dynamic run metadata after the static system instructions.
-- Only changed property: system-message block order.
-- Held constant: agent code, static instructions, dynamic metadata content, model, backend, tools, evaluator, tasks, and acceptance gates.
-- Expected mechanism: keep the static instruction prefix stable so the second inference call can reuse more cached prompt tokens.
+vLLM can reuse cached prompt tokens while a new prompt matches a previous prompt from the beginning. In the baseline, changing metadata appeared first, so the shared prefix ended immediately. The candidate moved that metadata after the stable instructions.
 
-## What was measured
+- **Baseline:** Changing run metadata appeared before stable system instructions.
+- **Candidate:** The same changing metadata moved after stable system instructions.
+- **Why this might help:** A longer stable prefix may allow more prompt tokens to be reused from cache.
+- **Control:** The prompt content stayed the same. Only the block order changed.
 
-The frozen workload contained 40 tasks (13 direct-call, 13 docstring, 14 string-literal),
-with one baseline and one candidate attempt per task. Each attempt made two
-inference calls around one real bounded repository-search tool. Order was
-seeded and randomized (`20261114`). The predeclared product outcome
-was end-to-end workflow latency, paired only where both variants succeeded.
+## Results
 
-Environment: `Qwen/Qwen2.5-7B-Instruct` revision
-`a09a35458c702b33eeacc393d103063234e8bc28`, vLLM `0.33.0`, one
-A10, Chat Completions, colocated driver.
+### Cached input tokens
 
-## Task quality
+**+105**
 
-| Variant | Successes | Point rate | Exact 95% interval | Absolute gate |
-|---|---:|---:|---:|---:|
-| Baseline | 37/40 | 92.50% | 79.61%–98.43% | lower bound ≥ 80% |
-| Candidate | 38/40 | 95.00% | 83.08%–99.39% | lower bound ≥ 80% |
+More prompt tokens were served from cache.
 
-Paired success was
-2.50 percentage points; its one-sided
-lower bound was -12.55 percentage points, missing
-the predeclared
-−10.00 percentage points
-non-inferiority margin. Outcomes were 36
-both-success, 1 baseline-only,
-2 candidate-only, and
-1 both-failure.
+### Server time to first token
 
-## Decision gates, in order
+**9 ms lower**
 
-1. `evidence_integrity` — passed: 80/80 valid traces and 80/80 complete explicit DAGs.
-2. `baseline_completion_and_absolute_task_success` — failed: 79.61% lower bound was below 80.00% **(decisive)**.
-3. `candidate_completion_and_absolute_task_success` — passed: 83.08% lower bound exceeded 80.00%.
-4. `candidate_point_estimate_task_success_guardrail` — passed: candidate point estimate 95.00% exceeded baseline 92.50%.
-5. `paired_task_success_noninferiority` — failed independently: -12.55 percentage points was below -10.00 percentage points.
-6. `successful_pair_workflow_latency` — conditionally favorable at -62.43 ms but ineligible to verify the change.
+The first token arrived sooner at the server.
 
-The baseline validity gate was decisive. RunEconomy therefore returned
-**`invalid`** before the favorable latency result could authorize a verified
-performance claim. The paired non-inferiority gate also failed independently.
+### Workflow latency
 
-## Conditional mechanism and latency observations
+**62 ms lower**
 
-Among the 36 pairs where both
-variants succeeded:
+Successful task pairs completed sooner.
 
-- Cached input tokens: +105.33 tokens; 95% interval +98.65 to +112.02; 36 pairs.
-- Server TTFT: -9.08 ms; 95% interval -11.85 to -6.30; 36 pairs.
-- Client TTFT: -9.39 ms; 95% interval -12.21 to -6.57; 36 pairs.
-- Workflow latency: -62.43 ms; 95% interval -123.86 to -1.01; 36 pairs.
-- Critical-path latency: -61.98 ms; 95% interval -123.44 to -0.52; 36 pairs.
+**Important:** Measured across the 36 task pairs where both variants succeeded. These measurements are not a verified improvement until the quality requirements pass.
 
-These are measured conditional effects, not verified improvements. Failed tasks
-remain in the quality analysis and cannot make the candidate appear faster by
-disappearing from the verdict.
+- **Baseline:** 37 of 40 tasks succeeded.
+- **Candidate:** 38 of 40 tasks succeeded.
+- **Both succeeded:** 36 pairs
+- **Baseline only succeeded:** 1 pair
+- **Candidate only succeeded:** 2 pairs
+- **Both failed:** 1 pair
 
-## What RunEconomy demonstrated
+### Cache reuse by agent call
 
-RunEconomy connected an application-level prompt-layout change to cache,
-inference, workflow, and task-success evidence; then declined to verify an
-attractive latency result because the frozen quality requirements were not
-established. That rejection—not a speedup claim—is the product proof.
+| Agent call | Mean cached input tokens across both-successful pairs |
+|---|---|
+| Planning call | Baseline 0.00, candidate 108.89, difference 108.89 cached tokens |
+| Final answer call | Baseline 196.00, candidate 192.44, difference -3.56 cached tokens |
 
-## What this does not prove
+## Verdict
 
-- One pinned model revision, vLLM version, A10 hardware class, and repository-analysis workload were evaluated.
-- Execution was sequential and colocated; production concurrency and multi-replica routing were not tested.
-- Continuous effects use only the 36 task pairs where both variants succeeded.
-- Workflow latency includes process startup and agent execution but excludes evaluator time.
-- Prefill, decode, retrieval, cost, and GPU-time effects were unavailable and remain unknown rather than zero.
-- The 40-task held-out workload is consumed and cannot be reused as fresh held-out evidence.
-- External readers can audit the aggregate arithmetic, gate logic, provenance hashes, and claim boundary, but cannot independently recompute the experiment without the private raw tasks and traces.
+### Result not verified
 
-It also does not establish universal model behavior, production-concurrency
-performance, superiority over another tool, or a verified performance win.
+The candidate showed better cache reuse and lower measured latency, but this experiment did not establish the task-quality evidence required for a verified performance claim.
 
-## Audit trail
+Verdict: Invalid
 
-The machine-readable source is
-[`src/runeconomy/data/public-proof-rejection.json`](../src/runeconomy/data/public-proof-rejection.json).
-It can be rebuilt only when the ignored private evidence is present:
+Invalid does not mean the candidate was slower. It means the attractive measurements were not eligible to become a verified improvement or regression claim.
 
-```bash
-uv run python scripts/build_public_proof_artifact.py
-```
+### Was the baseline workload reliable enough?
 
-Frozen hashes:
+| Measure | Recorded result |
+|---|---|
+| Required lower confidence bound | 80.00% |
+| Observed baseline lower bound | 79.61% |
+| Result | Failed by 0.39 percentage points |
 
-- Agent: `sha256:e6f42c619f15be192512d234ee21b623a09e69402a62ab16516190c9ea348dcb`
-- Comparison: `sha256:d8df549ebcb7d814aa1d70b02e2d9c482830e02d7812a40376d1c8161dd31e8f`
-- Driver: `sha256:1a6a589353e5352116a58ee446493fbc83c486f4fc7634a49483ac81b474b1b1`
-- Environment Identity: `sha256:a62037eec6d2c8d31743f404018469cb8d42c9359b1fe5a84f1e0053c86638ef`
-- Evaluator: `sha256:8f6f0ac64145392fd9f2086705345871628fce3957bae810f5cd551be4b02dba`
-- Experiment Design: `sha256:51975b24f8792f6f9ab453fb6a2fcba84ab1247e9f1a230e3ca0b9910564a48e`
-- Private Result: `sha256:783c08972d972b2cc7aad610c13d9df934d8f4c573915ad6423ebaf74402aa99`
-- Status Protocol: `sha256:b3885985bfa88510d901600b28e3d6341427b2390b3dedb2c16ccd124e68e723`
-- Workload: `sha256:85e53d2d2f2ab108b5bc83e27947a67d710ed53326a89467005630dea3bddf61`
+The baseline succeeded on 37 of 40 tasks. With only 40 tasks, the lower confidence bound remained slightly below the required threshold.
 
-The public artifact contains aggregate evidence only. Its sanitizer fails
-closed on unexpected top-level fields, endpoints, credentials, local paths,
-and raw-evidence keys.
+### Did the candidate preserve task quality?
+
+| Measure | Recorded result |
+|---|---|
+| Maximum allowed regression | 10.00 percentage points |
+| Observed lower-bound difference | negative 12.55 percentage points |
+| Result | Failed by 2.55 percentage points |
+
+The candidate's observed success rate was higher, but the uncertainty was too wide to rule out a regression larger than the allowed margin.
+
+### Decision path
+
+1. **Evidence usable?** Passed
+1. **Baseline reliable enough?** Failed
+1. **Performance claim:** Not eligible for verification
+
+- Candidate absolute quality: Passed
+- Paired quality preservation: Failed
+- Conditional workflow latency: Favorable but not eligible
+
+**Recommended next step:** Do not present this candidate as a verified latency improvement. Establish a more reliable baseline and test the intervention on a new, sufficiently powered held-out workload. The current 40-task workload has been consumed and cannot be reused as fresh evidence.
+
+## Experiment Details
+
+Each task gave the agent a code clue and a bounded set of repository files. The agent planned a search, used a repository-search tool and identified the enclosing Python function or class.
+
+| Experiment fact | Recorded value |
+|---|---|
+| Task families | 13 direct-call lookup tasks, 13 docstring lookup tasks and 14 unique-string lookup tasks |
+| Paired workload | 40 baseline and candidate pairs, 80 total attempts |
+| Workflow | 2 model calls and 1 repository-search tool call per attempt |
+| Environment | Qwen2.5-7B-Instruct, vLLM 0.33.0, Modal A10 |
+| Execution | Chat Completions, colocated driver and sequential execution |
+
+**Controls:** The model, backend, hardware, agent, tasks, evaluator and acceptance rules were chosen and locked before the held-out workload was run.
+
+## Technical Details
+
+<details>
+<summary>Acceptance checks</summary>
+
+| Field | Recorded value |
+|---|---|
+| trace_and_environment_identity | Passed. Threshold: every attempt has an explicit complete DAG and each variant has complete, stable environment identity. Observed: {'baseline': {'complete_dag_count': 40, 'complete_dag_rate': 1.0, 'environment_identity_complete': True, 'environment_identity_stable': True, 'valid_trace_count': 40}, 'candidate': {'complete_dag_count': 40, 'complete_dag_rate': 1.0, 'environment_identity_complete': True, 'environment_identity_stable': True, 'valid_trace_count': 40}} |
+| baseline_minimum_task_success | Failed. Threshold: 0.8. Observed: [0.7961352512671009, 0.9842578201489585] |
+| candidate_minimum_task_success | Passed. Threshold: 0.8. Observed: [0.8308031360405823, 0.9938863534006492] |
+| task_success_noninferiority | Failed. Threshold: -0.1. Observed: {'candidate_minus_baseline_mean': 0.025, 'confidence_interval': [-0.14498205538583642, 0.18780457959853636], 'confidence_level': 0.95, 'method': 'exact marginal binomial bounds with Bonferroni coverage', 'one_sided_lower_bound': -0.12547221188341495, 'outcome_counts': {'baseline_only': 1, 'both_failure': 1, 'both_success': 36, 'candidate_only': 2}, 'paired_count': 40} |
+| baseline_completion | Passed. Threshold: 1.0. Observed: 1.0 |
+| candidate_completion | Passed. Threshold: 1.0. Observed: 1.0 |
+| successful_task_workflow_latency_improvement | Passed. Threshold: upper bound of paired 95% Student-t interval < 0. Observed: {'available': True, 'candidate_minus_baseline_mean': -62.43227297222221, 'confidence_interval': [-123.85694821653173, -1.0075977279126818], 'confidence_level': 0.95, 'method': 'paired Student-t interval', 'paired_count': 36} |
+| successful_task_workflow_latency_non_regression | Passed. Threshold: lower bound of paired 95% Student-t interval <= 0. Observed: {'available': True, 'candidate_minus_baseline_mean': -62.43227297222221, 'confidence_interval': [-123.85694821653173, -1.0075977279126818], 'confidence_level': 0.95, 'method': 'paired Student-t interval', 'paired_count': 36} |
+
+</details>
+
+<details>
+<summary>Statistical details</summary>
+
+| Field | Recorded value |
+|---|---|
+| Cached Input Tokens | Mean candidate minus baseline: 105.333. 95% interval: 98.648 to 112.018. Pairs: 36 |
+| Client Ttft Ms | Mean candidate minus baseline: -9.386. 95% interval: -12.206 to -6.566. Pairs: 36 |
+| Cost Usd | Mean candidate minus baseline: Unknown. 95% interval: Unknown. Pairs: 0 |
+| Critical Path Ms | Mean candidate minus baseline: -61.980. 95% interval: -123.439 to -0.522. Pairs: 36 |
+| Decode Ms | Mean candidate minus baseline: Unknown. 95% interval: Unknown. Pairs: 0 |
+| Gpu Time Ms | Mean candidate minus baseline: Unknown. 95% interval: Unknown. Pairs: 0 |
+| Inference Span Ms | Mean candidate minus baseline: -61.914. 95% interval: -123.346 to -0.483. Pairs: 36 |
+| Input Tokens | Mean candidate minus baseline: -3.444. 95% interval: -5.311 to -1.578. Pairs: 36 |
+| Output Tokens | Mean candidate minus baseline: -1.556. 95% interval: -3.419 to 0.308. Pairs: 36 |
+| Prefill Ms | Mean candidate minus baseline: Unknown. 95% interval: Unknown. Pairs: 0 |
+| Queue Ms | Mean candidate minus baseline: -0.040. 95% interval: -0.334 to 0.254. Pairs: 36 |
+| Retrieval Span Ms | Mean candidate minus baseline: Unknown. 95% interval: Unknown. Pairs: 0 |
+| Server Ttft Ms | Mean candidate minus baseline: -9.075. 95% interval: -11.846 to -6.304. Pairs: 36 |
+| Tool Span Ms | Mean candidate minus baseline: -0.066. 95% interval: -0.199 to 0.067. Pairs: 36 |
+| Workflow Latency Ms | Mean candidate minus baseline: -62.432. 95% interval: -123.857 to -1.008. Pairs: 36 |
+| Paired task success | Mean candidate minus baseline: 2.50 percentage points. 95% interval: -14.50 percentage points to 18.78 percentage points. One-sided lower bound: -12.55 percentage points. Method: exact marginal binomial bounds with Bonferroni coverage |
+| Planning call | Baseline mean: 0.00. Candidate mean: 108.89. Difference: 108.89 cached tokens. Pairs: 36 |
+| Final answer call | Baseline mean: 196.00. Candidate mean: 192.44. Difference: -3.56 cached tokens. Pairs: 36 |
+
+</details>
+
+<details>
+<summary>Environment and provenance</summary>
+
+| Field | Recorded value |
+|---|---|
+| Api Dialect | chat_completions |
+| Backend | vllm |
+| Backend Version | 0.33.0 |
+| Chat Template Digest | sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f |
+| Driver Location | same Modal container as vLLM |
+| Engine Configuration | {"block_size": 16, "gpu_memory_utilization": 0.85, "max_model_len": 8192, "max_num_seqs": 8} |
+| Hardware | A10 |
+| Model | Qwen/Qwen2.5-7B-Instruct |
+| Model Revision | a09a35458c702b33eeacc393d103063234e8bc28 |
+| Tokenizer | Qwen/Qwen2.5-7B-Instruct |
+| Tokenizer Revision | a09a35458c702b33eeacc393d103063234e8bc28 |
+| Agent hash | sha256:e6f42c619f15be192512d234ee21b623a09e69402a62ab16516190c9ea348dcb |
+| Comparison hash | sha256:d8df549ebcb7d814aa1d70b02e2d9c482830e02d7812a40376d1c8161dd31e8f |
+| Driver hash | sha256:1a6a589353e5352116a58ee446493fbc83c486f4fc7634a49483ac81b474b1b1 |
+| Environment Identity hash | sha256:a62037eec6d2c8d31743f404018469cb8d42c9359b1fe5a84f1e0053c86638ef |
+| Evaluator hash | sha256:8f6f0ac64145392fd9f2086705345871628fce3957bae810f5cd551be4b02dba |
+| Experiment Design hash | sha256:51975b24f8792f6f9ab453fb6a2fcba84ab1247e9f1a230e3ca0b9910564a48e |
+| Private Result hash | sha256:783c08972d972b2cc7aad610c13d9df934d8f4c573915ad6423ebaf74402aa99 |
+| Status Protocol hash | sha256:b3885985bfa88510d901600b28e3d6341427b2390b3dedb2c16ccd124e68e723 |
+| Workload hash | sha256:85e53d2d2f2ab108b5bc83e27947a67d710ed53326a89467005630dea3bddf61 |
+
+</details>
+
+<details>
+<summary>Evidence integrity</summary>
+
+| Field | Recorded value |
+|---|---|
+| Attempt Count | 80 |
+| Attempt Status Schema Versions | ['0.1'] |
+| Complete Dag Count | 80 |
+| Environment Identity Complete | True |
+| Environment Identity Stable | True |
+| Generated Content Included | False |
+| Raw Attempts Included | False |
+| Valid Trace Count | 80 |
+| Evaluator Failure | 0 |
+| Invalid Trace | 0 |
+| Process Or Infrastructure Failure | 0 |
+| Task Quality Failure | 5 |
+| Timeout | 0 |
+
+</details>
+
+<details>
+<summary>Limitations</summary>
+
+| Field | Recorded value |
+|---|---|
+| Supported claim | RunEconomy rejected an apparently faster, more cache-efficient candidate because the frozen successful-task quality requirements were not established. |
+| Claims not supported | a verified performance improvement, universal model behavior, production-concurrency performance, superiority over another tool |
+| Limitations | One pinned model revision, vLLM version, A10 hardware class, and repository-analysis workload were evaluated. Execution was sequential and colocated. Production concurrency and multi-replica routing were not tested. Continuous effects use only the 36 task pairs where both variants succeeded. Workflow latency includes process startup and agent execution but excludes evaluator time. Prefill, decode, retrieval, cost, and GPU-time effects were unavailable and remain unknown rather than zero. The 40-task held-out workload is consumed and cannot be reused as fresh held-out evidence. External readers can audit the aggregate arithmetic, gate logic, provenance hashes, and claim boundary, but cannot independently recompute the experiment without the private raw tasks and traces. |
+| Artifact source | src/runeconomy/data/public-proof-rejection.json |
+
+</details>

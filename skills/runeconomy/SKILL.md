@@ -6,7 +6,7 @@ description: Diagnose inference waste in vLLM-backed agent workflows and run qua
 # RunEconomy
 
 Use RunEconomy as a verification layer between agent traces and inference
-infrastructure. The goal is not to maximize an isolated metric; it is to learn
+infrastructure. The goal is not to maximize an isolated metric. It is to learn
 whether a change improves successful-task performance.
 
 ## Safety boundary
@@ -16,7 +16,7 @@ whether a change improves successful-task performance.
 - Never print or commit API keys, prompts, model output, evaluator answers, raw
   traces, private endpoints, or experiment artifacts containing them.
 - `runeconomy doctor` is read-only. It may make metadata and non-inference
-  render probes; it never generates text or calls cache-reset endpoints.
+  render probes. It never generates text or calls cache-reset endpoints.
 - Do not enable development endpoints, reset shared caches, start paid compute,
   publish results, or alter production infrastructure without explicit approval.
 - Treat executable evaluators and agent commands as local code execution. Review
@@ -27,7 +27,7 @@ whether a change improves successful-task performance.
 Install the version requested by the user. For the current alpha:
 
 ```bash
-python -m pip install --pre runeconomy==0.2.0a2
+python -m pip install --pre runeconomy==0.2.0a3
 runeconomy --help
 runeconomy demo --open
 ```
@@ -44,7 +44,7 @@ runeconomy doctor --base-url "$VLLM_BASE_URL" --api-key-env VLLM_API_KEY
 ```
 
 The operator must supply the OpenAI-compatible server root. If the base URL is
-not available, stop and ask for it; do not guess an endpoint from repository
+not available, stop and ask for it. Do not guess an endpoint from repository
 history, logs, or provider metadata.
 
 Do not paste the key into arguments, manifests, reports, or chat. Interpret the
@@ -78,7 +78,7 @@ tokens, timing, or identity fields. Unknown must remain unknown.
 For real-agent comparison, every attempt must export durable OpenTelemetry or
 OpenInference JSON to `RUNECONOMY_TRACE_PATH` and a versioned attempt status to
 `RUNECONOMY_STATUS_PATH`. Preserve variant-local state. Add explicit
-`runeconomy.depends_on` relationships for actual execution dependencies; do not
+`runeconomy.depends_on` relationships for actual execution dependencies. Do not
 infer a workflow DAG merely from span nesting.
 
 ## 3. Diagnose and initialize
@@ -97,12 +97,12 @@ fields supported by evidence, then validate again.
 
 Before execution, predeclare and review:
 
-- workload split and task evaluator;
-- baseline and candidate intervention;
-- primary end-to-end metric and secondary mechanism metrics;
-- absolute task-success and paired non-inferiority gates;
-- cache isolation and trial ordering;
-- model, revision, tokenizer, template, backend, and relevant engine identity;
+- workload split and task evaluator
+- baseline and candidate intervention
+- primary end-to-end metric and secondary mechanism metrics
+- absolute task-success and paired non-inferiority gates
+- cache isolation and trial ordering
+- model, revision, tokenizer, template, backend, and relevant engine identity
 - sample size or stopping rule and cost ceiling.
 
 ## 4. Execute the right comparison
@@ -125,7 +125,7 @@ runeconomy compare \
   --output comparison.json
 ```
 
-Use randomized or alternating paired order. Keep failures in the result; never
+Use randomized or alternating paired order. Keep failures in the result. Never
 allow failed or timed-out attempts to disappear from latency accounting. Classify
 task failure, model-output failure, application failure, infrastructure failure,
 timeout, evaluator failure, and invalid trace separately. Preserve checkpoints

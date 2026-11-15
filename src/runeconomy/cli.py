@@ -163,7 +163,7 @@ def _build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--invoked-tool", action="append", default=[])
 
     demo = subparsers.add_parser(
-        "demo", help="render the bundled CPU-only NegativeSplit demonstration"
+        "demo", help="render the bundled CPU-only experiment report"
     )
     demo.add_argument(
         "--case",
@@ -211,7 +211,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
     experiment = subparsers.add_parser(
         "experiment",
-        aliases=["negative-split"],
         help="run a controlled baseline-versus-candidate comparison",
     )
     experiment_commands = experiment.add_subparsers(
@@ -256,7 +255,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="return exit code 3 unless every configured acceptance gate passes",
     )
     report = experiment_commands.add_parser(
-        "report", help="render a static NegativeSplit report"
+        "report", help="render a static experiment report"
     )
     report.add_argument("result", type=Path)
     report.add_argument("--output", type=Path, required=True)
@@ -449,7 +448,7 @@ def _next_action_for_error(args: argparse.Namespace) -> str:
         return "Review the source format and required flags, then rerun the same import command."
     if command == "compare":
         return "Inspect the preserved artifacts and status files, correct the agent or evaluator failure, then rerun `runeconomy compare`."
-    if command in {"experiment", "negative-split"}:
+    if command == "experiment":
         subcommand = getattr(args, "experiment_command", None)
         if subcommand == "init":
             return "Run `runeconomy analyze` or a supported importer first, then pass its report to `runeconomy experiment init --from-finding ...`."
@@ -580,8 +579,10 @@ def main(argv: list[str] | None = None) -> int:
             demo_result = load_demo_result(args.case)
             rendered = render_demo_html(demo_result)
             _write_text(args.output, rendered)
-            status = demo_result["decision"]["status"].upper()
-            print(f"RunEconomy demo · {status} proof written to {args.output}")
+            status = str(demo_result["decision"]["status"]).title()
+            print(
+                f"RunEconomy demo · Verdict: {status} · report written to {args.output}"
+            )
             print(
                 "What to do next: open the report and read the failed quality gates "
                 "before interpreting the conditional latency measurements."
@@ -649,7 +650,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             _write_json(args.output, result)
             print(
-                f"RunEconomy compare · {result['decision']['status'].upper()} · wrote "
+                f"RunEconomy compare · Verdict: {str(result['decision']['status']).title()} · wrote "
                 f"to {args.output}"
             )
             print(
@@ -677,7 +678,7 @@ def main(argv: list[str] | None = None) -> int:
                     f"cannot render experiment report: {exc}"
                 ) from exc
             _write_text(args.output, rendered)
-            print(f"RunEconomy report · wrote NegativeSplit report to {args.output}")
+            print(f"RunEconomy report · wrote experiment report to {args.output}")
             print(
                 "What to do next: read the verdict and quality gates before "
                 "interpreting conditional performance measurements."
@@ -710,7 +711,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest = ExperimentManifest.from_path(args.manifest)
         _require_trusted_evaluators(manifest, args.allow_exec_evaluators)
         if args.experiment_command == "validate":
-            print(f"RunEconomy experiment · VALID · {manifest.experiment_id}")
+            print(f"RunEconomy experiment · Valid · {manifest.experiment_id}")
             print(
                 "What to do next: run the manifest only after reviewing its evaluator, "
                 "quality gates, cache-isolation mode, and backend identity."
@@ -739,7 +740,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         _write_json(args.output, result)
         print(
-            f"RunEconomy experiment · {result['decision']['status'].upper()} · "
+            f"RunEconomy experiment · Verdict: {str(result['decision']['status']).title()} · "
             f"wrote result to {args.output}"
         )
         print(

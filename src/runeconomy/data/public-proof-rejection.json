@@ -1,6 +1,6 @@
 {
   "artifact_kind": "runeconomy.public_proof",
-  "artifact_version": "0.2",
+  "artifact_version": "0.3",
   "claim_boundary": {
     "not_supported": [
       "a verified performance improvement",
@@ -386,7 +386,7 @@
   },
   "limitations": [
     "One pinned model revision, vLLM version, A10 hardware class, and repository-analysis workload were evaluated.",
-    "Execution was sequential and colocated; production concurrency and multi-replica routing were not tested.",
+    "Execution was sequential and colocated. Production concurrency and multi-replica routing were not tested.",
     "Continuous effects use only the 36 task pairs where both variants succeeded.",
     "Workflow latency includes process startup and agent execution but excludes evaluator time.",
     "Prefill, decode, retrieval, cost, and GPU-time effects were unavailable and remain unknown rather than zero.",
@@ -450,6 +450,24 @@
     "tokenizer": "Qwen/Qwen2.5-7B-Instruct",
     "tokenizer_revision": "a09a35458c702b33eeacc393d103063234e8bc28"
   },
+  "request_position_effects": [
+    {
+      "baseline_mean": 0.0,
+      "candidate_mean": 108.88888888888889,
+      "candidate_minus_baseline_mean": 108.88888888888889,
+      "label": "Planning call",
+      "paired_count": 36,
+      "sequence": 0
+    },
+    {
+      "baseline_mean": 196.0,
+      "candidate_mean": 192.44444444444446,
+      "candidate_minus_baseline_mean": -3.5555555555555554,
+      "label": "Final answer call",
+      "paired_count": 36,
+      "sequence": 1
+    }
+  ],
   "sanitization": {
     "aggregate_only": true,
     "generator": "scripts/build_public_proof_artifact.py",
