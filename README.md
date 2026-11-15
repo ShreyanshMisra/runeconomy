@@ -22,8 +22,8 @@ reduced server TTFT by about 9.08 ms, and reduced workflow latency by about
 returned **`invalid`**: the baseline task-success lower bound was 79.61%, below
 the frozen 80% gate, and paired success non-inferiority also failed.
 
-All 80 attempts completed with valid traces. The quality gate—not
-infrastructure—rejected the apparent speedup. The workload is consumed and
+All 80 attempts completed with valid traces. The quality gate, not
+infrastructure, rejected the apparent speedup. The workload is consumed and
 cannot be reused or retuned as fresh held-out evidence.
 
 [Read the complete public proof](docs/public-proof.md) ·
@@ -35,7 +35,7 @@ RunEconomy requires Python 3.11 or newer. The bundled proof is CPU-only and
 makes no network or GPU calls.
 
 ```bash
-python -m pip install --pre runeconomy==0.2.0a2
+python -m pip install --pre runeconomy==0.2.0a3
 runeconomy demo --open
 ```
 
@@ -47,8 +47,8 @@ runeconomy doctor \
   --api-key-env VLLM_API_KEY
 ```
 
-`doctor` reports supported, unsupported, and unknown capabilities; safe
-experiment modes; and an exact next action. Use `--json` for automation.
+`doctor` reports supported, unsupported, and unknown capabilities, safe
+experiment modes, and an exact next action. Use `--json` for automation.
 
 [Follow the complete quickstart](docs/getting-started.md) ·
 [Read the compatibility guide](docs/doctor.md) ·
@@ -57,9 +57,8 @@ experiment modes; and an exact next action. Use `--json` for automation.
 
 ## Choose the right experiment
 
-- `runeconomy experiment` runs controlled static request manifests against
-  vLLM. `negative-split` remains a backward-compatible alias; NegativeSplit is
-  the methodology and report name.
+- `runeconomy experiment` runs controlled baseline and candidate request
+  manifests against vLLM and produces an experiment report.
 - `runeconomy compare` executes complete baseline and candidate agent processes
   with variant-local state, explicit dependencies, real tool time, task-level
   pairing, and durable OpenTelemetry/OpenInference evidence.

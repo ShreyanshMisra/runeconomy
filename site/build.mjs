@@ -12,7 +12,7 @@ const pages = [
   { route: "", source: "site/content/index.md", title: "RunEconomy" },
   { route: "getting-started", source: "docs/getting-started.md", title: "Getting started" },
   { route: "how-it-works", source: "docs/how-it-works.md", title: "How it works" },
-  { route: "proof", source: "docs/public-proof.md", title: "The cache optimization that looked faster—and why RunEconomy rejected it" },
+  { route: "proof", source: "docs/public-proof.md", title: "The cache optimization that looked faster, and why RunEconomy rejected it" },
   { route: "doctor", source: "docs/doctor.md", title: "vLLM compatibility" },
   { route: "cli", source: "docs/cli-reference.md", title: "CLI reference" },
   { route: "experiments", source: "docs/experiment-format.md", title: "Static experiments" },
@@ -76,7 +76,6 @@ function layout(page, content) {
     <article>${skillDownload}${content}</article>
     <aside class="source-note">Repository source: <a href="${sourceUrl}">${page.source}</a></aside>
   </main>
-  <footer>Alpha software. Inspect evidence and quality gates before acting on performance measurements.</footer>
 </body>
 </html>`;
 }

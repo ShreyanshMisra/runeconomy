@@ -9,7 +9,7 @@ alpha command-line tool for engineers using self-hosted vLLM.
 Use an isolated Python 3.11 or newer environment:
 
 ```bash
-python -m pip install --pre runeconomy==0.2.0a2
+python -m pip install --pre runeconomy==0.2.0a3
 runeconomy --help
 ```
 
@@ -86,9 +86,15 @@ skeleton because RunEconomy cannot safely synthesize the application change.
 Resolve every named field, freeze the quality and performance gates, and
 validate again. See the [experiment format](experiment-format.md).
 
-Run static request experiments with `runeconomy experiment run`. Use
-`runeconomy compare` only when executing complete baseline and candidate agent
-processes; see [closed-loop comparison](closed-loop-comparison.md).
+Run and report a static request experiment with:
+
+```bash
+runeconomy experiment run experiment.json --output result.json
+runeconomy experiment report result.json --output report.html
+```
+
+Use `runeconomy compare` only when executing complete baseline and candidate
+agent processes. See [closed-loop comparison](closed-loop-comparison.md).
 
 ## Interpret the result
 

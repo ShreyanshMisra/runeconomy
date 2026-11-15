@@ -1,4 +1,4 @@
-"""Cost-bounded, colocated Modal runner for the held-out NegativeSplit proof.
+"""Cost-bounded, colocated Modal runner for the held-out experiment proof.
 
 This App is intentionally separate from the persistent HTTP Server definition
 in ``modal_vllm.py``. ``modal run`` therefore allocates exactly one ephemeral

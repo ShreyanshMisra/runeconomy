@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import subprocess
 import tomllib
 import unittest
 from pathlib import Path
-
 
 ROOT = Path(__file__).parents[1]
 
@@ -21,7 +22,9 @@ class ReleaseHygieneTests(unittest.TestCase):
             )
             self.assertEqual(payload["backend"]["api_key_env"], "VLLM_API_KEY", path)
 
-    def test_public_sources_contain_no_private_modal_endpoint_or_local_path(self) -> None:
+    def test_public_sources_contain_no_private_modal_endpoint_or_local_path(
+        self,
+    ) -> None:
         roots = [
             ROOT / ".env.example",
             ROOT / ".github",
@@ -78,6 +81,14 @@ class ReleaseHygieneTests(unittest.TestCase):
             configuration = tomllib.load(handle)
         sdist = configuration["tool"]["hatch"]["build"]["targets"]["sdist"]
         self.assertIn("/docs/internal", sdist["exclude"])
+        self.assertIn(
+            "/examples/experiments/repository-agent-tool-pruning-heldout.json",
+            sdist["exclude"],
+        )
+        self.assertIn(
+            "/examples/fixtures/recorded-cli-build-parser.txt",
+            sdist["exclude"],
+        )
         self.assertIn("/skills", sdist["include"])
         self.assertNotIn("/.env.local", sdist["include"])
 
@@ -89,7 +100,7 @@ class ReleaseHygieneTests(unittest.TestCase):
         with (ROOT / "pyproject.toml").open("rb") as handle:
             project = tomllib.load(handle)["project"]
         self.assertEqual(project["name"], "runeconomy")
-        self.assertEqual(project["version"], "0.2.0a2")
+        self.assertEqual(project["version"], "0.2.0a3")
         self.assertEqual(
             project["urls"]["Repository"],
             "https://github.com/ShreyanshMisra/runeconomy",
@@ -102,6 +113,49 @@ class ReleaseHygieneTests(unittest.TestCase):
             self.assertIn("id-token: write", text)
             self.assertNotIn("secrets.", text)
             self.assertNotIn("password:", text)
+
+    def test_removed_experiment_brand_is_absent_from_active_tracked_files(self) -> None:
+        frozen = {
+            Path("examples/fixtures/recorded-cli-build-parser.txt"),
+            Path("examples/experiments/repository-agent-tool-pruning-heldout.json"),
+        }
+        tracked = (
+            subprocess.run(
+                ["git", "ls-files", "-z"],
+                cwd=ROOT,
+                check=True,
+                capture_output=True,
+            )
+            .stdout.decode()
+            .split("\0")
+        )
+        pattern = re.compile(
+            "negative" + r"[ _-]?split|negative" + "split",
+            re.IGNORECASE,
+        )
+        for relative_text in tracked:
+            if not relative_text:
+                continue
+            relative = Path(relative_text)
+            if (
+                relative in frozen
+                or (ROOT / "docs" / "internal") in (ROOT / relative).parents
+            ):
+                continue
+            text = (ROOT / relative).read_text(encoding="utf-8", errors="ignore")
+            self.assertIsNone(pattern.search(text), relative)
+
+    def test_frozen_parser_evidence_remains_byte_identical(self) -> None:
+        expected = {
+            "examples/fixtures/recorded-cli-build-parser.txt": "2e53bcb76255840483deb6398032b55158af2cbfeca37034e233329e843ca5e0",
+            "examples/experiments/repository-agent-tool-pruning-heldout.json": "3842cc39f61b374b75b0d91e6bede9543f0ba54acfd1d9ef280875894eb201ec",
+        }
+        for relative, digest in expected.items():
+            self.assertEqual(
+                hashlib.sha256((ROOT / relative).read_bytes()).hexdigest(),
+                digest,
+                relative,
+            )
 
 
 if __name__ == "__main__":

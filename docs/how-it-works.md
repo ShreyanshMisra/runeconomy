@@ -34,4 +34,4 @@ the latency sample.
 Return `verified`, `regression`, `inconclusive`, or `invalid`, together with the
 decisive gate, provenance, intervals, and conditional mechanism measurements.
 The result answers whether the proposed change improved successful-task
-performance—not merely whether a cache counter moved.
+performance, not merely whether a cache counter moved.

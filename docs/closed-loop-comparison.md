@@ -200,7 +200,7 @@ Statuses remain separate per attempt: `completed`, `task_failure`,
 ## Evidence and sensitive data
 
 The JSON result stores digests (including digested task IDs), metrics, statuses,
-uncertainty, provenance, and relative artifact locations—not task contents,
+uncertainty, provenance, and relative artifact locations, not task contents,
 generated output, stderr, or evaluator detail content. Full evaluator details
 are stored in the attempt's local
 `evaluation.json`; the result contains their digest. The artifacts
