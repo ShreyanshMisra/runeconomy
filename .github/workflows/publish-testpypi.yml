@@ -30,7 +30,7 @@ jobs:
       - name: Check package metadata
         run: uvx --from twine twine check dist/*
       - name: Upload distributions
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: python-distributions
           path: dist/
