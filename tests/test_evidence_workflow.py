@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import unittest
+from importlib.resources import files
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -15,13 +16,20 @@ from runeconomy.workspaces import (
 )
 
 
-ROOT = Path(__file__).parents[1]
-FIXTURE = ROOT / "examples" / "golden_path" / "openinference-evidence.json"
-
-
 class EvidenceWorkflowTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._fixture_directory = TemporaryDirectory()
+        cls.fixture = Path(cls._fixture_directory.name) / "tutorial-evidence.json"
+        resource = files("runeconomy").joinpath("data", "tutorial-evidence.json")
+        cls.fixture.write_text(resource.read_text(encoding="utf-8"), encoding="utf-8")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._fixture_directory.cleanup()
+
     def test_realistic_openinference_bundle_is_runnable_without_editing(self) -> None:
-        bundle = import_evidence(FIXTURE)
+        bundle = import_evidence(self.fixture)
         assessment = bundle["capability_assessment"]
 
         self.assertTrue(assessment["runnable_experiment"])
@@ -81,8 +89,8 @@ class EvidenceWorkflowTests(unittest.TestCase):
     def test_openinference_directory_preserves_multiple_runs_without_auto_selection(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
-            shutil.copyfile(FIXTURE, root / "run-a.json")
-            second = json.loads(FIXTURE.read_text())
+            shutil.copyfile(self.fixture, root / "run-a.json")
+            second = json.loads(self.fixture.read_text())
             spans = second["resourceSpans"][0]["scopeSpans"][0]["spans"]
             for span in spans:
                 span["traceId"] = "golden-trace-two"
@@ -95,7 +103,7 @@ class EvidenceWorkflowTests(unittest.TestCase):
         self.assertIn("select one run", bundle["capability_assessment"]["next_action"])
 
     def test_unresolved_workspace_has_corrective_validation_issues(self) -> None:
-        bundle = import_evidence(FIXTURE)
+        bundle = import_evidence(self.fixture)
         finding = bundle["analysis"]["findings"][0]
         finding["experiment_parameters"].pop("evaluator")
         with TemporaryDirectory() as directory:
@@ -134,7 +142,7 @@ class EvidenceWorkflowTests(unittest.TestCase):
         self.assertEqual(report["mode"], "agent_process")
 
     def test_saved_doctor_report_can_mark_backend_unsupported(self) -> None:
-        bundle = import_evidence(FIXTURE)
+        bundle = import_evidence(self.fixture)
         with TemporaryDirectory() as directory:
             root = Path(directory)
             evidence_path = root / "evidence.json"
@@ -153,7 +161,7 @@ class EvidenceWorkflowTests(unittest.TestCase):
         self.assertEqual(report["issues"][0]["field_path"], "chat_completions")
 
     def test_public_claim_without_identity_is_reported_but_remains_runnable(self) -> None:
-        bundle = import_evidence(FIXTURE)
+        bundle = import_evidence(self.fixture)
         with TemporaryDirectory() as directory:
             root = Path(directory)
             evidence_path = root / "evidence.json"
@@ -176,7 +184,7 @@ class EvidenceWorkflowTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             output = Path(directory) / "evidence.json"
             self.assertEqual(
-                main(["import", str(FIXTURE), "--output", str(output), "--json"]),
+                main(["import", str(self.fixture), "--output", str(output), "--json"]),
                 0,
             )
             loaded = load_evidence_bundle(output)

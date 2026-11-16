@@ -35,6 +35,12 @@ from .reports import (
     render_experiment_html,
     render_experiment_markdown,
 )
+from .tutorial import (
+    DEFAULT_TUTORIAL_PORT,
+    TutorialError,
+    materialize_tutorial,
+    serve_tutorial,
+)
 from .vllm import VLLMClient, VLLMError, VLLMHTTPError
 from .workspaces import (
     agent_run_arguments,
@@ -215,6 +221,26 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     demo.add_argument("--output", type=Path, default=Path("runeconomy-demo.html"))
     demo.add_argument("--open", action="store_true", help="open the report in a browser")
+
+    tutorial = subparsers.add_parser(
+        "tutorial", help="materialize or serve the deterministic local tutorial"
+    )
+    tutorial_commands = tutorial.add_subparsers(
+        dest="tutorial_command", required=True
+    )
+    tutorial_init = tutorial_commands.add_parser(
+        "init", help="create a sanitized tutorial directory"
+    )
+    tutorial_init.add_argument("output", type=Path)
+    tutorial_init.add_argument(
+        "--port", type=int, default=DEFAULT_TUTORIAL_PORT
+    )
+    tutorial_serve = tutorial_commands.add_parser(
+        "serve", help="start the localhost-only deterministic tutorial server"
+    )
+    tutorial_serve.add_argument(
+        "--port", type=int, default=DEFAULT_TUTORIAL_PORT
+    )
 
     doctor = subparsers.add_parser(
         "doctor", help="inspect a vLLM server without running inference"
@@ -642,6 +668,10 @@ def _next_action_for_error(args: argparse.Namespace) -> str:
         return "Verify the result JSON, then rerun `runeconomy experiment report`."
     if command == "capture-vllm":
         return "Run `runeconomy doctor` against the same backend, correct the reported capability or authentication issue, then retry the capture."
+    if command == "tutorial":
+        if getattr(args, "tutorial_command", None) == "init":
+            return "Choose a new empty directory, then rerun `runeconomy tutorial init DIRECTORY`."
+        return "Free the port or create a matching tutorial and server on another port."
     return "Correct the reported input or configuration and rerun the command."
 
 
@@ -819,6 +849,22 @@ def main(argv: list[str] | None = None) -> int:
                         f"What to do next: open {args.output.resolve()} in a browser.",
                         file=sys.stderr,
                     )
+            return 0
+
+        if args.command == "tutorial":
+            if args.tutorial_command == "init":
+                created = materialize_tutorial(args.output, port=args.port)
+                print(
+                    "RunEconomy tutorial · Created deterministic local tutorial · "
+                    f"{args.output}"
+                )
+                print(f"Tutorial schema: 0.1 · Files: {len(created)}")
+                serve_command = "runeconomy tutorial serve"
+                if args.port != DEFAULT_TUTORIAL_PORT:
+                    serve_command += f" --port {args.port}"
+                print(f"What to do next: run `{serve_command}` in another terminal.")
+                return 0
+            serve_tutorial(port=args.port)
             return 0
 
         if args.command == "doctor":
@@ -1091,6 +1137,7 @@ def main(argv: list[str] | None = None) -> int:
         ExperimentValidationError,
         VLLMError,
         BackendProbeError,
+        TutorialError,
     ) as exc:
         print(_format_cli_error(exc, args), file=sys.stderr)
         return 2

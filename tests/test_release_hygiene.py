@@ -137,6 +137,8 @@ class ReleaseHygieneTests(unittest.TestCase):
             if not relative_text:
                 continue
             relative = Path(relative_text)
+            if not (ROOT / relative).is_file():
+                continue
             if (
                 relative in frozen
                 or (ROOT / "docs" / "internal") in (ROOT / relative).parents

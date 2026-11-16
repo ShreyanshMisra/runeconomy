@@ -1,28 +1,23 @@
-# Evidence-to-report golden path
+# Evidence-to-report tutorial
 
-This public fixture exercises the complete local workflow with sanitized
-OpenInference evidence and a deterministic vLLM-compatible mock server. It
-uses no private trace, credential, endpoint, model output, paid compute or GPU.
-
-Start the mock server in one terminal:
+The canonical golden path is packaged with RunEconomy. It works from an
+installed wheel without cloning this repository:
 
 ```bash
-python examples/golden_path/mock_vllm.py
+runeconomy tutorial init ./runeconomy-tutorial
+runeconomy tutorial serve
 ```
 
-Then run:
+Follow the generated `runeconomy-tutorial/README.md` in another terminal.
 
-```bash
-runeconomy import examples/golden_path/openinference-evidence.json \
-  --output evidence.json
-runeconomy experiment init --from-evidence evidence.json \
-  --output experiment/
-runeconomy experiment validate experiment/
-runeconomy experiment run experiment/ --output results/
-runeconomy experiment report results/result.json \
-  --output report.html
-```
+The tutorial uses a RunEconomy-enriched OpenInference fixture with explicit
+prompt tokens, prompt segments, workflow dependencies, and experiment context.
+Ordinary OpenTelemetry or OpenInference evidence may support diagnosis while
+still producing an unresolved workspace.
 
-The mock result validates workflow plumbing and verdict gating. It is not a
-live-vLLM performance result and must not be presented as one. The separately
-documented real-vLLM path requires an approved private benchmark server.
+The deterministic local server validates product plumbing only. It is not a
+complete vLLM implementation, does not run a model, and is not a performance
+benchmark or live-vLLM validation.
+
+`mock_vllm.py` remains as a compatibility entry point for repository developers.
+It delegates to the same server implementation used by the installed CLI.

@@ -46,6 +46,11 @@
     }
   ],
   "runeconomy": {
+    "tutorial": {
+      "schema_version": "0.1",
+      "fixture_kind": "runeconomy_enriched_openinference",
+      "claim_boundary": "Deterministic product-plumbing tutorial, not real inference or a performance benchmark."
+    },
     "experiment_context": {
       "experiment_template_id": "prompt.move_dynamic_metadata",
       "experiment_id": "golden-prefix-placement",
