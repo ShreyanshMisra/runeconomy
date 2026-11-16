@@ -1,115 +1,82 @@
-# RunEconomy 0.2.0a3 alpha guide
+# RunEconomy 0.2.0a4 alpha guide
 
-`0.2.0a3` is an invited-tester alpha. It is not a production service or a
-general benchmark suite. RunEconomy remains a local CLI and Python package.
+`0.2.0a4` is an invited-tester prerelease focused on one coherent
+evidence-to-verdict workflow. RunEconomy remains a local CLI and Python package,
+not a production service or general observability platform.
 
-## Install the prerelease
-
-`0.2.0a3` is a prerelease, so request it explicitly:
+## Install
 
 ```bash
-python -m pip install --pre runeconomy==0.2.0a3
-runeconomy --help
+python -m pip install --pre runeconomy==0.2.0a4
+runeconomy --version
 runeconomy demo --open
 ```
 
-The default demo is the aggregate-only frozen rejection proof. Use
-`runeconomy demo --case historical` to render the earlier static-request case.
-The [public proof case study](public-proof.md) documents the intervention,
-gating order, evidence, limitations, and frozen hashes.
+The demo is the immutable aggregate-only rejection proof. It does not rerun the
+consumed workload.
 
-## What is included
+## Evidence-to-report workflow
 
-- `doctor` performs a read-only capability probe against a vLLM server and
-  reports API dialects, tokenization/render support, timing and cache
-  telemetry, cache reset/salt support, identities that can be detected, and
-  safe experiment modes. It gives exact next actions and stable exit codes:
-  `0` ready, `1` diagnosed but not ready, and `2` probe failure.
-- Chat Completions and Responses are both supported. Exact-token capture uses
-  supported render or tokenize capabilities when available.
-- Static `experiment` manifests support observed, salted, and development-mode
-  cache isolation. A salt isolates cache namespaces but does not physically
-  clear blocks or eliminate capacity and eviction effects.
-- Analysis findings have stable IDs, evidence/confidence fields, critical-path
-  context, impact estimates, optimization targets, capability requirements,
-  and structured experiment templates.
-- `experiment init --from-finding` creates a runnable manifest only when the
-  required evidence is available. Otherwise it creates an explicit unresolved
-  skeleton instead of guessing requests, evaluators, or thresholds.
-- `import-openinference` preserves structural OpenTelemetry/OpenInference
-  evidence without inventing exact token boundaries or workflow dependencies.
-- `import-ledger-jsonl` imports the conclusions and evidence available in a
-  cache-ledger JSONL export without reconstructing prompts or tokens from
-  hashes.
-- `compare` executes real baseline and candidate agent processes with
-  variant-local state, task-level pairing, deterministic evaluation, explicit
-  failure classes, imported traces, DAG reconstruction, and joint quality and
-  latency gates.
-- The attempt-status protocol records versioned completion and failure state
-  at `RUNECONOMY_STATUS_PATH`, allowing interrupted attempts to retain durable
-  classification evidence without putting generated content in status files.
-- The flagship demo shows why a candidate with favorable cache and latency
-  measurements can still receive an `invalid` verdict.
-- The canonical coding-agent skill under `skills/runeconomy` preserves the same
-  experiment, privacy, and authorization boundaries for Codex and compatible
-  skill hosts.
-- A build-only static documentation site renders the repository Markdown
-  sources. It is not deployed by the package or CLI.
+```bash
+runeconomy import SOURCE --output evidence.json
+runeconomy experiment init --from-evidence evidence.json --output experiment/
+runeconomy experiment validate experiment/
+runeconomy experiment run experiment/ --output results/
+runeconomy experiment report results/result.json --output report.html --open
+```
 
-## Migration from the stable release
+The unified importer assesses basic diagnosis, structural attribution, exact
+cache analysis, critical-path analysis, static replay, complete agent
+comparison, and public-claim readiness. Missing evidence remains unknown.
 
-There are no intentional Python API removals in this alpha. Existing static
-experiment manifests remain supported. The prerelease command alias formerly
-used for static experiments has been removed. Use `runeconomy experiment`. The
-ledger importer is now `runeconomy import-ledger-jsonl`, and the per-trial
-placeholder is now `{{RUNECONOMY_TRIAL_ID}}`. Manifests that use the earlier
-placeholder name still run.
+Experiment initialization creates a small workspace with source provenance,
+the selected finding, intervention, mode, gates, metrics, identity, unresolved
+fields, and the exact next command. An incomplete workspace is not runnable.
 
-Behavioral changes to review:
+Both static requests and complete agent processes use the same experiment
+command family. `compare` remains a compatibility wrapper and prints migration
+guidance.
 
-1. `experiment` is the sole command for static request experiments and reports.
-2. `compare` is reserved for executing complete baseline and candidate agent
-   processes. It is not an alias for static request replay.
-3. `runeconomy demo` now renders the frozen quality-gated rejection. Select
-   `--case historical` for the earlier bundled report.
-4. Verdicts can be `verified`, `regression`, `inconclusive`, or `invalid`.
-   Missing or incomplete evidence is not coerced to zero merely to produce a
-   verdict.
-5. Real-agent integrations should emit the documented OpenTelemetry or
-   OpenInference JSON trace and, where supported, the versioned attempt-status
-   document. Review the environment-variable contract in
-   [closed-loop-comparison.md](closed-loop-comparison.md).
+## Connectors
 
-## Alpha limitations
+- OpenInference and OpenTelemetry are the golden path. Exact token boundaries
+  and workflow dependencies require explicit evidence.
+- vLLM capture JSONL supports exact-token analysis when the capture contains it.
+- Prefixwise ledger JSONL preserves findings, hashes, counts, and provenance.
+  It does not reconstruct prompts or tokens and normally creates an unresolved
+  workspace.
+- Phoenix CLI JSON has a narrow adapter. Parentage is structural only.
+- LangSmith users should use its documented OpenTelemetry export or fan-out.
+- AgenticLens has no claimed native adapter until a stable export contract is
+  available.
 
-- The vLLM integration surface varies by deployment. Run `doctor` before an
-  experiment and treat unknown capabilities as unknown.
-- Development-mode cache reset is suitable only for private benchmark servers.
-- A unique cache salt provides logical isolation, not a physical reset.
-- OpenInference imports may provide structural evidence without exact rendered
-  token IDs. Parent-child nesting alone is not treated as an explicit workflow
-  dependency.
-- Cache-ledger exports often contain hashes and counts rather than replayable
-  prompts. Experiments generated from them may therefore remain unresolved.
-- `compare` requires the agent to export a durable trace file. RunEconomy does
-  not yet provide an OTLP network collector, automatic resume, or
-  framework-specific tracing SDK.
-- The current flagship proof uses one pinned model, backend, hardware class,
-  and consumed workload. It is an example of verification behavior, not a
-  universal performance claim.
+## Compatibility and migration from 0.2.0a3
 
-## Privacy boundary
+Existing normalized traces, structured findings, static manifests, results, and
+the legacy importer commands remain supported. `analyze` remains available for
+advanced use.
 
-RunEconomy comparison artifacts can contain task inputs, process output,
-stderr, evaluator details, and raw traces. Keep the artifacts directory
-private unless it has been explicitly reviewed and sanitized.
+New workflows should replace importer-specific first steps with
+`runeconomy import`, use a directory workspace, and use agent-process mode
+instead of calling `compare` directly. A `.json` output path still creates the
+legacy monolithic finding artifact where supported.
 
-The bundled public proof contains aggregate counts, intervals, hashes,
-provenance, gate results, high-level failure categories, and the claim
-boundary. It excludes raw prompts, task answers, model output, stdout/stderr,
-credentials, endpoints, local paths, raw traces, and replayable private
-workload data.
+Evidence bundle schema `0.1` and workspace schema `0.1` are new. They wrap
+existing artifacts without silently strengthening their evidence. Validation
+statuses now distinguish runnable, unresolved, invalid, unsupported backend,
+and incomplete claim evidence.
 
-Credentials should be supplied through environment variables or an ignored
-local environment file. Do not place API keys in manifests, traces, reports,
-issues, or test fixtures.
+## Privacy and limitations
+
+Raw prompts, replay requests, traces, generated output, evaluator data, task
+answers, credentials, endpoints, and local experiment artifacts remain the
+operator's responsibility. Source evidence is referenced by name and digest in
+the workspace rather than copied into it.
+
+The zero-edit public fixture uses a deterministic mock vLLM server. It validates
+workflow plumbing, not real serving performance. Live vLLM behavior still
+depends on deployment capabilities reported by `doctor`.
+
+RunEconomy does not provide a hosted dashboard, managed collector,
+framework-specific SDK, automatic production changes, automatic resume, SGLang
+runner, or broad diagnosis catalog.

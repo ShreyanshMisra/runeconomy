@@ -3,11 +3,11 @@
 RunEconomy connects application behavior to inference measurements and refuses
 to verify a speedup unless task-quality evidence supports the comparison.
 
-## 1. Trace
+## 1. Import evidence
 
-Instrument a real agent with OpenTelemetry/OpenInference or import evidence from
-supported vLLM capture and cache-ledger exports. Preserve explicit workflow dependencies,
-variant-local state, and unknown fields.
+Use `runeconomy import` with OpenTelemetry or OpenInference, vLLM capture,
+Prefixwise ledger, or Phoenix trace evidence. The resulting capability
+assessment explains what is known and what remains unavailable.
 
 ## 2. Diagnose
 
@@ -16,20 +16,20 @@ workflow. A finding records its evidence quality, affected requests,
 critical-path status, optimization target, required capabilities, and possible
 experiment template.
 
-## 3. Experiment
+## 3. Initialize and validate
 
-Turn a supported finding into a controlled baseline/candidate manifest. If the
-application change cannot be generated safely, RunEconomy emits an unresolved
-skeleton instead of pretending it is runnable.
+Turn a supported finding into a small experiment workspace. Validation reports
+whether it is runnable, unresolved, invalid, unsupported by the backend, or
+missing evidence for the intended claim.
 
-## 4. Gate
+## 4. Run and gate
 
 Execute paired trials with frozen identities, ordering, metrics, task evaluators,
 and acceptance gates. Task success and completion are evaluated before
 successful-pair latency. Failures remain visible rather than disappearing from
 the latency sample.
 
-## 5. Verdict
+## 5. Report the verdict
 
 Return `verified`, `regression`, `inconclusive`, or `invalid`, together with the
 decisive gate, provenance, intervals, and conditional mechanism measurements.

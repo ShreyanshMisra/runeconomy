@@ -1,68 +1,59 @@
 # Agents
 
-Most users will have a coding agent help install, configure and operate
-RunEconomy. The official RunEconomy skill gives that agent the same safety,
-privacy and verdict contract documented in this repository.
+The official RunEconomy skill gives a coding agent the same evidence, privacy,
+authorization, and verdict contract documented in this repository. The
+canonical source is the complete
+[`skills/runeconomy`](../skills/runeconomy/) directory.
 
-The canonical source is
-[`skills/runeconomy/SKILL.md`](../skills/runeconomy/SKILL.md). The website copy
-and download actions are generated from that exact file during the site build.
-The repository copy is the source of truth.
+## Install
+
+From the project where the agent will operate, run:
+
+```bash
+npx skills add ShreyanshMisra/runeconomy --skill runeconomy --all
+```
+
+The Agent Skills installer places the portable skill for each selected agent.
+Review the paths it prints. For Codex and Claude Code, confirm that each
+installed `SKILL.md` resolves to the same canonical skill directory and includes
+the `references/` files.
+
+The current Agent Skills CLI requires Node.js 22.20 or newer. If `npx` reports
+an engine or `node:util` error, update Node before retrying the same command.
+
+If an agent does not rediscover skills during the current session, tell it to
+read the newly installed `SKILL.md` completely before continuing. Cursor skill
+discovery can vary by version, so use the installer's reported result rather
+than assuming a universal path.
+
+## Bootstrap prompt
+
+```text
+Install the official RunEconomy skill for this project by running:
+npx skills add ShreyanshMisra/runeconomy --skill runeconomy --all
+
+Review the installed files, read the RunEconomy SKILL.md completely, and follow it for this task. Begin read-only. Inspect the repository and available inference evidence, identify what is missing for a valid experiment, and propose the exact import, initialization, validation, run, and report commands. Do not start paid compute, reset caches, expose private traces, or modify production infrastructure without my explicit approval.
+```
+
+## Version contract
+
+The skill does not hardcode a prerelease. It tells the agent to inspect
+`runeconomy --version`, use documentation from the matching release or tag, and
+ask before upgrading. Versioned and latest skill copies on the documentation
+site are generated from this repository source. Their SHA-256 checksum is shown
+on this page after the site build.
 
 ## What the skill teaches
 
-- inspect a repository and deployment without changing infrastructure
-- install the requested RunEconomy version
-- run and interpret the read-only `doctor` command
-- choose between instrumentation and supported trace imports
-- initialize, validate and execute a controlled experiment
+- begin read-only and diagnose vLLM safely
+- choose the unified evidence importer and respect capability grades
+- create and validate an experiment workspace
+- choose static request or agent-process mode
 - preserve variant-local state and explicit workflow dependencies
-- read task-quality gates before conditional latency measurements
-- distinguish verified, regression, inconclusive and invalid verdicts
+- read task-quality gates before mechanism metrics
+- distinguish verified, regression, inconclusive, and invalid
+- protect prompts, traces, answers, credentials, and raw artifacts
+- stop before paid, destructive, production, or publication actions
 
-The agent is told not to call a change an improvement unless the verdict is
-`verified`.
-
-## Safety and privacy boundaries
-
-The skill tells an agent to protect prompts, generated output, evaluator data,
-raw traces, credentials, private endpoints and unsanitized result artifacts. It
-also requires explicit approval before paid compute, cache reset, development
-endpoint changes, publication or production infrastructure changes.
-
-The skill targets RunEconomy `0.2.0a3`.
-
-## Codex
-
-Copy the complete skill directory to a project-scoped path:
-
-```text
-.agents/skills/runeconomy/SKILL.md
-```
-
-For user scope, use `~/.agents/skills/runeconomy/SKILL.md`. Start a new session
-after copying the directory.
-
-## Claude Code
-
-Claude Code uses a compatible `SKILL.md` folder shape. Copy the complete
-directory to:
-
-```text
-.claude/skills/runeconomy/SKILL.md
-```
-
-Use `~/.claude/skills/runeconomy/SKILL.md` for user scope. Review the skill
-before allowing it to execute commands.
-
-## Cursor
-
-Cursor commonly uses project rules under `.cursor/rules` or a root `AGENTS.md`.
-Adapt the canonical skill into a project rule and preserve its safety
-boundaries. Cursor support is not universal `SKILL.md` discovery, so do not
-describe this adaptation as universal native skill support.
-
-## Keep one canonical source
-
-Replace the installed directory from a newer tagged release instead of editing
-multiple copies. The repository file remains authoritative for every tool.
+The repository copy is the source of truth. Replace the installed directory
+from a tagged release rather than maintaining hand-edited copies.

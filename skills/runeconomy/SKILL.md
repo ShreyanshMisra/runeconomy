@@ -1,159 +1,100 @@
 ---
 name: runeconomy
-description: Diagnose inference waste in vLLM-backed agent workflows and run quality-gated baseline/candidate experiments with RunEconomy. Use when inspecting compatibility, importing traces, preparing an experiment, comparing agents, or interpreting RunEconomy verdicts.
+description: Import agent inference evidence, assess what it can support, prepare a controlled baseline and candidate experiment, and interpret a quality-gated RunEconomy verdict. Use when onboarding a repository to RunEconomy, diagnosing vLLM compatibility, converting OpenInference, Phoenix, vLLM, or Prefixwise evidence, or running an experiment safely.
 ---
 
 # RunEconomy
 
-Use RunEconomy as a verification layer between agent traces and inference
-infrastructure. The goal is not to maximize an isolated metric. It is to learn
-whether a change improves successful-task performance.
+RunEconomy tests whether an inference change improves successful-task
+performance. Treat cache reuse, tokens, TTFT, and latency as observations until
+the declared task-quality and performance gates support the claim.
 
-## Safety boundary
+## Start safely
 
-- Begin read-only. Inspect the repository, deployment configuration, existing
-  traces, and `runeconomy --help` before changing an agent or server.
-- Never print or commit API keys, prompts, model output, evaluator answers, raw
-  traces, private endpoints, or experiment artifacts containing them.
-- `runeconomy doctor` is read-only. It may make metadata and non-inference
-  render probes. It never generates text or calls cache-reset endpoints.
-- Do not enable development endpoints, reset shared caches, start paid compute,
-  publish results, or alter production infrastructure without explicit approval.
-- Treat executable evaluators and agent commands as local code execution. Review
-  them before opting in.
+1. Inspect the repository and deployment without changing them.
+2. Run `runeconomy --version`. Read documentation from the matching release or
+   tag. If RunEconomy is missing, install the version requested by the user.
+3. Never upgrade RunEconomy without asking first.
+4. Never print or commit credentials, prompts, model output, evaluator answers,
+   raw traces, private endpoints, or unsanitized result artifacts.
+5. Ask before paid compute, cache reset, development-mode endpoints,
+   infrastructure changes, publication, or deployment.
 
-## 1. Establish the environment
-
-Install the version requested by the user. For the current alpha:
+`runeconomy doctor` is read-only. It does not generate text or reset caches:
 
 ```bash
-python -m pip install --pre runeconomy==0.2.0a3
-runeconomy --help
-runeconomy demo --open
-```
-
-If `--open` is unavailable, generate the file and report its path. The bundled
-proof is an `invalid` result: attractive cache and latency measurements were
-rejected because task-quality evidence did not pass the frozen gates.
-
-For vLLM, keep the key in an environment variable and diagnose compatibility:
-
-```bash
-export VLLM_API_KEY='...'
 runeconomy doctor --base-url "$VLLM_BASE_URL" --api-key-env VLLM_API_KEY
 ```
 
-The operator must supply the OpenAI-compatible server root. If the base URL is
-not available, stop and ask for it. Do not guess an endpoint from repository
-history, logs, or provider metadata.
+Follow its exact next action. An optional capability is not a blocker unless the
+selected experiment mode requires it.
 
-Do not paste the key into arguments, manifests, reports, or chat. Interpret the
-doctor exit code as follows:
+## Evidence-first workflow
 
-- `0`: at least one safe experiment mode is supported.
-- `1`: diagnosis completed, but no safe mode is established.
-- `2`: the probe could not complete because of configuration, authentication,
-  connection, timeout, or malformed-response failure.
-
-Follow the reported “What to do next” action. Optional cache reset, cache salt,
-server timing, or cache telemetry must not be described as universal blockers.
-
-## 2. Choose evidence acquisition
-
-Prefer existing OpenTelemetry/OpenInference traces when they preserve real
-workflow timing and explicit dependencies. Otherwise use the narrowest importer
-that matches available evidence:
+Import the evidence without guessing its format:
 
 ```bash
-runeconomy import-openinference otlp.json --output trace.json
-runeconomy import-vllm-jsonl captures.jsonl --output trace.json \
-  --trace-id TRACE --model MODEL
-runeconomy import-ledger-jsonl ledger.jsonl --output findings.json
+runeconomy import SOURCE --output evidence.json
 ```
 
-Use instrumentation when imports lack the workflow relationships required by
-the question. Do not invent token boundaries, parent-child dependencies, cached
-tokens, timing, or identity fields. Unknown must remain unknown.
-
-For real-agent comparison, every attempt must export durable OpenTelemetry or
-OpenInference JSON to `RUNECONOMY_TRACE_PATH` and a versioned attempt status to
-`RUNECONOMY_STATUS_PATH`. Preserve variant-local state. Add explicit
-`runeconomy.depends_on` relationships for actual execution dependencies. Do not
-infer a workflow DAG merely from span nesting.
-
-## 3. Diagnose and initialize
+Read the capability assessment. Unknown fields must remain unknown. Then create
+an experiment workspace:
 
 ```bash
-runeconomy analyze trace.json --format json --output analysis.json
-runeconomy experiment init --from-finding analysis.json \
-  --finding-id FINDING_ID --output experiment.json
-runeconomy experiment validate experiment.json
+runeconomy experiment init --from-evidence evidence.json --output experiment/
+runeconomy experiment validate experiment/
 ```
 
-Inspect the finding's evidence level, attribution quality, affected requests,
-critical-path status, required backend capabilities, proposed causal mechanism,
-and predicted direction. An unresolved skeleton is not runnable: fill only
-fields supported by evidence, then validate again.
+Validation is corrective. Resolve only the fields it identifies and only from
+real evidence. Do not make an unresolved workspace runnable by inventing
+requests, dependencies, token boundaries, identity, an evaluator, or replay
+context.
 
-Before execution, predeclare and review:
-
-- workload split and task evaluator
-- baseline and candidate intervention
-- primary end-to-end metric and secondary mechanism metrics
-- absolute task-success and paired non-inferiority gates
-- cache isolation and trial ordering
-- model, revision, tokenizer, template, backend, and relevant engine identity
-- sample size or stopping rule and cost ceiling.
-
-## 4. Execute the right comparison
-
-Use static `experiment` for controlled request manifests:
+For a new real-agent experiment, initialize the agent-process mode directly:
 
 ```bash
-runeconomy experiment run experiment.json --output result.json
-runeconomy experiment report result.json --output report.html
-```
-
-Use `compare` for complete baseline and candidate agent processes:
-
-```bash
-runeconomy compare \
+runeconomy experiment init --mode agent-process \
   --baseline "python agent_v1.py" \
   --candidate "python agent_v2.py" \
   --dataset tasks.json \
   --evaluator evaluator.py \
-  --output comparison.json
+  --output experiment/
 ```
 
-Use randomized or alternating paired order. Keep failures in the result. Never
-allow failed or timed-out attempts to disappear from latency accounting. Classify
-task failure, model-output failure, application failure, infrastructure failure,
-timeout, evaluator failure, and invalid trace separately. Preserve checkpoints
-and partial traces when interrupted.
+Run and report through the same command family:
 
-## 5. Interpret the verdict
+```bash
+runeconomy experiment run experiment/ --output result/
+runeconomy experiment report result/ --output report.html
+```
 
-Read gates in their declared order and report the exact status:
+Review executable agent commands and evaluators before running them. Keep every
+failure and timeout in the result. Preserve variant-local state and explicit
+`runeconomy.depends_on` relationships. Never infer a workflow dependency merely
+from span nesting.
 
-- `verified`: quality gates passed and the declared performance criterion passed.
-- `regression`: the candidate violated a declared quality or performance guardrail.
-- `inconclusive`: evidence was valid but insufficient to establish the claim.
-- `invalid`: the experiment or baseline did not establish valid evidence for the
-  comparison.
+## Interpret the result
 
-Only call a change an improvement when the verdict is `verified`. Cache hits,
-token reductions, TTFT, or successful-pair latency may be useful mechanism
-measurements, but remain conditional when quality gates fail. State which pairs
-entered each continuous metric and whether missing fields were unknown.
+- `verified`: declared quality and performance requirements passed.
+- `regression`: a declared quality or performance guardrail failed.
+- `inconclusive`: evidence was valid but insufficient for the claim.
+- `invalid`: evidence, identity, execution, or baseline quality could not
+  support the comparison.
+
+Only call a change an improvement when the verdict is `verified`. State which
+pairs entered each latency or mechanism estimate. Missing metrics stay unknown,
+not zero.
+
+## Load detail only when needed
+
+- [Evidence imports and capability levels](references/evidence-imports.md)
+- [Experiment workspace and execution contract](references/experiment-contract.md)
+- [Verdicts and claim language](references/verdicts.md)
+- [Privacy and infrastructure safety](references/privacy.md)
+- [Troubleshooting](references/troubleshooting.md)
 
 ## Completion report
 
-Report:
-
-1. Evidence source and privacy boundary.
-2. Backend readiness and unsupported or unknown capabilities.
-3. Frozen intervention, workload, metrics, gates, identities, and hashes.
-4. Attempt counts and failure classifications.
-5. Verdict and decisive gate.
-6. Conditional mechanism measurements, clearly labelled.
-7. Remaining uncertainty and the next safe action.
+Report the evidence source, privacy boundary, capability assessment, frozen
+intervention and gates, attempt classifications, verdict and decisive gate,
+conditional observations, remaining uncertainty, and next safe action.

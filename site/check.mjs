@@ -39,7 +39,8 @@ const routes = new Set(files.map(routeFor));
 const requiredRoutes = [
   "/", "/start/", "/doctor/", "/agents/", "/proof/", "/experiments/",
   "/compare/", "/traces/", "/cli/", "/troubleshooting/", "/alpha/",
-  "/articles/0-2-0a2/", "/articles/0-2-0a3/",
+  "/evidence/", "/connectors/",
+  "/articles/0-2-0a2/", "/articles/0-2-0a3/", "/articles/0-2-0a4/",
   "/articles/how-runeconomy-works/", "/getting-started/", "/skill/",
   "/how-it-works/", "/404.html",
 ];
@@ -83,7 +84,7 @@ for (const file of files) {
       failures.push(`${route}: relative link ${target} does not resolve on the site`);
       continue;
     }
-    if (target.startsWith("/assets/") || target === "/favicon.svg") {
+    if (target.startsWith("/assets/") || target.startsWith("/skills/") || target.startsWith("/llms") || target === "/favicon.svg") {
       try {
         await access(join(output, target.slice(1)));
       } catch {
@@ -114,6 +115,32 @@ for (const marker of ["79.61%", "0.8308031360405823", "negative 12.55 percentage
 const builtSkill = await readFile(join(output, "assets", "runeconomy-skill.md"));
 const sourceSkill = await readFile(join(root, "skills", "runeconomy", "SKILL.md"));
 if (!builtSkill.equals(sourceSkill)) failures.push("skill download differs from canonical repository source");
+for (const version of ["latest", siteConfig.alphaVersion]) {
+  const versionedSkill = await readFile(join(output, "skills", version, "SKILL.md"));
+  if (!versionedSkill.equals(sourceSkill)) failures.push(`${version}: versioned skill differs from canonical source`);
+  for (const reference of ["evidence-imports.md", "experiment-contract.md", "verdicts.md", "privacy.md", "troubleshooting.md"]) {
+    const builtReference = await readFile(join(output, "skills", version, "references", reference));
+    const sourceReference = await readFile(join(root, "skills", "runeconomy", "references", reference));
+    if (!builtReference.equals(sourceReference)) failures.push(`${version}: ${reference} differs from canonical source`);
+  }
+}
+const agentsPage = await readFile(join(output, "agents", "index.html"), "utf8");
+for (const marker of [
+  "npx skills add ShreyanshMisra/runeconomy --skill runeconomy --all",
+  "Copy install command",
+  "Copy bootstrap prompt",
+  "/skills/latest/SKILL.md",
+  "Verify SHA-256",
+]) {
+  if (!agentsPage.includes(marker)) failures.push(`agents: missing skill action ${marker}`);
+}
+for (const file of ["llms.txt", "llms-full.txt"]) {
+  try {
+    await access(join(output, file));
+  } catch {
+    failures.push(`missing ${file}`);
+  }
+}
 
 const siteCss = await readFile(join(output, "assets", "site.css"), "utf8");
 for (const marker of [

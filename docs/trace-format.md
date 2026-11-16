@@ -5,9 +5,10 @@ part of the initial schema. Token IDs can often be decoded and must still be
 treated as sensitive data.
 
 Normalized traces are evidence for `analyze`, structured findings, and
-`experiment init`. Importing a trace does not replay the original agent.
-`runeconomy compare` separately executes complete baseline and candidate agent
-processes, then imports each attempt's trace under the closed-loop contract.
+`experiment init`. The public entry point is
+`runeconomy import SOURCE --output evidence.json`, which adds source provenance
+and a capability assessment. Importing a trace does not replay the original
+agent.
 
 ```json
 {
@@ -180,7 +181,7 @@ runeconomy import-vllm-jsonl captures.jsonl \
 The JSONL envelope contains the original request body. Keep it local or
 sanitize it before sharing.
 
-## Importing OpenInference/OpenTelemetry
+## Importing OpenInference and OpenTelemetry
 
 `runeconomy import-openinference` reads one trace from an OTLP JSON export. It
 recognizes OpenInference LLM, tool, and retriever spans, model/provider and token
@@ -209,7 +210,13 @@ retained work span declares that attribute. Otherwise the dependency evidence
 is `partial_explicit` or `absent` and must not be presented as a reconstructed
 workflow DAG.
 
-## Importing cache-ledger evidence
+The unified importer also accepts directories containing several JSON traces.
+It preserves runs separately and requires explicit selection before runnable
+initialization. An explicit `runeconomy.prompt_segments` extension may provide
+semantic token arrays. Exact boundaries are accepted only when those arrays
+concatenate to the complete `runeconomy.prompt_token_ids` sequence.
+
+## Importing Prefixwise and cache-ledger evidence
 
 Some prompt-cache analysis tools export a JSONL ledger with one row per
 request. Each row records a classified `cause` together with counts, costs,
@@ -217,12 +224,11 @@ divergence roles and indexes, and hashes instead of prompt text. RunEconomy
 imports those rows as structured finding evidence:
 
 ```bash
-runeconomy import-ledger-jsonl ledger.jsonl \
-  --output findings.json
+runeconomy import prefixwise-ledger.jsonl --type prefixwise \
+  --output evidence.json
 runeconomy experiment init \
-  --from-finding findings.json \
-  --finding-id FINDING_ID \
-  --output experiment-skeleton.json
+  --from-evidence evidence.json \
+  --finding-id FINDING_ID --output experiment/
 ```
 
 The import allowlists documented ledger fields, does not copy arbitrary request
@@ -231,3 +237,6 @@ are not replayable workloads and do not establish workflow critical-path
 membership, `experiment init` produces an unresolved skeleton until the user
 provides requests, a candidate change, backend controls, acceptance gates, and
 an evaluator.
+
+`import-prefixwise-jsonl` is the named compatibility command.
+`import-ledger-jsonl` remains available for existing automation.

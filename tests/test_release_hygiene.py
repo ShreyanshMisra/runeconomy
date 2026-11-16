@@ -100,7 +100,7 @@ class ReleaseHygieneTests(unittest.TestCase):
         with (ROOT / "pyproject.toml").open("rb") as handle:
             project = tomllib.load(handle)["project"]
         self.assertEqual(project["name"], "runeconomy")
-        self.assertEqual(project["version"], "0.2.0a3")
+        self.assertEqual(project["version"], "0.2.0a4")
         self.assertEqual(
             project["urls"]["Repository"],
             "https://github.com/ShreyanshMisra/runeconomy",

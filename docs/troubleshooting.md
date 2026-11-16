@@ -29,17 +29,35 @@ runeconomy doctor --base-url "$VLLM_BASE_URL" --api-key-env VLLM_API_KEY
 If metadata endpoints use different authorization policy from generation,
 correct that policy or use a key permitted to read them.
 
-## Experiment manifest is invalid
+## Evidence format cannot be detected
+
+Run `runeconomy import --help`, then supply the known `--type`. Do not rewrite
+the artifact or claim a stronger source merely to make detection pass.
+
+## Experiment workspace is unresolved
 
 Run:
 
 ```bash
-runeconomy experiment validate experiment.json
+runeconomy experiment validate experiment/ --json
 ```
 
-Correct the named field. An unresolved skeleton must have all unresolved fields
-filled from real evidence before it is runnable. Executable evaluators require
+Each issue identifies the artifact, field, execution impact, claim impact, and
+next action. Fill fields only from real evidence. Executable evaluators require
 manual review and explicit `--allow-exec-evaluators` opt-in.
+
+## Backend capabilities are unsupported or unknown
+
+Save a read-only diagnosis, then validate against it:
+
+```bash
+runeconomy doctor --base-url "$VLLM_BASE_URL" \
+  --api-key-env VLLM_API_KEY --json > doctor.json
+runeconomy experiment validate experiment/ --doctor-report doctor.json
+```
+
+Do not enable development endpoints or reset a shared cache merely to clear a
+validation message.
 
 ## Experiment execution stopped
 
@@ -48,7 +66,7 @@ backend, inspect the reported cause, and resume only if the manifest schedule,
 backend identity, and evidence remain valid. A changed model, tokenizer,
 template, backend version, or relevant engine setting invalidates comparison.
 
-## `compare` reports invalid evidence
+## An agent-process experiment reports invalid evidence
 
 Inspect the private artifacts directory and attempt status files. Verify that
 each agent wrote a complete trace and status, identity fields match, and actual
