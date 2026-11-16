@@ -1,23 +1,51 @@
 # Start with RunEconomy
 
-Move from a clean installation to a quality-gated experiment. The bundled demo
-works offline. A real experiment requires your evidence and a compatible
-backend.
+Move from a clean installation to a quality-gated experiment. The installed
+tutorial works offline. A real experiment requires your evidence and a
+compatible backend.
 
-## 1. Install and inspect the proof
+## 1. Install
 
 RunEconomy requires Python 3.11 or newer.
 
 ```bash
 python -m pip install --pre runeconomy==0.2.0a4
 runeconomy --version
+```
+
+## 2. Try the complete workflow locally
+
+```bash
+runeconomy tutorial init ./runeconomy-tutorial
+runeconomy tutorial serve
+```
+
+The first command creates a sanitized, versioned directory. The second starts a
+deterministic server on `127.0.0.1:8765`. It is not vLLM and does not run a
+model. It validates RunEconomy's product plumbing without network access,
+credentials, a GPU, or paid compute.
+
+Follow `runeconomy-tutorial/README.md` in another terminal. It gives the complete
+`import`, `experiment init`, `validate`, `run`, and `report` sequence. The final
+report is generated from newly executed controlled mock trials. It is not a
+relabelled historical trace or a real performance benchmark.
+
+The tutorial uses a RunEconomy-enriched OpenInference fixture with explicit
+prompt tokens, prompt segments, workflow dependencies, and experiment context.
+Ordinary OpenTelemetry or OpenInference evidence may support diagnosis while
+still producing an unresolved workspace.
+
+To inspect the bundled frozen rejection proof, run:
+
+```bash
 runeconomy demo --open
 ```
 
-The demo renders sanitized aggregate evidence. It makes no network or GPU calls
-and does not rerun the consumed proof workload.
+The proof demo makes no network or GPU calls and does not rerun the consumed
+workload. Read the [complete public proof](public-proof.md) before quoting its
+conditional measurements.
 
-## 2. Check vLLM safely
+## 3. Check a real vLLM deployment safely
 
 Keep authentication in an environment variable:
 
@@ -32,7 +60,7 @@ runeconomy doctor \
 supported, unsupported, and unknown capabilities, plus the safe experiment
 modes and exact next action.
 
-## 3. Import evidence
+## 4. Import your evidence
 
 The unified importer detects supported evidence formats and records what each
 artifact can support:
@@ -46,7 +74,7 @@ OpenInference or OpenTelemetry OTLP JSON, Phoenix JSON traces, exact-token vLLM
 capture JSONL, and Prefixwise ledger JSONL. The importer does not invent prompt
 tokens, dependencies, task outcomes, or replay requests.
 
-## 4. Initialize and validate a workspace
+## 5. Initialize and validate a workspace
 
 ```bash
 runeconomy experiment init \
@@ -63,7 +91,7 @@ findings are viable, select one with `--finding-id`. If evidence is incomplete,
 validation explains the exact field and safe correction. An unresolved
 workspace is not runnable.
 
-## 5. Run and report
+## 6. Run and report
 
 Review the generated commands, evaluator, quality gates, cost ceiling, and
 private artifact locations before execution.
@@ -90,7 +118,7 @@ runeconomy experiment init \
 The older `compare` command remains a compatibility wrapper. New integrations
 should use `experiment init`, `validate`, `run`, and `report` for both modes.
 
-## 6. Read the verdict
+## 7. Read the verdict
 
 - `verified` means declared quality and performance criteria passed.
 - `regression` means a declared candidate guardrail failed.

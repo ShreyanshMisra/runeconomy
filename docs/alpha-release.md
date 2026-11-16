@@ -9,11 +9,14 @@ not a production service or general observability platform.
 ```bash
 python -m pip install --pre runeconomy==0.2.0a4
 runeconomy --version
-runeconomy demo --open
+runeconomy tutorial init ./runeconomy-tutorial
+runeconomy tutorial serve
 ```
 
-The demo is the immutable aggregate-only rejection proof. It does not rerun the
-consumed workload.
+The tutorial is deterministic and local. It uses RunEconomy-enriched
+OpenInference evidence and validates product plumbing only. Ordinary telemetry
+may produce an unresolved workspace. Use `runeconomy demo --open` to inspect the
+immutable aggregate-only rejection proof.
 
 ## Evidence-to-report workflow
 

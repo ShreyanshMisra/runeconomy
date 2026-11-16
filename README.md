@@ -31,13 +31,21 @@ cannot be reused or retuned as fresh held-out evidence.
 
 ## Install and see it in five minutes
 
-RunEconomy requires Python 3.11 or newer. The bundled proof is CPU-only and
-makes no network or GPU calls.
+RunEconomy requires Python 3.11 or newer. The tutorial is CPU-only and makes no
+network or GPU calls.
 
 ```bash
 python -m pip install --pre runeconomy==0.2.0a4
-runeconomy demo --open
+runeconomy tutorial init ./runeconomy-tutorial
+runeconomy tutorial serve
 ```
+
+Follow the generated README in another terminal. The tutorial is deterministic
+and local. It validates product plumbing, not real model performance. It uses
+RunEconomy-enriched OpenInference evidence. Ordinary traces may support
+diagnosis while still producing an unresolved workspace.
+
+Inspect the frozen public proof separately with `runeconomy demo --open`.
 
 Then diagnose a vLLM deployment without generating text or resetting caches:
 

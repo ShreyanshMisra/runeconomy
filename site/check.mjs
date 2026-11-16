@@ -54,6 +54,12 @@ for (const file of files) {
   const prose = visibleProse(html);
   const h1Count = (html.match(/<h1\b/g) || []).length;
   if (h1Count !== 1) failures.push(`${route}: expected one h1, found ${h1Count}`);
+  const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
+  if (new Set(ids).size !== ids.length) failures.push(`${route}: duplicate element id`);
+  if ((html.match(/<main\b/g) || []).length !== 1) failures.push(`${route}: expected one main landmark`);
+  for (const match of html.matchAll(/<img\b[^>]*>/g)) {
+    if (!/\salt="[^"]*"/.test(match[0])) failures.push(`${route}: image without alt text`);
+  }
   if (retiredTerm.test(html)) failures.push(`${route}: retired terminology`);
   if (prose.includes("—")) failures.push(`${route}: em dash in visible prose`);
   if (prose.includes(";")) failures.push(`${route}: semicolon in visible prose`);
@@ -106,6 +112,26 @@ for (const target of [siteConfig.repository, siteConfig.pypi, siteConfig.owner.x
 for (const marker of ["data-menu-button", "data-copy", "article-rail", "Maintained by Shrey"]) {
   if (!home.includes(marker)) failures.push(`home: missing interaction marker ${marker}`);
 }
+for (const marker of [
+  "Try the complete workflow locally",
+  "runeconomy tutorial init ./runeconomy-tutorial",
+  "runeconomy tutorial serve",
+  "does not run a model or measure real inference performance",
+  "RunEconomy-enriched OpenInference",
+  "newly executed controlled trials",
+]) {
+  if (!home.includes(marker)) failures.push(`home: missing tutorial boundary ${marker}`);
+}
+const start = await readFile(join(output, "start", "index.html"), "utf8");
+const startProse = visibleProse(start);
+if (!start.includes("127.0.0.1:8765")) failures.push("start: missing tutorial endpoint");
+for (const marker of [
+  "Ordinary OpenTelemetry or OpenInference evidence",
+  "unresolved workspace",
+  "not a relabelled historical trace",
+]) {
+  if (!startProse.includes(marker)) failures.push(`start: missing tutorial guidance ${marker}`);
+}
 
 const proof = await readFile(join(output, "proof", "index.html"), "utf8");
 for (const marker of ["79.61%", "0.8308031360405823", "negative 12.55 percentage points", "+105", "9 ms lower", "62 ms lower", "Result not verified", "Verdict: Invalid", "consumed"]) {
@@ -148,8 +174,13 @@ for (const marker of [
   "scroll-snap-type: inline proximity",
   "touch-action: pan-x",
   ":focus-visible",
+  "overflow-x: clip",
 ]) {
   if (!siteCss.includes(marker)) failures.push(`site.css: missing accessibility marker ${marker}`);
+}
+const siteJs = await readFile(join(output, "assets", "site.js"), "utf8");
+for (const marker of ["menuButton.focus()", "(min-width: 721px)"]) {
+  if (!siteJs.includes(marker)) failures.push(`site.js: missing navigation behavior ${marker}`);
 }
 
 const release = articles.find((article) => article.slug === "release-0-2-0a2");

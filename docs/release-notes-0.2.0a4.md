@@ -16,6 +16,10 @@ evidence-to-verdict workflow.
   and incomplete public-claim evidence, with corrective actions for every issue.
 - A realistic OpenInference fixture supports the complete zero-edit workflow
   through a deterministic mock vLLM integration test.
+- `runeconomy tutorial init` and `runeconomy tutorial serve` make the complete
+  workflow available from an installed wheel without cloning the repository.
+- Package CI installs the wheel outside the checkout and runs import,
+  initialization, validation, controlled trials, and report generation.
 - Prefixwise ledger evidence imports without reconstructing prompts or tokens.
 - A narrow Phoenix JSON adapter preserves documented structural evidence while
   keeping raw input and output out of the bundle.
@@ -34,12 +38,21 @@ python -m pip install --pre runeconomy==0.2.0a4
 ## Canonical workflow
 
 ```bash
+runeconomy tutorial init ./runeconomy-tutorial
+runeconomy tutorial serve
+
 runeconomy import otlp.json --output evidence.json
 runeconomy experiment init --from-evidence evidence.json --output experiment/
 runeconomy experiment validate experiment/
 runeconomy experiment run experiment/ --output results/
 runeconomy experiment report results/result.json --output report.html --open
 ```
+
+The tutorial uses a RunEconomy-enriched OpenInference fixture with explicit
+prompt tokens, prompt segments, dependencies, and experiment context. Ordinary
+OpenTelemetry evidence may support diagnosis while still producing an
+unresolved workspace. The deterministic server validates product plumbing. It
+does not run a model or measure real inference performance.
 
 ## Compatibility
 

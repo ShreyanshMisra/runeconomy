@@ -25,6 +25,19 @@ Each capability is supported, unsupported, or unknown. A missing metric remains
 unknown. Unsupported replay does not prevent diagnosis, but it prevents a
 runnable replay workspace.
 
+## Tutorial evidence
+
+The installed tutorial uses a RunEconomy-enriched OpenInference fixture. It
+contains explicit prompt token arrays, verified prompt segments, complete
+workflow dependencies, replay requests, a synthetic evaluator, acceptance
+gates, and deterministic mock-backend context.
+
+This is intentionally stronger than an ordinary OpenTelemetry export. Generic
+user traces may support diagnosis while still producing an unresolved
+workspace. Importing a historical trace does not create a verification report.
+The report is generated only after the runner executes newly declared baseline
+and candidate trials.
+
 ## OpenInference and OpenTelemetry
 
 Current GenAI and OpenInference exports can provide model and provider identity,

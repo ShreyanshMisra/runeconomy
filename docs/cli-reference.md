@@ -41,6 +41,8 @@ silently upgrading their evidence quality.
 | Command | Purpose |
 | --- | --- |
 | `runeconomy demo --open` | Render the bundled frozen rejection proof. |
+| `runeconomy tutorial init DIRECTORY` | Materialize the sanitized installed tutorial without overwriting files. |
+| `runeconomy tutorial serve` | Start the deterministic localhost-only tutorial server. |
 | `runeconomy doctor ...` | Diagnose vLLM compatibility safely. |
 | `runeconomy --version` | Print the installed package version. |
 

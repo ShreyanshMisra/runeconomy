@@ -29,6 +29,17 @@ runeconomy doctor --base-url "$VLLM_BASE_URL" --api-key-env VLLM_API_KEY
 Follow its exact next action. An optional capability is not a blocker unless the
 selected experiment mode requires it.
 
+When the user wants to learn the workflow before supplying real evidence, use
+the installed deterministic tutorial:
+
+```bash
+runeconomy tutorial init ./runeconomy-tutorial
+runeconomy tutorial serve
+```
+
+Treat it as a product-plumbing check, never as real inference validation or a
+performance benchmark.
+
 ## Evidence-first workflow
 
 Import the evidence without guessing its format:
