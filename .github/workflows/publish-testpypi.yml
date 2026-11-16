@@ -29,6 +29,10 @@ jobs:
         run: uv build
       - name: Check package metadata
         run: uvx --from twine twine check dist/*
+      - name: Exercise installed evidence-to-report tutorial
+        run: |
+          wheel="$(find dist -name '*.whl' -print -quit)"
+          bash scripts/smoke_installed_tutorial.sh "$wheel"
       - name: Upload distributions
         uses: actions/upload-artifact@v7.0.2
         with:
