@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import hashlib
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -406,7 +407,52 @@ _TOOL_CALL = re.compile(
 )
 
 
-def _openinference_segments(attributes: dict[str, Any]) -> list[dict[str, Any]]:
+def _openinference_segments(
+    attributes: dict[str, Any], exact_token_ids: list[int] | None
+) -> list[dict[str, Any]]:
+    explicit = attributes.get("runeconomy.prompt_segments")
+    if isinstance(explicit, str):
+        try:
+            explicit = json.loads(explicit)
+        except json.JSONDecodeError as exc:
+            raise TraceValidationError(
+                "runeconomy.prompt_segments must be valid JSON"
+            ) from exc
+    if explicit is not None:
+        if not isinstance(explicit, list) or exact_token_ids is None:
+            raise TraceValidationError(
+                "runeconomy.prompt_segments requires exact prompt token IDs and an array value"
+            )
+        flattened: list[int] = []
+        result: list[dict[str, Any]] = []
+        for index, item in enumerate(explicit):
+            if not isinstance(item, dict) or not isinstance(item.get("token_ids"), list):
+                raise TraceValidationError(
+                    f"runeconomy.prompt_segments[{index}].token_ids must be an array"
+                )
+            ids = item["token_ids"]
+            if any(isinstance(value, bool) or not isinstance(value, int) for value in ids):
+                raise TraceValidationError(
+                    f"runeconomy.prompt_segments[{index}].token_ids must contain integers"
+                )
+            start = len(flattened)
+            flattened.extend(ids)
+            if ids:
+                result.append(
+                    {
+                        "kind": str(item.get("kind", "unknown")),
+                        "label": str(item.get("label", item.get("kind", "unknown"))),
+                        "start_token": start,
+                        "end_token": len(flattened),
+                        "attribution_quality": "exact_token_boundary",
+                        "source": "runeconomy.prompt_segments",
+                    }
+                )
+        if flattened != exact_token_ids:
+            raise TraceValidationError(
+                "runeconomy.prompt_segments do not concatenate to prompt token IDs"
+            )
+        return result
     roles = sorted(
         (
             (int(match.group(1)), str(value))
@@ -510,8 +556,18 @@ def import_openinference(
     normalized_spans: list[dict[str, Any]] = []
     any_error = False
     dependency_declarations = 0
+    task_outcomes: set[bool] = set()
+    task_ids: set[str] = set()
+    attempt_ids: set[str] = set()
     for span in selected:
         attributes = _span_attributes(span)
+        explicit_success = attributes.get("runeconomy.task_success")
+        if isinstance(explicit_success, bool):
+            task_outcomes.add(explicit_success)
+        if isinstance(attributes.get("runeconomy.task_id"), str):
+            task_ids.add(attributes["runeconomy.task_id"])
+        if isinstance(attributes.get("runeconomy.attempt_id"), str):
+            attempt_ids.add(attributes["runeconomy.attempt_id"])
         span_kind = str(attributes.get("openinference.span.kind", "")).upper()
         operation = str(attributes.get("gen_ai.operation.name", "")).lower()
         is_llm = span_kind == "LLM" or operation in {"chat", "text_completion"}
@@ -581,7 +637,7 @@ def import_openinference(
                 "prompt_token_ids": exact_ids,
                 "prompt_token_count": prompt_count,
                 "token_evidence_quality": token_quality,
-                "segments": _openinference_segments(attributes),
+                "segments": _openinference_segments(attributes, exact_ids),
                 "available_tools": available,
                 "invoked_tools": list(dict.fromkeys(invoked)),
                 "cache": {"enabled": True, "block_size": block_size},
@@ -659,15 +715,20 @@ def import_openinference(
                 "end_ms": (end_ns - origin) / 1_000_000,
                 "request_id": request_id,
                 "depends_on": _explicit_dependencies(attributes),
+                "parent_span_id": span.get("parentSpanId", span.get("parent_span_id")),
             }
         )
     if not requests:
         raise TraceValidationError("selected trace contains no OpenInference LLM spans")
+    if len(task_outcomes) > 1:
+        raise TraceValidationError("conflicting runeconomy.task_success values in one trace")
     normalized = {
         "schema_version": "0.2",
         "trace_id": trace_id,
         "workload": workload,
-        "success": False if any_error else None,
+        "success": False if any_error else next(iter(task_outcomes)) if task_outcomes else None,
+        "task_id": next(iter(task_ids)) if len(task_ids) == 1 else None,
+        "attempt_id": next(iter(attempt_ids)) if len(attempt_ids) == 1 else None,
         "dependency_evidence": (
             "complete_explicit"
             if dependency_declarations == len(normalized_spans)
@@ -676,6 +737,134 @@ def import_openinference(
             else "absent"
         ),
         "spans": normalized_spans,
+        "requests": requests,
+    }
+    Trace.from_dict(normalized)
+    return normalized
+
+
+def _iso_nanoseconds(value: Any, path: str) -> int:
+    if not isinstance(value, str):
+        raise TraceValidationError(f"{path} must be an ISO 8601 timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise TraceValidationError(f"{path} must be an ISO 8601 timestamp") from exc
+    return int(parsed.timestamp() * 1_000_000_000)
+
+
+def import_phoenix_json(
+    path: Path,
+    *,
+    workload: str = "unknown",
+    backend: str = "unknown",
+    block_size: int = 16,
+) -> dict[str, Any]:
+    """Import the documented ``px trace get --format json`` structure.
+
+    Phoenix parent IDs are retained as structural evidence. They are not
+    converted into RunEconomy execution dependencies.
+    """
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise TraceValidationError(f"cannot read {path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise TraceValidationError(
+            f"{path}:{exc.lineno}:{exc.colno}: invalid JSON: {exc.msg}"
+        ) from exc
+    if isinstance(payload, list):
+        if len(payload) != 1:
+            raise TraceValidationError(
+                "Phoenix input must contain one trace; import a directory for multiple traces"
+            )
+        payload = payload[0]
+    if not isinstance(payload, dict) or not isinstance(payload.get("spans"), list):
+        raise TraceValidationError(f"{path}: expected a Phoenix trace object")
+    trace_id = str(payload.get("traceId", payload.get("trace_id", "phoenix-trace")))
+    prepared: list[tuple[dict[str, Any], int, int]] = []
+    for index, span in enumerate(payload["spans"]):
+        if not isinstance(span, dict):
+            continue
+        start = _iso_nanoseconds(span.get("start_time"), f"spans[{index}].start_time")
+        end = _iso_nanoseconds(span.get("end_time"), f"spans[{index}].end_time")
+        prepared.append((span, start, end))
+    if not prepared:
+        raise TraceValidationError("Phoenix trace contains no spans")
+    origin = min(start for _, start, _ in prepared)
+    requests: list[dict[str, Any]] = []
+    spans: list[dict[str, Any]] = []
+    any_error = False
+    for span, start, end in prepared:
+        attributes = _attributes(span.get("attributes", {}))
+        kind = str(span.get("span_kind", attributes.get("openinference.span.kind", ""))).upper()
+        if kind not in {"LLM", "TOOL", "RETRIEVER"}:
+            continue
+        context = span.get("context", {})
+        span_id = str(
+            context.get("span_id")
+            if isinstance(context, dict) and context.get("span_id")
+            else span.get("span_id", f"span-{len(spans) + 1}")
+        )
+        if str(span.get("status_code", "")).upper() == "ERROR":
+            any_error = True
+        request_id: str | None = None
+        if kind == "LLM":
+            request_id = span_id
+            prompt_count = _integer(
+                _first(attributes, "llm.token_count.prompt", "gen_ai.usage.input_tokens")
+            )
+            available = [
+                str(value)
+                for key, value in attributes.items()
+                if _TOOL_NAME.match(key) and isinstance(value, str)
+            ]
+            invoked = [
+                str(value)
+                for key, value in attributes.items()
+                if _TOOL_CALL.match(key) and isinstance(value, str)
+            ]
+            requests.append(
+                {
+                    "request_id": request_id,
+                    "sequence": len(requests),
+                    "model": str(attributes.get("llm.model_name") or "unknown"),
+                    "backend": str(attributes.get("llm.provider") or backend).lower(),
+                    "prompt_token_ids": None,
+                    "prompt_token_count": prompt_count,
+                    "token_evidence_quality": "count_only" if prompt_count is not None else "unknown",
+                    "segments": _openinference_segments(attributes, None),
+                    "available_tools": list(dict.fromkeys([*available, *invoked])),
+                    "invoked_tools": list(dict.fromkeys(invoked)),
+                    "cache": {"enabled": True, "block_size": block_size},
+                    "metrics": {
+                        "input_tokens": prompt_count,
+                        "output_tokens": _integer(attributes.get("llm.token_count.completion")),
+                        "cached_input_tokens": _integer(attributes.get("llm.token_count.prompt_details.cache_read")),
+                        "total_latency_ms": (end - start) / 1_000_000,
+                    },
+                }
+            )
+        spans.append(
+            {
+                "span_id": span_id,
+                "kind": "inference" if kind == "LLM" else kind.lower(),
+                "start_ms": (start - origin) / 1_000_000,
+                "end_ms": (end - origin) / 1_000_000,
+                "request_id": request_id,
+                "depends_on": [],
+                "parent_span_id": span.get("parent_id"),
+            }
+        )
+    normalized = {
+        "schema_version": "0.2",
+        "trace_id": trace_id,
+        "workload": workload,
+        "success": False if any_error else None,
+        "dependency_evidence": "absent",
+        "span_parentage_evidence": "structural_only",
+        "spans": spans,
         "requests": requests,
     }
     Trace.from_dict(normalized)
@@ -745,7 +934,9 @@ def _ledger_template(cause: str) -> tuple[str, str, str, str]:
     return mappings.get(cause, ("", "cache_reuse", "cached_tokens", "increase"))
 
 
-def import_ledger_jsonl(path: Path) -> dict[str, Any]:
+def import_ledger_jsonl(
+    path: Path, *, source_name: str = "cache_ledger"
+) -> dict[str, Any]:
     """Import cache-ledger JSONL exports as findings, preserving only ledger evidence."""
 
     findings: list[dict[str, Any]] = []
@@ -771,7 +962,7 @@ def import_ledger_jsonl(path: Path) -> dict[str, Any]:
         findings.append(
             {
                 "finding_id": finding_id,
-                "rule_id": f"ledger.{cause}",
+                "rule_id": f"{source_name}.{cause}",
                 "request_id": request_id,
                 "affected_request_ids": [request_id],
                 "title": f"The imported ledger classified the request as {cause}",
@@ -799,13 +990,13 @@ def import_ledger_jsonl(path: Path) -> dict[str, Any]:
                 "predicted_metric": metric,
                 "predicted_direction": direction,
                 "attribution_quality": "block_level" if row.get("divergence_role") else "unknown",
-                "source": "cache_ledger_export",
+                "source": f"{source_name}_export",
             }
         )
     return {
         "artifact_type": "runeconomy.imported_findings",
         "artifact_version": "0.1",
-        "source": "cache_ledger",
+        "source": source_name,
         "trace_id": next(iter(sessions)) if len(sessions) == 1 else "ledger-import",
         "findings": findings,
         "limitations": [

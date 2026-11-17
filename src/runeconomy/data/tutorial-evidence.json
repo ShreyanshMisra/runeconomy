@@ -1,0 +1,120 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "sanitized-prefix-agent"}}
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {"name": "openinference.instrumentation.example"},
+          "spans": [
+            {
+              "traceId": "golden-trace",
+              "spanId": "request-a",
+              "startTimeUnixNano": "1000000000",
+              "endTimeUnixNano": "1020000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "LLM"}},
+                {"key": "llm.model_name", "value": {"stringValue": "example/prefix-model"}},
+                {"key": "llm.provider", "value": {"stringValue": "vllm"}},
+                {"key": "llm.token_count.prompt_details.cache_read", "value": {"intValue": "0"}},
+                {"key": "runeconomy.prompt_token_ids", "value": {"stringValue": "[101,10,11,12,13,14,15,16,17]"}},
+                {"key": "runeconomy.prompt_segments", "value": {"stringValue": "[{\"kind\":\"dynamic_metadata\",\"label\":\"changing run metadata\",\"token_ids\":[101]},{\"kind\":\"system_instructions\",\"label\":\"stable instructions\",\"token_ids\":[10,11,12,13,14,15,16,17]}]"}},
+                {"key": "runeconomy.depends_on", "value": {"stringValue": "[]"}}
+              ]
+            },
+            {
+              "traceId": "golden-trace",
+              "spanId": "request-b",
+              "startTimeUnixNano": "1030000000",
+              "endTimeUnixNano": "1050000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "LLM"}},
+                {"key": "llm.model_name", "value": {"stringValue": "example/prefix-model"}},
+                {"key": "llm.provider", "value": {"stringValue": "vllm"}},
+                {"key": "llm.token_count.prompt_details.cache_read", "value": {"intValue": "0"}},
+                {"key": "runeconomy.prompt_token_ids", "value": {"stringValue": "[102,10,11,12,13,14,15,16,17]"}},
+                {"key": "runeconomy.prompt_segments", "value": {"stringValue": "[{\"kind\":\"dynamic_metadata\",\"label\":\"changing run metadata\",\"token_ids\":[102]},{\"kind\":\"system_instructions\",\"label\":\"stable instructions\",\"token_ids\":[10,11,12,13,14,15,16,17]}]"}},
+                {"key": "runeconomy.depends_on", "value": {"stringValue": "[\"request-a\"]"}}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "runeconomy": {
+    "tutorial": {
+      "schema_version": "0.1",
+      "fixture_kind": "runeconomy_enriched_openinference",
+      "claim_boundary": "Deterministic product-plumbing tutorial, not real inference or a performance benchmark."
+    },
+    "experiment_context": {
+      "experiment_template_id": "prompt.move_dynamic_metadata",
+      "experiment_id": "golden-prefix-placement",
+      "backend": {
+        "kind": "vllm",
+        "base_url": "http://127.0.0.1:8765",
+        "api_dialect": "chat_completions",
+        "model": "example/prefix-model",
+        "model_revision": "model-revision-example",
+        "tokenizer_revision": "tokenizer-revision-example",
+        "chat_template_digest": "sha256:example-template",
+        "backend_version": "0.33.0-mock",
+        "hardware": "CPU mock server",
+        "block_size": 4,
+        "engine_config": {
+          "enable_prefix_caching": true,
+          "tensor_parallel_size": 1,
+          "dtype": "float32"
+        }
+      },
+      "sampling": {"temperature": 0.0, "max_tokens": 8, "seed": 7},
+      "execution": {
+        "repetitions": 20,
+        "warmup_repetitions": 0,
+        "order": "alternating",
+        "seed": 7,
+        "cache_treatment": "warm",
+        "cache_isolation": "shared",
+        "arrival_pattern": "sequential",
+        "require_evaluation": true
+      },
+      "acceptance": {
+        "task_success_method": "paired_exact",
+        "optimization_target": "cache_reuse",
+        "primary_metric": "total_latency_ms",
+        "max_task_success_regression": 0.2,
+        "min_task_success_rate": 0.8,
+        "min_completed_rate": 1.0,
+        "min_cached_token_gain": 4,
+        "require_latency_improvement": true,
+        "require_environment_identity": false
+      },
+      "evaluator": {"kind": "exact", "expected": "PASS"},
+      "baseline_request": {
+        "model": "example/prefix-model",
+        "messages": [
+          {"role": "system", "content": "Run metadata {{RUNECONOMY_TRIAL_ID}}"},
+          {"role": "system", "content": "Stable instructions"},
+          {"role": "user", "content": "Return PASS"}
+        ]
+      },
+      "candidate_request": {
+        "model": "example/prefix-model",
+        "messages": [
+          {"role": "system", "content": "Stable instructions"},
+          {"role": "system", "content": "Run metadata {{RUNECONOMY_TRIAL_ID}}"},
+          {"role": "user", "content": "Return PASS"}
+        ]
+      },
+      "confirmed_capabilities": [
+        "exact_prompt_tokens",
+        "cache_telemetry",
+        "task_evaluator"
+      ]
+    }
+  }
+}

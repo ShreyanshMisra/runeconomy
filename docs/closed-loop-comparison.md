@@ -1,25 +1,33 @@
-# Closed-loop agent comparison
+# Complete agent-process experiments
 
-`runeconomy compare` executes real baseline and candidate agent processes. One
+The `agent-process` experiment mode executes real baseline and candidate agent
+processes. One
 process receives one task and owns its complete workflow state, so later agent
 steps can consume earlier model outputs, tool results, retrieved documents, and
 files exactly as the agent normally implements them.
 
-This is distinct from `runeconomy experiment`, which replays static request
-manifests directly against vLLM. `compare` includes agent process and tool time,
+It uses the same initialization, validation, execution, and report workflow as
+static request experiments. Agent-process mode includes process and tool time,
 variant-local state, task evaluation, and imported workflow telemetry.
 
 ```bash
-runeconomy compare \
+runeconomy experiment init --mode agent-process \
   --baseline "python agent_v1.py" \
   --candidate "python agent_v2.py" \
   --dataset tasks.json \
   --evaluator evaluator.py \
-  --output comparison.json \
+  --output experiment/ \
   --repetitions 3 \
   --order randomized \
   --seed 2027
+
+runeconomy experiment validate experiment/
+runeconomy experiment run experiment/ --output results/
+runeconomy experiment report results/result.json --output report.html --open
 ```
+
+`runeconomy compare` remains a compatibility wrapper for existing automation.
+It emits a migration notice. New integrations should use the workspace workflow.
 
 This command executes local code. Review the agent and evaluator commands
 before running them. RunEconomy does not invoke a shell: command strings are

@@ -10,17 +10,31 @@ ROOT = Path(__file__).parents[1]
 
 
 class DocumentationTests(unittest.TestCase):
-    def test_current_alpha_is_consistent_across_onboarding_sources(self) -> None:
+    def test_current_release_is_consistent_with_versioned_release_sources(self) -> None:
         with (ROOT / "pyproject.toml").open("rb") as handle:
             version = tomllib.load(handle)["project"]["version"]
         for relative in (
-            "README.md",
             "docs/alpha-release.md",
-            "docs/getting-started.md",
-            "skills/runeconomy/SKILL.md",
+            f"docs/release-notes-{version}.md",
         ):
             text = (ROOT / relative).read_text(encoding="utf-8")
             self.assertIn(f"runeconomy=={version}", text, relative)
+            self.assertNotIn("--pre", text, relative)
+
+        release_notes = (ROOT / f"docs/release-notes-{version}.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "RunEconomy `0.2.0` is the first complete evidence-to-verdict release",
+            release_notes,
+        )
+
+        skill = (ROOT / "skills" / "runeconomy" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotRegex(skill, r"runeconomy==\d")
+        self.assertIn("runeconomy --version", skill)
+        self.assertIn("Never upgrade RunEconomy without asking first", skill)
 
     def test_local_markdown_links_resolve(self) -> None:
         sources = [ROOT / "README.md", *(ROOT / "docs").glob("*.md")]

@@ -1,4 +1,5 @@
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,6 +12,14 @@ import { fetchReleases, formatReleaseDate } from "./releases.mjs";
 const siteDir = dirname(fileURLToPath(import.meta.url));
 const root = resolve(siteDir, "..");
 const output = join(siteDir, "dist");
+const skillDirectory = join(root, "skills", "runeconomy");
+const skillSource = await readFile(join(skillDirectory, "SKILL.md"), "utf8");
+const skillChecksum = createHash("sha256").update(skillSource).digest("hex");
+const skillInstallCommand = "npx skills add ShreyanshMisra/runeconomy --skill runeconomy --all";
+const skillBootstrapPrompt = `Install the official RunEconomy skill for this project by running:
+${skillInstallCommand}
+
+Review the installed files, read the RunEconomy SKILL.md completely, and follow it for this task. Begin read-only. Inspect the repository and available inference evidence, identify what is missing for a valid experiment, and propose the exact import, initialization, validation, run, and report commands. Do not start paid compute, reset caches, expose private traces, or modify production infrastructure without my explicit approval.`;
 
 const primaryNavigation = [
   { route: "", label: "Home", key: "home" },
@@ -39,8 +48,8 @@ const referencePages = [
   {
     route: "experiments",
     source: "docs/experiment-format.md",
-    title: "Static experiments",
-    description: "Manifest structure, controls, execution and verdict semantics.",
+    title: "Experiment contract",
+    description: "Workspaces, modes, validation, controls, execution and verdict semantics.",
     active: "start",
     kind: "reference",
   },
@@ -57,6 +66,22 @@ const referencePages = [
     source: "docs/trace-format.md",
     title: "Trace format",
     description: "Normalized requests, spans, dependencies and evidence quality.",
+    active: "start",
+    kind: "reference",
+  },
+  {
+    route: "evidence",
+    source: "docs/evidence-formats.md",
+    title: "Evidence formats",
+    description: "Capability grading and privacy boundaries for supported evidence sources.",
+    active: "start",
+    kind: "reference",
+  },
+  {
+    route: "connectors",
+    source: "docs/connectors.md",
+    title: "Connector support",
+    description: "Supported connectors, evidence boundaries and deferred integrations.",
     active: "start",
     kind: "reference",
   },
@@ -98,8 +123,9 @@ const notFoundPage = {
 };
 
 const releases = await fetchReleases(siteConfig.repository);
-const stableVersion = releases.find((release) => !release.prerelease)?.version
-  || siteConfig.fallbackStableVersion;
+const currentVersion = releases.find((release) => (
+  !release.prerelease && release.version === siteConfig.currentVersion
+))?.version || siteConfig.fallbackStableVersion;
 
 // A release-notes article takes its date from the matching GitHub release when
 // one exists, so a newly published version is dated without editing this site.
@@ -121,6 +147,8 @@ routeBySource.set("doctor.md", "/doctor/");
 routeBySource.set("experiment-format.md", "/experiments/");
 routeBySource.set("closed-loop-comparison.md", "/compare/");
 routeBySource.set("trace-format.md", "/traces/");
+routeBySource.set("evidence-formats.md", "/evidence/");
+routeBySource.set("connectors.md", "/connectors/");
 routeBySource.set("agent-skill.md", "/agents/");
 routeBySource.set("getting-started.md", "/start/");
 routeBySource.set("how-it-works.md", "/articles/how-runeconomy-works/");
@@ -160,6 +188,10 @@ function icon(name) {
   return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths[name]}</svg>`;
 }
 
+function escapeAttribute(value) {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+}
+
 function sidebar(active) {
   const links = primaryNavigation.map((item) => {
     const current = item.key === active;
@@ -171,7 +203,7 @@ function sidebar(active) {
     <div class="sidebar-secondary">
       <a href="${siteConfig.repository}">GitHub</a>
       <a href="${siteConfig.pypi}">PyPI</a>
-      <span>v${siteConfig.alphaVersion}</span>
+      <span>v${siteConfig.currentVersion}</span>
     </div>
   </aside>`;
 }
@@ -233,18 +265,13 @@ function installStrip() {
   return `<section class="install-section" aria-labelledby="install-heading">
     <div class="install-copy">
       <p class="eyebrow" id="install-heading">Install</p>
-      <p>The stable release installs by default. The alpha is a prerelease with the newest features, so request it explicitly.</p>
+      <p>RunEconomy ${currentVersion} installs by default. The package remains alpha-stage software for controlled experiments and private testing.</p>
     </div>
     <div class="install-options">
       <div class="install-command">
-        <span class="command-label">Stable ${stableVersion}</span>
-        <code>pip install runeconomy</code>
-        <button type="button" class="copy-button" data-copy data-copy-text="pip install runeconomy" aria-label="Copy stable install command">${icon("copy")}<span data-copy-label aria-live="polite">Copy</span></button>
-      </div>
-      <div class="install-command">
-        <span class="command-label">Alpha ${siteConfig.alphaVersion}</span>
-        <code>python -m pip install --pre runeconomy==${siteConfig.alphaVersion}</code>
-        <button type="button" class="copy-button" data-copy data-copy-text="python -m pip install --pre runeconomy==${siteConfig.alphaVersion}" aria-label="Copy alpha install command">${icon("copy")}<span data-copy-label aria-live="polite">Copy</span></button>
+        <span class="command-label">Current release ${currentVersion}</span>
+        <code>python -m pip install runeconomy==${currentVersion}</code>
+        <button type="button" class="copy-button" data-copy data-copy-text="python -m pip install runeconomy==${currentVersion}" aria-label="Copy current release install command">${icon("copy")}<span data-copy-label aria-live="polite">Copy</span></button>
       </div>
     </div>
     <div class="install-links" aria-label="Package links">
@@ -267,12 +294,15 @@ function homeFooter() {
 
 function agentActions() {
   return `<section class="resource-actions" aria-label="Agent skill actions">
-    <div><p class="eyebrow">Canonical source</p><p>The downloaded and copied skill is produced from the repository's current <code>SKILL.md</code>.</p></div>
+    <div><p class="eyebrow">Canonical source</p><p>The install, download and checksum are generated from the repository's complete <code>skills/runeconomy</code> directory.</p></div>
     <div class="action-row">
-      <button type="button" class="action-button" data-copy data-copy-url="/assets/runeconomy-skill.md">${icon("copy")}<span data-copy-label aria-live="polite">Copy skill</span></button>
-      <a class="action-button" href="/assets/runeconomy-skill.md" download>${icon("download")}<span>Download skill</span></a>
+      <button type="button" class="action-button" data-copy data-copy-text="${escapeAttribute(skillInstallCommand)}">${icon("copy")}<span data-copy-label aria-live="polite">Copy install command</span></button>
+      <button type="button" class="action-button" data-copy data-copy-text="${escapeAttribute(skillBootstrapPrompt)}">${icon("copy")}<span data-copy-label aria-live="polite">Copy bootstrap prompt</span></button>
+      <a class="action-button" href="/skills/latest/SKILL.md">${icon("arrow")}<span>View skill</span></a>
+      <a class="action-button" href="/skills/latest/SKILL.md" download>${icon("download")}<span>Download skill</span></a>
       <a class="action-button" href="${siteConfig.repository}/tree/main/skills/runeconomy">${icon("github")}<span>View source</span></a>
     </div>
+    <p class="skill-checksum"><a href="/skills/latest/SHA256SUMS">Verify SHA-256</a> <code>${skillChecksum}</code></p>
   </section>`;
 }
 
@@ -353,10 +383,20 @@ function redirectPage(target) {
 
 await rm(output, { recursive: true, force: true });
 await mkdir(join(output, "assets", "thumbnails"), { recursive: true });
+await mkdir(join(output, "skills", "latest"), { recursive: true });
+await mkdir(join(output, "skills", siteConfig.currentVersion), { recursive: true });
 await cp(join(siteDir, "site.css"), join(output, "assets", "site.css"));
 await cp(join(siteDir, "site.js"), join(output, "assets", "site.js"));
 await cp(join(siteDir, "favicon.svg"), join(output, "favicon.svg"));
 await cp(join(root, "skills", "runeconomy", "SKILL.md"), join(output, "assets", "runeconomy-skill.md"));
+await cp(skillDirectory, join(output, "skills", "latest"), { recursive: true });
+await cp(skillDirectory, join(output, "skills", siteConfig.currentVersion), { recursive: true });
+await writeFile(join(output, "skills", "latest", "SHA256SUMS"), `${skillChecksum}  SKILL.md\n`);
+await writeFile(join(output, "skills", siteConfig.currentVersion, "SHA256SUMS"), `${skillChecksum}  SKILL.md\n`);
+await writeFile(join(output, "llms.txt"), `# RunEconomy\n\n- Start: /start/\n- Evidence: /evidence/\n- Experiments: /experiments/\n- Connectors: /connectors/\n- Agent skill: /skills/latest/SKILL.md\n`);
+const skillReferences = ["evidence-imports.md", "experiment-contract.md", "verdicts.md", "privacy.md", "troubleshooting.md"];
+const fullSkill = [skillSource, ...await Promise.all(skillReferences.map(async (name) => `\n\n${await readFile(join(skillDirectory, "references", name), "utf8")}`))].join("");
+await writeFile(join(output, "llms-full.txt"), fullSkill);
 await cp(join(siteDir, "assets", "thumbnails"), join(output, "assets", "thumbnails"), { recursive: true });
 
 for (const page of pages) {

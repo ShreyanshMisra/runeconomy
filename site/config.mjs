@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 
-// The alpha version shown on the site is the package version, so a release
-// only needs the version bump in pyproject.toml.
+// The package version is canonical for current-release and versioned assets.
 const pyproject = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 const packageVersion = pyproject.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
 if (!packageVersion) throw new Error("pyproject.toml does not declare a project version");
@@ -12,8 +11,8 @@ export const siteConfig = {
   repository: "https://github.com/ShreyanshMisra/runeconomy",
   pypi: "https://pypi.org/project/runeconomy/",
   // Used only when the GitHub release list cannot be read during the build.
-  fallbackStableVersion: "0.1.0",
-  alphaVersion: packageVersion,
+  fallbackStableVersion: "0.2.0",
+  currentVersion: packageVersion,
   defaultSocialImage: "/assets/thumbnails/workflow.png",
   owner: {
     name: "Shrey",

@@ -10,6 +10,7 @@ from runeconomy.experiment_init import initialize_experiment, select_finding
 from runeconomy.importers import (
     import_openinference,
     import_ledger_jsonl,
+    import_phoenix_json,
     import_vllm_jsonl,
 )
 from runeconomy.models import Trace, TraceValidationError
@@ -254,6 +255,44 @@ class ImporterTests(unittest.TestCase):
         self.assertNotIn("secret", json.dumps(artifact))
         skeleton = initialize_experiment(select_finding(artifact))
         self.assertEqual(skeleton["generation_status"], "unresolved")
+
+    def test_prefixwise_contract_preserves_conclusion_without_reconstructing_prompt(self) -> None:
+        fixture = (
+            Path(__file__).parents[1]
+            / "examples"
+            / "connectors"
+            / "prefixwise-ledger.jsonl"
+        )
+        artifact = import_ledger_jsonl(fixture, source_name="prefixwise")
+        serialized = json.dumps(artifact)
+
+        self.assertEqual(artifact["source"], "prefixwise")
+        self.assertEqual(
+            artifact["findings"][0]["rule_id"], "prefixwise.volatile_system"
+        )
+        self.assertNotIn("messages", serialized)
+        self.assertNotIn("prompt_token_ids", serialized)
+        skeleton = initialize_experiment(select_finding(artifact))
+        self.assertEqual(skeleton["generation_status"], "unresolved")
+        self.assertIn("replayable request", json.dumps(skeleton))
+
+    def test_phoenix_cli_export_preserves_parentage_without_inventing_dependencies(self) -> None:
+        fixture = (
+            Path(__file__).parents[1]
+            / "examples"
+            / "connectors"
+            / "phoenix-trace.json"
+        )
+        payload = import_phoenix_json(fixture, workload="phoenix-agent")
+        trace = Trace.from_dict(payload)
+
+        self.assertEqual(trace.requests[0].prompt_token_count, 128)
+        self.assertEqual(trace.requests[0].token_evidence_quality, "count_only")
+        self.assertEqual(trace.requests[0].metrics.cached_input_tokens, 64)
+        self.assertEqual(trace.spans[0].depends_on, ())
+        self.assertEqual(payload["spans"][0]["parent_span_id"], "agent-1")
+        self.assertEqual(payload["dependency_evidence"], "absent")
+        self.assertEqual(payload["span_parentage_evidence"], "structural_only")
 
 
 if __name__ == "__main__":

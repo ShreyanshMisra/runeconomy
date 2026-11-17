@@ -16,7 +16,14 @@ mobileMenu?.addEventListener("click", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") setMenu(false);
+  if (event.key === "Escape" && menuButton?.getAttribute("aria-expanded") === "true") {
+    setMenu(false);
+    menuButton.focus();
+  }
+});
+
+window.addEventListener("resize", () => {
+  if (window.matchMedia("(min-width: 721px)").matches) setMenu(false);
 });
 
 async function copyText(button) {

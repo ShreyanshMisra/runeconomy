@@ -16,6 +16,7 @@ from . import __version__
 from .analysis import analyze_trace
 from .backends import BackendProbeError, discover_vllm_capabilities
 from .comparison import run_comparison
+from .evidence import import_evidence, load_evidence_bundle
 from .experiment_init import initialize_experiment, select_finding
 from .experiments import (
     ExperimentManifest,
@@ -34,7 +35,23 @@ from .reports import (
     render_experiment_html,
     render_experiment_markdown,
 )
+from .tutorial import (
+    DEFAULT_TUTORIAL_PORT,
+    TutorialError,
+    materialize_tutorial,
+    serve_tutorial,
+)
 from .vllm import VLLMClient, VLLMError, VLLMHTTPError
+from .workspaces import (
+    agent_run_arguments,
+    create_agent_workspace,
+    create_workspace_from_evidence,
+    create_workspace_from_finding,
+    load_workspace,
+    resolve_agent_manifest,
+    resolve_static_manifest,
+    validate_experiment_artifact,
+)
 
 
 def _load_trace(path: Path) -> Trace:
@@ -102,6 +119,25 @@ def _build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--json", dest="format", action="store_const", const="json")
     analyze.add_argument("--output", type=Path)
 
+    unified_import = subparsers.add_parser(
+        "import",
+        help="import evidence and explain which RunEconomy workflows it can support",
+    )
+    unified_import.add_argument("source", type=Path)
+    unified_import.add_argument("--output", type=Path, required=True)
+    unified_import.add_argument(
+        "--type",
+        choices=("auto", "openinference", "vllm", "prefixwise", "phoenix"),
+        default="auto",
+    )
+    unified_import.add_argument("--trace-id")
+    unified_import.add_argument("--workload", default="unknown")
+    unified_import.add_argument("--backend", default="unknown")
+    unified_import.add_argument("--model")
+    unified_import.add_argument("--block-size", type=int, default=16)
+    unified_import.add_argument("--format", choices=("human", "json"), default="human")
+    unified_import.add_argument("--json", dest="format", action="store_const", const="json")
+
     import_vllm = subparsers.add_parser(
         "import-vllm-jsonl",
         help="convert exact-token vLLM capture records into a normalized trace",
@@ -139,6 +175,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     import_ledger.add_argument("export", type=Path)
     import_ledger.add_argument("--output", type=Path, required=True)
+
+    import_prefixwise = subparsers.add_parser(
+        "import-prefixwise-jsonl",
+        help="import documented Prefixwise ledger evidence without reconstructing prompts",
+    )
+    import_prefixwise.add_argument("export", type=Path)
+    import_prefixwise.add_argument("--output", type=Path, required=True)
 
     capture = subparsers.add_parser(
         "capture-vllm", help="render and execute one vLLM request"
@@ -178,6 +221,26 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     demo.add_argument("--output", type=Path, default=Path("runeconomy-demo.html"))
     demo.add_argument("--open", action="store_true", help="open the report in a browser")
+
+    tutorial = subparsers.add_parser(
+        "tutorial", help="materialize or serve the deterministic local tutorial"
+    )
+    tutorial_commands = tutorial.add_subparsers(
+        dest="tutorial_command", required=True
+    )
+    tutorial_init = tutorial_commands.add_parser(
+        "init", help="create a sanitized tutorial directory"
+    )
+    tutorial_init.add_argument("output", type=Path)
+    tutorial_init.add_argument(
+        "--port", type=int, default=DEFAULT_TUTORIAL_PORT
+    )
+    tutorial_serve = tutorial_commands.add_parser(
+        "serve", help="start the localhost-only deterministic tutorial server"
+    )
+    tutorial_serve.add_argument(
+        "--port", type=int, default=DEFAULT_TUTORIAL_PORT
+    )
 
     doctor = subparsers.add_parser(
         "doctor", help="inspect a vLLM server without running inference"
@@ -222,13 +285,37 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="experiment_command", required=True
     )
     initialize = experiment_commands.add_parser(
-        "init", help="create a manifest or skeleton from a structured finding"
+        "init", help="create an experiment workspace from evidence or explicit agent commands"
     )
-    initialize.add_argument("--from-finding", type=Path, required=True)
+    initialize.add_argument("--from-finding", type=Path)
+    initialize.add_argument("--from-evidence", type=Path)
+    initialize.add_argument(
+        "--mode", choices=("static-request", "agent-process"), default="static-request"
+    )
     initialize.add_argument("--finding-id")
     initialize.add_argument("--output", type=Path, required=True)
+    initialize.add_argument("--baseline", help="baseline agent command")
+    initialize.add_argument("--candidate", help="candidate agent command")
+    initialize.add_argument("--dataset", type=Path)
+    initialize.add_argument("--evaluator", type=Path)
+    initialize.add_argument("--repetitions", type=int, default=1)
+    initialize.add_argument("--order", choices=("randomized", "alternating"), default="randomized")
+    initialize.add_argument("--seed", type=int, default=0)
+    initialize.add_argument("--timeout", type=float, default=300.0)
+    initialize.add_argument("--evaluator-timeout", type=float, default=30.0)
+    initialize.add_argument("--max-task-success-regression", type=float, default=0.05)
+    initialize.add_argument("--min-task-success-rate", type=float, default=0.8)
+    initialize.add_argument("--min-completed-rate", type=float, default=1.0)
+    initialize.add_argument("--cost-ceiling-usd", type=float)
     validate = experiment_commands.add_parser("validate", help="validate a manifest")
     validate.add_argument("manifest", type=Path)
+    validate.add_argument("--format", choices=("human", "json"), default="human")
+    validate.add_argument("--json", dest="format", action="store_const", const="json")
+    validate.add_argument(
+        "--doctor-report",
+        type=Path,
+        help="read a saved `runeconomy doctor --json` result without probing the server",
+    )
     validate.add_argument(
         "--allow-exec-evaluators",
         action="store_true",
@@ -270,6 +357,7 @@ def _build_parser() -> argparse.ArgumentParser:
     report.add_argument("result", type=Path)
     report.add_argument("--output", type=Path, required=True)
     report.add_argument("--format", choices=("markdown", "html"))
+    report.add_argument("--open", action="store_true", help="open an HTML report in a browser")
     return parser
 
 
@@ -463,10 +551,108 @@ def _format_doctor_error(payload: Mapping[str, Any]) -> str:
     )
 
 
+def _format_evidence_assessment(payload: Mapping[str, Any]) -> str:
+    assessment = payload["capability_assessment"]
+    trace = payload.get("trace", {})
+    analysis = payload.get("analysis", {})
+    runs = payload.get("runs", [])
+    if isinstance(runs, list) and runs:
+        requests = [
+            request
+            for run in runs
+            if isinstance(run, Mapping)
+            for request in run.get("trace", {}).get("requests", [])
+        ]
+        spans = [
+            span
+            for run in runs
+            if isinstance(run, Mapping)
+            for span in run.get("trace", {}).get("spans", [])
+        ]
+    else:
+        requests = trace.get("requests", []) if isinstance(trace, Mapping) else []
+        spans = trace.get("spans", []) if isinstance(trace, Mapping) else []
+    findings = (
+        analysis.get("findings", [])
+        if isinstance(analysis, Mapping)
+        else payload.get("findings", [])
+    )
+    lines = [
+        "RunEconomy import",
+        f"Imported {len(requests)} inference request(s), {len(spans)} work span(s), and {len(findings)} finding(s)",
+        "",
+        "Evidence capability                 Status      Evidence",
+        "----------------------------------  ----------  ----------------------------------------",
+    ]
+    labels = {
+        "basic_diagnosis": "Basic diagnosis",
+        "structural_prompt_attribution": "Structural prompt attribution",
+        "exact_token_cache_analysis": "Exact token cache analysis",
+        "critical_path_analysis": "Critical-path analysis",
+        "static_request_replay": "Static request replay",
+        "complete_agent_comparison": "Complete agent comparison",
+        "public_verification_claim": "Public verification claim",
+    }
+    for key, capability in assessment["capabilities"].items():
+        lines.append(
+            f"{labels.get(key, key):<34} {str(capability['status']).title():<11} {capability['evidence']}"
+        )
+    lines.extend(
+        [
+            "",
+            "Runnable experiment: " + ("Yes" if assessment["runnable_experiment"] else "No"),
+            f"Next action: {assessment['next_action']}",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _format_validation_report(report: Mapping[str, Any], path: Path) -> str:
+    status = str(report["status"])
+    headline = {
+        "runnable": "Valid and runnable",
+        "unresolved": "Structurally valid but unresolved",
+        "invalid": "Invalid",
+        "unsupported_backend": "Valid but unsupported by the current backend",
+        "claim_evidence_incomplete": "Valid but missing claim evidence",
+    }.get(status, status.replace("_", " ").title())
+    lines = [
+        f"RunEconomy experiment validate · {headline}",
+        f"Artifact: {path}",
+        f"Mode: {report.get('mode', 'unknown')}",
+    ]
+    for issue in report.get("issues", []):
+        lines.extend(
+            [
+                "",
+                f"Field: {issue['field_path']}",
+                f"Why it matters: {issue['reason']}",
+                "Blocks execution: " + ("Yes" if issue["execution_blocking"] else "No"),
+                "Weakens claim: " + ("Yes" if issue["claim_weakening"] else "No"),
+                f"Safest next action: {issue['next_action']}",
+            ]
+        )
+        if issue.get("command"):
+            lines.append(f"Command: {issue['command']}")
+    if report.get("next_command"):
+        lines.extend(["", f"What to do next: {report['next_command']}"])
+    return "\n".join(lines)
+
+
+def _result_output_path(output: Path) -> tuple[Path, Path]:
+    if output.suffix.lower() == ".json":
+        output.parent.mkdir(parents=True, exist_ok=True)
+        return output, output.with_name(output.stem + "-artifacts")
+    output.mkdir(parents=True, exist_ok=True)
+    return output / "result.json", output / "artifacts"
+
+
 def _next_action_for_error(args: argparse.Namespace) -> str:
     command = getattr(args, "command", None)
     if command == "analyze":
         return "Check that the input is normalized trace JSON, then rerun `runeconomy analyze TRACE`."
+    if command == "import":
+        return "Pass the correct --type when auto-detection is ambiguous, then rerun `runeconomy import SOURCE --output evidence.json`."
     if command and command.startswith("import-"):
         return "Review the source format and required flags, then rerun the same import command."
     if command == "compare":
@@ -474,7 +660,7 @@ def _next_action_for_error(args: argparse.Namespace) -> str:
     if command == "experiment":
         subcommand = getattr(args, "experiment_command", None)
         if subcommand == "init":
-            return "Run `runeconomy analyze` or a supported importer first, then pass its report to `runeconomy experiment init --from-finding ...`."
+            return "Import evidence first, then run `runeconomy experiment init --from-evidence evidence.json --output experiment/`."
         if subcommand == "validate":
             return "Correct the manifest field named above, then rerun `runeconomy experiment validate MANIFEST`."
         if subcommand == "run":
@@ -482,6 +668,10 @@ def _next_action_for_error(args: argparse.Namespace) -> str:
         return "Verify the result JSON, then rerun `runeconomy experiment report`."
     if command == "capture-vllm":
         return "Run `runeconomy doctor` against the same backend, correct the reported capability or authentication issue, then retry the capture."
+    if command == "tutorial":
+        if getattr(args, "tutorial_command", None) == "init":
+            return "Choose a new empty directory, then rerun `runeconomy tutorial init DIRECTORY`."
+        return "Free the port or create a matching tutorial and server on another port."
     return "Correct the reported input or configuration and rerun the command."
 
 
@@ -520,6 +710,32 @@ def main(argv: list[str] | None = None) -> int:
                 _write_text(args.output, rendered + "\n")
             else:
                 print(rendered)
+            return 0
+
+        if args.command == "import":
+            payload = import_evidence(
+                args.source,
+                source_type=args.type,
+                trace_id=args.trace_id,
+                workload=args.workload,
+                backend=args.backend,
+                model=args.model,
+                block_size=args.block_size,
+            )
+            _write_json(args.output, payload)
+            rendered = (
+                json.dumps(payload["capability_assessment"], indent=2, sort_keys=True)
+                if args.format == "json"
+                else _format_evidence_assessment(payload)
+            )
+            print(rendered)
+            if args.format == "human":
+                print(f"Evidence bundle: {args.output}")
+            if args.format == "human" and payload["capability_assessment"]["runnable_experiment"]:
+                print(
+                    "What to do next: run "
+                    f"`runeconomy experiment init --from-evidence {args.output} --output experiment/`."
+                )
             return 0
 
         if args.command == "import-vllm-jsonl":
@@ -569,6 +785,17 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 "What to do next: inspect the evidence and run "
                 f"`runeconomy experiment init --from-finding {args.output} ...`."
+            )
+            return 0
+
+        if args.command == "import-prefixwise-jsonl":
+            payload = import_ledger_jsonl(args.export, source_name="prefixwise")
+            _write_json(args.output, payload)
+            print(
+                f"RunEconomy import · wrote {len(payload['findings'])} Prefixwise finding(s) to {args.output}"
+            )
+            print(
+                "What to do next: initialize an unresolved workspace, then supply replay inputs and an evaluator only when available."
             )
             return 0
 
@@ -624,6 +851,22 @@ def main(argv: list[str] | None = None) -> int:
                     )
             return 0
 
+        if args.command == "tutorial":
+            if args.tutorial_command == "init":
+                created = materialize_tutorial(args.output, port=args.port)
+                print(
+                    "RunEconomy tutorial · Created deterministic local tutorial · "
+                    f"{args.output}"
+                )
+                print(f"Tutorial schema: 0.1 · Files: {len(created)}")
+                serve_command = "runeconomy tutorial serve"
+                if args.port != DEFAULT_TUTORIAL_PORT:
+                    serve_command += f" --port {args.port}"
+                print(f"What to do next: run `{serve_command}` in another terminal.")
+                return 0
+            serve_tutorial(port=args.port)
+            return 0
+
         if args.command == "doctor":
             try:
                 capabilities = discover_vllm_capabilities(
@@ -648,6 +891,11 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if capabilities["readiness"]["status"] == "ready" else 1
 
         if args.command == "compare":
+            print(
+                "RunEconomy · WARNING · `runeconomy compare` is a compatibility wrapper. "
+                "New workflows should use `runeconomy experiment init --mode agent-process`.",
+                file=sys.stderr,
+            )
             artifacts_dir = args.artifacts_dir or args.output.with_name(
                 args.output.stem + "-artifacts"
             )
@@ -707,40 +955,145 @@ def main(argv: list[str] | None = None) -> int:
                 "What to do next: read the verdict and quality gates before "
                 "interpreting conditional performance measurements."
             )
+            if args.open:
+                if report_format != "html":
+                    raise ExperimentValidationError("--open requires an HTML report")
+                if not webbrowser.open(args.output.resolve().as_uri()):
+                    print(
+                        "RunEconomy · WARNING · the report was written, but no browser accepted the open request.",
+                        file=sys.stderr,
+                    )
             return 0
 
         if args.experiment_command == "init":
+            if args.mode == "agent-process":
+                if args.from_finding or args.from_evidence:
+                    raise ExperimentValidationError(
+                        "agent-process initialization accepts explicit commands and files, not --from-finding or --from-evidence"
+                    )
+                missing = [
+                    name
+                    for name, value in (
+                        ("--baseline", args.baseline),
+                        ("--candidate", args.candidate),
+                        ("--dataset", args.dataset),
+                        ("--evaluator", args.evaluator),
+                    )
+                    if value is None
+                ]
+                if missing:
+                    raise ExperimentValidationError(
+                        "agent-process initialization requires " + ", ".join(missing)
+                    )
+                descriptor = create_agent_workspace(
+                    output=args.output,
+                    baseline_command=args.baseline,
+                    candidate_command=args.candidate,
+                    dataset_path=args.dataset,
+                    evaluator_path=args.evaluator,
+                    repetitions=args.repetitions,
+                    order=args.order,
+                    seed=args.seed,
+                    timeout_seconds=args.timeout,
+                    evaluator_timeout_seconds=args.evaluator_timeout,
+                    max_task_success_regression=args.max_task_success_regression,
+                    min_task_success_rate=args.min_task_success_rate,
+                    min_completed_rate=args.min_completed_rate,
+                    cost_ceiling_usd=args.cost_ceiling_usd,
+                )
+                print(f"RunEconomy experiment init · Runnable agent-process workspace · {args.output}")
+                print(f"What to do next: {descriptor['next_command']}")
+                return 0
+
+            if bool(args.from_finding) == bool(args.from_evidence):
+                raise ExperimentValidationError(
+                    "static initialization requires exactly one of --from-evidence or --from-finding"
+                )
+            if args.from_evidence:
+                evidence = load_evidence_bundle(args.from_evidence)
+                descriptor = create_workspace_from_evidence(
+                    evidence,
+                    evidence_path=args.from_evidence,
+                    output=args.output,
+                    finding_id=args.finding_id,
+                )
+                print(
+                    "RunEconomy experiment init · "
+                    f"{str(descriptor['generation_status']).title()} workspace · {args.output}"
+                )
+                print(f"What to do next: {descriptor['next_command']}")
+                return 0
+
             source = _load_json_object(args.from_finding)
-            finding = select_finding(source, args.finding_id)
-            artifact = initialize_experiment(finding)
-            _write_json(args.output, artifact)
-            status = artifact.get("generation_status", "runnable")
-            if status == "unresolved":
-                print(
-                    "wrote unresolved experiment skeleton to "
-                    f"{args.output}; resolve every listed field before validation"
-                )
-                print(
-                    "What to do next: fill every unresolved field, then run "
-                    f"`runeconomy experiment validate {args.output}`."
-                )
-            else:
-                print(f"wrote runnable experiment manifest to {args.output}")
-                print(
-                    "What to do next: review the frozen gates and run "
-                    f"`runeconomy experiment validate {args.output}`."
-                )
+            if args.output.suffix.lower() == ".json":
+                finding = select_finding(source, args.finding_id)
+                artifact = initialize_experiment(finding)
+                _write_json(args.output, artifact)
+                status = artifact.get("generation_status", "runnable")
+                print(f"RunEconomy experiment init · {str(status).title()} artifact · {args.output}")
+                print(f"What to do next: run `runeconomy experiment validate {args.output}`.")
+                return 0
+            descriptor = create_workspace_from_finding(
+                source,
+                source_path=args.from_finding,
+                output=args.output,
+                finding_id=args.finding_id,
+            )
+            print(
+                "RunEconomy experiment init · "
+                f"{str(descriptor['generation_status']).title()} workspace · {args.output}"
+            )
+            print(f"What to do next: {descriptor['next_command']}")
             return 0
 
-        manifest = ExperimentManifest.from_path(args.manifest)
-        _require_trusted_evaluators(manifest, args.allow_exec_evaluators)
         if args.experiment_command == "validate":
-            print(f"RunEconomy experiment · Valid · {manifest.experiment_id}")
-            print(
-                "What to do next: run the manifest only after reviewing its evaluator, "
-                "quality gates, cache-isolation mode, and backend identity."
+            doctor_report = (
+                _load_json_object(args.doctor_report) if args.doctor_report else None
             )
-            return 0
+            report = validate_experiment_artifact(
+                args.manifest, doctor_report=doctor_report
+            )
+            if report["runnable"] and report["mode"] == "static_request":
+                manifest = resolve_static_manifest(args.manifest)
+                _require_trusted_evaluators(manifest, args.allow_exec_evaluators)
+            print(
+                json.dumps(report, indent=2, sort_keys=True)
+                if args.format == "json"
+                else _format_validation_report(report, args.manifest)
+            )
+            return 0 if report["status"] == "runnable" else 2 if report["status"] == "invalid" else 1
+
+        result_path, artifacts_path = _result_output_path(args.output)
+        if args.manifest.is_dir():
+            descriptor, _ = load_workspace(args.manifest)
+            if descriptor.get("mode") == "agent_process":
+                manifest_data, workspace = resolve_agent_manifest(args.manifest)
+                run_args = agent_run_arguments(manifest_data, workspace)
+                _progress(
+                    "starting paired agent-process experiment; partial traces and status files "
+                    f"will be preserved under {artifacts_path}"
+                )
+                result = run_comparison(
+                    **run_args,
+                    output_path=result_path,
+                    artifacts_dir=artifacts_path,
+                    workdir=Path.cwd(),
+                )
+                _write_json(result_path, result)
+                print(
+                    "RunEconomy experiment · Agent process · Verdict: "
+                    f"{str(result['decision']['status']).title()} · wrote {result_path}"
+                )
+                print(
+                    "What to do next: render the report and inspect task-quality gates before latency."
+                )
+                if args.require_verified and result["decision"]["status"] != "verified":
+                    print("error: experiment did not reach a verified decision", file=sys.stderr)
+                    return 3
+                return 0
+
+        manifest = resolve_static_manifest(args.manifest)
+        _require_trusted_evaluators(manifest, args.allow_exec_evaluators)
 
         client = VLLMClient(
             manifest.backend.base_url,
@@ -750,8 +1103,8 @@ def main(argv: list[str] | None = None) -> int:
             api_dialect=manifest.backend.api_dialect,
             on_startup_retry=_startup_retry_notice,
         )
-        checkpoint = args.checkpoint or args.output.with_name(
-            args.output.name + ".trials.jsonl"
+        checkpoint = args.checkpoint or result_path.with_name(
+            result_path.name + ".trials.jsonl"
         )
         _progress(
             "starting static experiment; completed trial records will be preserved "
@@ -763,10 +1116,10 @@ def main(argv: list[str] | None = None) -> int:
             checkpoint_path=checkpoint,
             resume=args.resume,
         )
-        _write_json(args.output, result)
+        _write_json(result_path, result)
         print(
             f"RunEconomy experiment · Verdict: {str(result['decision']['status']).title()} · "
-            f"wrote result to {args.output}"
+            f"wrote result to {result_path}"
         )
         print(
             "What to do next: render a report and interpret performance only after "
@@ -784,6 +1137,7 @@ def main(argv: list[str] | None = None) -> int:
         ExperimentValidationError,
         VLLMError,
         BackendProbeError,
+        TutorialError,
     ) as exc:
         print(_format_cli_error(exc, args), file=sys.stderr)
         return 2

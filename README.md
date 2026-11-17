@@ -7,7 +7,7 @@ CLI for engineers running multi-step agents on self-hosted vLLM.
 RunEconomy sits between agent observability and inference infrastructure:
 
 ```text
-trace → diagnosis → controlled experiment → quality-gated verdict
+import evidence → initialize → validate → run → report
 ```
 
 It reports `verified`, `regression`, `inconclusive`, or `invalid`. Favorable
@@ -31,13 +31,21 @@ cannot be reused or retuned as fresh held-out evidence.
 
 ## Install and see it in five minutes
 
-RunEconomy requires Python 3.11 or newer. The bundled proof is CPU-only and
-makes no network or GPU calls.
+RunEconomy requires Python 3.11 or newer. The tutorial is CPU-only and makes no
+network or GPU calls.
 
 ```bash
-python -m pip install --pre runeconomy==0.2.0a3
-runeconomy demo --open
+python -m pip install runeconomy==0.2.0
+runeconomy tutorial init ./runeconomy-tutorial
+runeconomy tutorial serve
 ```
+
+Follow the generated README in another terminal. The tutorial is deterministic
+and local. It validates product plumbing, not real model performance. It uses
+RunEconomy-enriched OpenInference evidence. Ordinary traces may support
+diagnosis while still producing an unresolved workspace.
+
+Inspect the frozen public proof separately with `runeconomy demo --open`.
 
 Then diagnose a vLLM deployment without generating text or resetting caches:
 
@@ -55,29 +63,39 @@ experiment modes, and an exact next action. Use `--json` for automation.
 [CLI reference](https://runeconomy.vercel.app/cli/) ·
 [Troubleshoot setup](https://runeconomy.vercel.app/troubleshooting/)
 
-## Choose the right experiment
+## Move from evidence to a verdict
 
-- `runeconomy experiment` runs controlled baseline and candidate request
-  manifests against vLLM and produces an experiment report.
-- `runeconomy compare` executes complete baseline and candidate agent processes
-  with variant-local state, explicit dependencies, real tool time, task-level
-  pairing, and durable OpenTelemetry/OpenInference evidence.
-- Importers accept exact-token vLLM captures, structural
-  OpenInference/OpenTelemetry traces, and evidence present in cache-ledger
-  JSONL exports without inventing missing prompts, tokens, timing, or
-  dependencies.
+```bash
+runeconomy import otlp.json --output evidence.json
+runeconomy experiment init --from-evidence evidence.json --output experiment/
+runeconomy experiment validate experiment/
+runeconomy experiment run experiment/ --output results/
+runeconomy experiment report results/result.json --output report.html --open
+```
 
-[Static experiment format](https://runeconomy.vercel.app/experiments/) ·
-[Closed-loop comparison](https://runeconomy.vercel.app/compare/) ·
-[Trace format](https://runeconomy.vercel.app/traces/) ·
+The importer explains which diagnoses, replay modes, and claims the evidence can
+support. An incomplete import creates an unresolved workspace with corrective
+actions instead of invented prompts, tokens, dependencies, or evaluators.
+
+`experiment` supports both static request comparisons and complete baseline and
+candidate agent processes. `compare` remains a compatibility wrapper for older
+agent-process integrations.
+
+[Evidence formats](https://runeconomy.vercel.app/evidence/) ·
+[Experiment contract](https://runeconomy.vercel.app/experiments/) ·
+[Connector support](https://runeconomy.vercel.app/connectors/) ·
 [How RunEconomy works](https://runeconomy.vercel.app/articles/how-runeconomy-works/)
 
 ## Give your coding agent the same contract
 
-The canonical [RunEconomy agent skill](https://github.com/ShreyanshMisra/runeconomy/blob/main/skills/runeconomy/SKILL.md) teaches an
+The canonical [RunEconomy agent skill](https://github.com/ShreyanshMisra/runeconomy/tree/main/skills/runeconomy) teaches an
 agent how to inspect compatibility, acquire evidence, prepare an experiment,
 preserve workflow state, interpret verdicts, protect private material, and stop
 before destructive or external operations.
+
+```bash
+npx skills add ShreyanshMisra/runeconomy --skill runeconomy --all
+```
 
 [Install the skill for Codex, Claude Code, or adapt it for Cursor](https://runeconomy.vercel.app/agents/)
 

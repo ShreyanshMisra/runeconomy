@@ -1,10 +1,36 @@
 # Experiment manifest and vLLM runner
 
-This document describes **static request experiments** run with
-`runeconomy experiment`. A manifest contains complete baseline and candidate
-requests and replays them directly against vLLM. It does not execute an agent,
-carry generated state into a later agent step, or include live tool time. Use
-[`runeconomy compare`](closed-loop-comparison.md) for complete agent processes.
+RunEconomy uses one experiment workflow for static requests and complete agent
+processes. A workspace created by `experiment init` records the mode and points
+to the mode-specific manifest. This document first describes the workspace and
+then the static request manifest. See
+[complete agent processes](closed-loop-comparison.md) for the agent contract.
+
+## Experiment workspace
+
+A workspace contains `workspace.json`, `manifest.json`, `intervention.md`, and a
+short `README.md`. It creates only files meaningful to the selected mode. Source
+evidence stays outside the directory and is referenced by name and SHA-256
+digest.
+
+`workspace.json` records the selected finding, intervention, mode, gates,
+metrics, identity, cache treatment, order, cost ceiling, unresolved fields, and
+next command. Missing values remain unresolved. They are not filled with
+synthetic data.
+
+```bash
+runeconomy experiment init --from-evidence evidence.json --output experiment/
+runeconomy experiment validate experiment/
+```
+
+Validation reports `runnable`, `unresolved`, `invalid`,
+`unsupported_backend`, or `claim_evidence_incomplete`. Every issue identifies
+the artifact and field, why it matters, whether it blocks execution or weakens
+the claim, and the next safe action. A saved `doctor --json` result can be
+applied with `--doctor-report` without changing server state.
+
+The `0.1`, `0.2`, and `0.3` static manifest formats remain readable. A legacy
+JSON manifest can still be passed directly to `validate` and `run`.
 
 The `0.1`, `0.2`, and `0.3` experiment formats define a paired
 baseline/candidate replay against one vLLM backend. Versions `0.1` and `0.2`
@@ -150,16 +176,16 @@ See
 [`examples/experiments/timestamp-placement.json`](../examples/experiments/timestamp-placement.json)
 for a complete manifest.
 
-## Commands
+## Static request commands
 
 ```bash
-runeconomy experiment validate \
-  examples/experiments/timestamp-placement.json
+runeconomy experiment validate examples/experiments/timestamp-placement.json
 
-runeconomy experiment run \
-  examples/experiments/timestamp-placement.json \
-  --output reports/timestamp-placement.json \
-  --require-verified
+runeconomy experiment run examples/experiments/timestamp-placement.json \
+  --output reports/timestamp-placement.json --require-verified
+
+runeconomy experiment report reports/timestamp-placement.json \
+  --output reports/timestamp-placement.html --open
 ```
 
 For adapter smoke-testing, one request can be captured directly:
@@ -243,18 +269,21 @@ runeconomy experiment report result.json \
   --output experiment-report.md
 ```
 
-`experiment` is the sole public command for static controlled comparisons.
+The same report command renders static and agent-process results.
 
-## Initializing from a diagnosis
+## Advanced initialization from an analysis report
 
 ```bash
 runeconomy experiment init \
   --from-finding analysis.json \
   --finding-id finding-0123456789abcdef \
-  --output experiment.json
+  --output experiment/
 ```
 
-The source can be one structured finding or a complete analysis report. When a
+`--from-finding` remains available for advanced and existing workflows. The
+preferred public path is `--from-evidence`, which performs analysis and carries
+the capability assessment into the workspace. The source can be one structured
+finding or a complete analysis report. When a
 report contains multiple findings, `--finding-id` is required. Safe templates
 produce a runnable manifest only when the finding includes complete baseline
 request evidence, candidate transformation inputs, evaluator, backend,
@@ -263,11 +292,11 @@ capabilities. The generated manifest passes through the ordinary manifest
 validator and must use the paired exact task-success method before it is
 labeled runnable.
 
-Otherwise the command writes a `runeconomy.experiment_skeleton` artifact with
-`generation_status: unresolved`, an explicit `unresolved_fields` list, and a
-non-runnable manifest draft. This is intentional: token IDs and tool names are
-not enough evidence to reconstruct requests, tool definitions, a representative
-dataset, or an evaluator.
+Otherwise the workspace records `generation_status: unresolved`, an explicit
+`unresolved_fields` list, and a non-runnable manifest draft. A `.json` output
+path retains the legacy monolithic skeleton. This is intentional: token IDs and
+tool names are not enough evidence to reconstruct requests, tool definitions, a
+representative dataset, or an evaluator.
 
 Generated manifests store the source finding, expected causal mechanism, and
 predicted metric direction under `design.hypothesis`. The final report compares
