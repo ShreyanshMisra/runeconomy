@@ -78,7 +78,7 @@ img { display: block; max-width: 100%; }
 .install-copy { display: grid; padding: 1rem 0; border-bottom: 1px solid var(--line); grid-template-columns: minmax(90px, 0.35fr) 1.65fr; gap: 1rem; }
 .install-copy p { margin: 0; }
 .install-copy p:last-child { max-width: 650px; color: var(--muted); font-size: 0.9rem; }
-.install-options { display: grid; grid-template-columns: 0.72fr 1.28fr; }
+.install-options { display: grid; grid-template-columns: 1fr; }
 .install-command { position: relative; display: grid; min-width: 0; padding: 1.25rem 3.7rem 1.25rem 1.1rem; border-right: 1px solid var(--line); gap: 0.55rem; }
 .install-command:last-child { border-right: 0; }
 .install-command code { overflow-x: auto; color: var(--ink); background: transparent; font: 0.82rem/1.5 var(--mono); white-space: nowrap; }

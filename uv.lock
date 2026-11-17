@@ -1114,7 +1114,7 @@ wheels = [
 
 [[package]]
 name = "runeconomy"
-version = "0.2.0a4"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "jsonschema" },

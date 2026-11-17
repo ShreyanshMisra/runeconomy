@@ -1,7 +1,9 @@
-# RunEconomy 0.2.0a4 release notes
+# RunEconomy 0.2.0 release notes
 
-RunEconomy `0.2.0a4` is the first prerelease with a coherent
-evidence-to-verdict workflow.
+RunEconomy `0.2.0` is the first complete evidence-to-verdict release. It is the
+default installable release and remains alpha-stage software for controlled
+experiments and private testing. This release is not a production-readiness or
+stable-API commitment.
 
 ## What changed
 
@@ -32,7 +34,7 @@ evidence-to-verdict workflow.
 ## Installation
 
 ```bash
-python -m pip install --pre runeconomy==0.2.0a4
+python -m pip install runeconomy==0.2.0
 ```
 
 ## Canonical workflow

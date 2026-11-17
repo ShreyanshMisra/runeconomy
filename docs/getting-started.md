@@ -9,7 +9,7 @@ compatible backend.
 RunEconomy requires Python 3.11 or newer.
 
 ```bash
-python -m pip install --pre runeconomy==0.2.0a4
+python -m pip install runeconomy==0.2.0
 runeconomy --version
 ```
 

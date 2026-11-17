@@ -10,6 +10,7 @@ import urllib.request
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from runeconomy import __version__
 from runeconomy.cli import main
 from runeconomy.tutorial import TutorialError, create_tutorial_server
 
@@ -58,6 +59,7 @@ class GoldenPathTests(unittest.TestCase):
             )
             metadata = json.loads((first / "tutorial.json").read_text())
             self.assertEqual(metadata["schema_version"], "0.1")
+            self.assertEqual(metadata["runeconomy_version"], __version__)
             self.assertEqual(metadata["host"], "127.0.0.1")
             self.assertEqual(metadata["port"], port)
             readme = (first / "README.md").read_text()

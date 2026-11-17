@@ -10,7 +10,7 @@ ROOT = Path(__file__).parents[1]
 
 
 class DocumentationTests(unittest.TestCase):
-    def test_current_alpha_is_consistent_with_versioned_release_sources(self) -> None:
+    def test_current_release_is_consistent_with_versioned_release_sources(self) -> None:
         with (ROOT / "pyproject.toml").open("rb") as handle:
             version = tomllib.load(handle)["project"]["version"]
         for relative in (
@@ -19,6 +19,15 @@ class DocumentationTests(unittest.TestCase):
         ):
             text = (ROOT / relative).read_text(encoding="utf-8")
             self.assertIn(f"runeconomy=={version}", text, relative)
+            self.assertNotIn("--pre", text, relative)
+
+        release_notes = (ROOT / f"docs/release-notes-{version}.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "RunEconomy `0.2.0` is the first complete evidence-to-verdict release",
+            release_notes,
+        )
 
         skill = (ROOT / "skills" / "runeconomy" / "SKILL.md").read_text(
             encoding="utf-8"

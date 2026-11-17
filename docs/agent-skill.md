@@ -37,7 +37,7 @@ Review the installed files, read the RunEconomy SKILL.md completely, and follow 
 
 ## Version contract
 
-The skill does not hardcode a prerelease. It tells the agent to inspect
+The skill does not hardcode a package version. It tells the agent to inspect
 `runeconomy --version`, use documentation from the matching release or tag, and
 ask before upgrading. Versioned and latest skill copies on the documentation
 site are generated from this repository source. Their SHA-256 checksum is shown

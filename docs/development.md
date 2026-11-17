@@ -28,9 +28,9 @@ npm run build
 npm run check
 ```
 
-The alpha version on the home page comes from `pyproject.toml`. The stable
-version and release-note dates come from the GitHub release list at build
-time, with repository values as the fallback when GitHub cannot be reached.
+The current package version on the home page comes from `pyproject.toml`.
+Release-note dates come from the GitHub release list at build time, with
+repository values as the fallback when GitHub cannot be reached.
 Set `RUNECONOMY_SKIP_RELEASE_LOOKUP=1` for a build without network access.
 
 Article thumbnails are 1280 by 800 PNG files in `site/assets/thumbnails/`,

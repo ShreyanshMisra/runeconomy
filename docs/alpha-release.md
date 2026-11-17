@@ -1,13 +1,14 @@
-# RunEconomy 0.2.0a4 alpha guide
+# RunEconomy 0.2.0 alpha guide
 
-`0.2.0a4` is an invited-tester prerelease focused on one coherent
-evidence-to-verdict workflow. RunEconomy remains a local CLI and Python package,
-not a production service or general observability platform.
+RunEconomy `0.2.0` is the first complete evidence-to-verdict release. It is the
+default installable release, but RunEconomy remains alpha-stage software for
+controlled experiments and private testing. It is a local CLI and Python
+package, not a production service or general observability platform.
 
 ## Install
 
 ```bash
-python -m pip install --pre runeconomy==0.2.0a4
+python -m pip install runeconomy==0.2.0
 runeconomy --version
 runeconomy tutorial init ./runeconomy-tutorial
 runeconomy tutorial serve

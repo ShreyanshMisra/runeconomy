@@ -123,8 +123,9 @@ const notFoundPage = {
 };
 
 const releases = await fetchReleases(siteConfig.repository);
-const stableVersion = releases.find((release) => !release.prerelease)?.version
-  || siteConfig.fallbackStableVersion;
+const currentVersion = releases.find((release) => (
+  !release.prerelease && release.version === siteConfig.currentVersion
+))?.version || siteConfig.fallbackStableVersion;
 
 // A release-notes article takes its date from the matching GitHub release when
 // one exists, so a newly published version is dated without editing this site.
@@ -202,7 +203,7 @@ function sidebar(active) {
     <div class="sidebar-secondary">
       <a href="${siteConfig.repository}">GitHub</a>
       <a href="${siteConfig.pypi}">PyPI</a>
-      <span>v${siteConfig.alphaVersion}</span>
+      <span>v${siteConfig.currentVersion}</span>
     </div>
   </aside>`;
 }
@@ -264,18 +265,13 @@ function installStrip() {
   return `<section class="install-section" aria-labelledby="install-heading">
     <div class="install-copy">
       <p class="eyebrow" id="install-heading">Install</p>
-      <p>The stable release installs by default. The alpha is a prerelease with the newest features, so request it explicitly.</p>
+      <p>RunEconomy ${currentVersion} installs by default. The package remains alpha-stage software for controlled experiments and private testing.</p>
     </div>
     <div class="install-options">
       <div class="install-command">
-        <span class="command-label">Stable ${stableVersion}</span>
-        <code>pip install runeconomy</code>
-        <button type="button" class="copy-button" data-copy data-copy-text="pip install runeconomy" aria-label="Copy stable install command">${icon("copy")}<span data-copy-label aria-live="polite">Copy</span></button>
-      </div>
-      <div class="install-command">
-        <span class="command-label">Alpha ${siteConfig.alphaVersion}</span>
-        <code>python -m pip install --pre runeconomy==${siteConfig.alphaVersion}</code>
-        <button type="button" class="copy-button" data-copy data-copy-text="python -m pip install --pre runeconomy==${siteConfig.alphaVersion}" aria-label="Copy alpha install command">${icon("copy")}<span data-copy-label aria-live="polite">Copy</span></button>
+        <span class="command-label">Current release ${currentVersion}</span>
+        <code>python -m pip install runeconomy==${currentVersion}</code>
+        <button type="button" class="copy-button" data-copy data-copy-text="python -m pip install runeconomy==${currentVersion}" aria-label="Copy current release install command">${icon("copy")}<span data-copy-label aria-live="polite">Copy</span></button>
       </div>
     </div>
     <div class="install-links" aria-label="Package links">
@@ -388,15 +384,15 @@ function redirectPage(target) {
 await rm(output, { recursive: true, force: true });
 await mkdir(join(output, "assets", "thumbnails"), { recursive: true });
 await mkdir(join(output, "skills", "latest"), { recursive: true });
-await mkdir(join(output, "skills", siteConfig.alphaVersion), { recursive: true });
+await mkdir(join(output, "skills", siteConfig.currentVersion), { recursive: true });
 await cp(join(siteDir, "site.css"), join(output, "assets", "site.css"));
 await cp(join(siteDir, "site.js"), join(output, "assets", "site.js"));
 await cp(join(siteDir, "favicon.svg"), join(output, "favicon.svg"));
 await cp(join(root, "skills", "runeconomy", "SKILL.md"), join(output, "assets", "runeconomy-skill.md"));
 await cp(skillDirectory, join(output, "skills", "latest"), { recursive: true });
-await cp(skillDirectory, join(output, "skills", siteConfig.alphaVersion), { recursive: true });
+await cp(skillDirectory, join(output, "skills", siteConfig.currentVersion), { recursive: true });
 await writeFile(join(output, "skills", "latest", "SHA256SUMS"), `${skillChecksum}  SKILL.md\n`);
-await writeFile(join(output, "skills", siteConfig.alphaVersion, "SHA256SUMS"), `${skillChecksum}  SKILL.md\n`);
+await writeFile(join(output, "skills", siteConfig.currentVersion, "SHA256SUMS"), `${skillChecksum}  SKILL.md\n`);
 await writeFile(join(output, "llms.txt"), `# RunEconomy\n\n- Start: /start/\n- Evidence: /evidence/\n- Experiments: /experiments/\n- Connectors: /connectors/\n- Agent skill: /skills/latest/SKILL.md\n`);
 const skillReferences = ["evidence-imports.md", "experiment-contract.md", "verdicts.md", "privacy.md", "troubleshooting.md"];
 const fullSkill = [skillSource, ...await Promise.all(skillReferences.map(async (name) => `\n\n${await readFile(join(skillDirectory, "references", name), "utf8")}`))].join("");

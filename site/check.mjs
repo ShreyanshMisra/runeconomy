@@ -40,7 +40,7 @@ const requiredRoutes = [
   "/", "/start/", "/doctor/", "/agents/", "/proof/", "/experiments/",
   "/compare/", "/traces/", "/cli/", "/troubleshooting/", "/alpha/",
   "/evidence/", "/connectors/",
-  "/articles/0-2-0a2/", "/articles/0-2-0a3/", "/articles/0-2-0a4/",
+  "/articles/0-2-0a2/", "/articles/0-2-0a3/", "/articles/0-2-0/",
   "/articles/how-runeconomy-works/", "/getting-started/", "/skill/",
   "/how-it-works/", "/404.html",
 ];
@@ -141,7 +141,7 @@ for (const marker of ["79.61%", "0.8308031360405823", "negative 12.55 percentage
 const builtSkill = await readFile(join(output, "assets", "runeconomy-skill.md"));
 const sourceSkill = await readFile(join(root, "skills", "runeconomy", "SKILL.md"));
 if (!builtSkill.equals(sourceSkill)) failures.push("skill download differs from canonical repository source");
-for (const version of ["latest", siteConfig.alphaVersion]) {
+for (const version of ["latest", siteConfig.currentVersion]) {
   const versionedSkill = await readFile(join(output, "skills", version, "SKILL.md"));
   if (!versionedSkill.equals(sourceSkill)) failures.push(`${version}: versioned skill differs from canonical source`);
   for (const reference of ["evidence-imports.md", "experiment-contract.md", "verdicts.md", "privacy.md", "troubleshooting.md"]) {
@@ -187,12 +187,19 @@ const release = articles.find((article) => article.slug === "release-0-2-0a2");
 if (release?.date !== "2026-11-14" || release?.dateLabel !== "November 14, 2026") {
   failures.push("0.2.0a2 release date differs from the GitHub release");
 }
+const currentRelease = articles.find((article) => article.slug === "release-0-2-0");
+if (currentRelease?.releaseVersion !== siteConfig.currentVersion || currentRelease?.status !== "Current release") {
+  failures.push("0.2.0 article is not the current package release");
+}
 const notFound = await readFile(join(output, "404.html"), "utf8");
 if (!notFound.includes('content="noindex"') || notFound.includes('rel="canonical"')) {
   failures.push("404: must be excluded from indexing and carry no canonical URL");
 }
-if (!home.includes(`Alpha ${siteConfig.alphaVersion}`) || !home.includes(`runeconomy==${siteConfig.alphaVersion}`)) {
-  failures.push("home: alpha install command differs from the package version");
+if (!home.includes(`Current release ${siteConfig.currentVersion}`) || !home.includes(`runeconomy==${siteConfig.currentVersion}`)) {
+  failures.push("home: current install command differs from the package version");
+}
+if (home.includes(`--pre runeconomy==${siteConfig.currentVersion}`)) {
+  failures.push("home: current release incorrectly requires prerelease installation");
 }
 
 for (const [route, target] of [["getting-started", "/start/"], ["skill", "/agents/"], ["how-it-works", "/articles/how-runeconomy-works/"]]) {
