@@ -93,3 +93,20 @@ responses, evaluator data, endpoints, credentials, paths, and arbitrary files.
 
 Extract and inspect every JSON file before sharing. Automated privacy controls
 reduce risk but cannot guarantee that an artifact is safe for every context.
+
+## The agent status integration is rejected
+
+Use `Attempt.from_environment()` at the real agent entry point. Do not create
+the status JSON manually. Confirm that all runner paths are absolute, distinct,
+and inside `RUNECONOMY_ATTEMPT_DIR`, and that no status file already exists.
+Call one terminal method exactly once. Keep `stage` and `code` as fixed labels,
+not exception messages or application data.
+
+## Experiment planning is blocked
+
+Run `runeconomy experiment validate WORKSPACE` first. Planning does not repair
+execution errors. For a runnable workspace, inspect each
+`runeconomy.plan.*` issue. Do not weaken a gate after seeing held-out results.
+Use calibration to estimate paired latency variability, declare a fixed or
+outcome-independent stopping rule, and keep calibration separate from the
+operator-declared held-out workload.

@@ -158,6 +158,9 @@ for (const marker of [
   "Copy bootstrap prompt",
   "/skills/latest/SKILL.md",
   "Verify SHA-256",
+  "from runeconomy.agent import Attempt",
+  "experiment plan",
+  "free compatibility trial",
 ]) {
   if (!agentsPage.includes(marker)) failures.push(`agents: missing skill action ${marker}`);
 }

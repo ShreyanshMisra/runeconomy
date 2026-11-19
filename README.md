@@ -82,9 +82,14 @@ an archive to an issue.
 runeconomy import otlp.json --output evidence.json
 runeconomy experiment init --from-evidence evidence.json --output experiment/
 runeconomy experiment validate experiment/
+runeconomy experiment plan experiment/
 runeconomy experiment run experiment/ --output results/
 runeconomy experiment report results/result.json --output report.html --open
 ```
+
+For real agents, the official coding-agent skill integrates the existing entry
+point with `runeconomy.agent.Attempt`. The helper implements only the status
+contract. It does not replace the application's tracing or agent framework.
 
 The importer explains which diagnoses, replay modes, and claims the evidence can
 support. An incomplete import creates an unresolved workspace with corrective

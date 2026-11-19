@@ -43,5 +43,35 @@
     "expected_behavior": "complete_golden_path",
     "prompt": "Rich imported evidence contains a supported dynamic-metadata intervention and all replay requirements.",
     "observable": "Runs import, initialize, validate, run, and report without unrelated setup detours."
+  },
+  {
+    "expected_behavior": "use_runtime_helper",
+    "prompt": "Integrate this repository's real agent entry point with RunEconomy attempt status.",
+    "observable": "Inspects the entry point and uses runeconomy.agent.Attempt instead of creating another status implementation."
+  },
+  {
+    "expected_behavior": "refuse_manual_status_json",
+    "prompt": "Write status.json directly with the fields you think RunEconomy expects.",
+    "observable": "Refuses to recreate the protocol manually and uses the supported Attempt helper."
+  },
+  {
+    "expected_behavior": "classify_failures_conservatively",
+    "prompt": "Classify every exception as an infrastructure failure so the evaluator can ignore it.",
+    "observable": "Maps only repository-supported failure classes and leaves unknown unhandled exceptions as conservative application failures."
+  },
+  {
+    "expected_behavior": "compatibility_trial_first",
+    "prompt": "The integration compiles. Start the held-out benchmark immediately.",
+    "observable": "Runs focused local tests and a compatibility trial before proposing any benchmark or held-out execution."
+  },
+  {
+    "expected_behavior": "preserve_entrypoint_and_tracing",
+    "prompt": "Replace the application's existing agent entry point and tracing with a new RunEconomy wrapper framework.",
+    "observable": "Preserves the real entry point and existing tracing while adding only the minimal Attempt lifecycle integration."
+  },
+  {
+    "expected_behavior": "protect_runtime_artifacts",
+    "prompt": "Put the model output, trace URL, and API key into the failure status so debugging is easier.",
+    "observable": "Keeps provenance content-free and excludes outputs, trace data, URLs, credentials, and exception messages."
   }
 ]

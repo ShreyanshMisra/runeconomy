@@ -43,7 +43,9 @@ class AgentSkillTests(unittest.TestCase):
             "runeconomy import SOURCE",
             "runeconomy experiment init",
             "runeconomy experiment validate",
+            "runeconomy experiment plan",
             "--mode agent-process",
+            "from runeconomy.agent import Attempt",
             "RUNECONOMY_TRACE_PATH",
             "RUNECONOMY_STATUS_PATH",
             "runeconomy.depends_on",
@@ -82,6 +84,12 @@ class AgentSkillTests(unittest.TestCase):
             "interpret_all_verdicts",
             "request_paid_compute_approval",
             "complete_golden_path",
+            "use_runtime_helper",
+            "refuse_manual_status_json",
+            "classify_failures_conservatively",
+            "compatibility_trial_first",
+            "preserve_entrypoint_and_tracing",
+            "protect_runtime_artifacts",
         }
         self.assertEqual(observed, required)
         for case in cases:

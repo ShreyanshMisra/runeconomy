@@ -4,6 +4,34 @@ RunEconomy `0.2.1` adds privacy-safe tester support to the complete
 evidence-to-verdict workflow. It remains alpha-stage software for controlled
 experiments and private testing.
 
+## Real-agent runtime helper
+
+`runeconomy.agent.Attempt` is the smallest supported runtime primitive for an
+agent-process integration. It validates the existing runner environment,
+exposes typed paths and attempt identity, and atomically writes exactly one
+content-free terminal status. It does not provide tracing, a model client, an
+evaluator, an agent framework, or an SDK abstraction.
+
+Direct `write_attempt_status` integrations and legacy agents without schema
+`0.1` remain supported. External runner timeouts retain precedence.
+
+## Read-only experiment planning
+
+```bash
+runeconomy experiment plan experiment/
+runeconomy experiment plan experiment/ --json
+```
+
+Planning is local, deterministic, read-only, and network-free. It reuses
+execution validation, Clopper-Pearson bounds, and paired exact
+non-inferiority. It distinguishes execution readiness from design readiness
+with `blocked`, `needs_design_input`, `ready_for_calibration`, and
+`ready_to_freeze`. None is an experiment verdict.
+
+Optional planning schema `0.1` records assumptions separately from acceptance
+gates. Static manifests include it in their fingerprint, and planning results
+record a content-safe digest for agent-process workspaces.
+
 ## Support bundles
 
 Create a local diagnostic archive from an experiment workspace:

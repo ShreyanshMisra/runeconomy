@@ -22,6 +22,7 @@ runeconomy experiment init --mode agent-process \
   --seed 2027
 
 runeconomy experiment validate experiment/
+runeconomy experiment plan experiment/
 runeconomy experiment run experiment/ --output results/
 runeconomy experiment report results/result.json --output report.html --open
 ```
@@ -84,6 +85,39 @@ RunEconomy sets these variables for each isolated attempt:
   JSON trace after the workflow ends.
 - `RUNECONOMY_STATUS_PATH`: where a status-aware agent atomically writes the
   versioned attempt-status record described below.
+
+Use the supported runtime helper at the application's existing entry point:
+
+```python
+from runeconomy.agent import Attempt
+
+with Attempt.from_environment() as attempt:
+    result = run_agent(attempt.task_path)
+    attempt.output_path.write_text(result, encoding="utf-8")
+    attempt.completed()
+```
+
+`Attempt` validates the runner environment and exposes typed task, output,
+trace, status, attempt-directory, seed, variant, repetition, and task-ID
+values. It writes exactly one atomic terminal status without overwriting a
+preexisting status file. Existing agents may continue using
+`write_attempt_status` directly, and legacy agents without a status record
+remain supported.
+
+Use fixed content-free labels for repository-classified failures:
+
+```python
+attempt.task_failure(stage="evaluation", code="incorrect_answer")
+attempt.model_output_failure(stage="planning", code="invalid_structured_output")
+attempt.application_failure(stage="execution", code="repository_error")
+attempt.infrastructure_failure(stage="model_request", code="upstream_unavailable")
+```
+
+An unhandled exception records the conservative code `unhandled_exception` as
+an application failure, then the original exception is re-raised. A normal
+context exit without a terminal method records an integration failure and
+raises `AttemptLifecycleError`. Call `completed()` only after output and trace
+writing have succeeded.
 
 ### Attempt status protocol
 
@@ -176,6 +210,26 @@ attempt artifacts. A `.json` file may instead contain any existing RunEconomy
 evaluator specification.
 
 ## Pairing and verdicts
+
+Before execution, run the separate read-only design check:
+
+```bash
+runeconomy experiment plan experiment/
+runeconomy experiment plan experiment/ --json
+```
+
+`experiment validate` answers whether the workspace is structurally runnable.
+`experiment plan` checks claim-design readiness. It reads local files only and
+does not start an agent or model, contact a backend, consume tasks, reset a
+cache, or modify the workspace. Its states are `blocked`,
+`needs_design_input`, `ready_for_calibration`, and `ready_to_freeze`. These are
+planning states, not experiment verdicts.
+
+Planning reports unique tasks, repetitions, planned pairs, total attempts,
+statistical units, exact quality-gate feasibility, the primary performance
+metric, maximum both-successful latency pairs, missing calibration assumptions,
+and operator-declared held-out status. Repetitions add task-attempt units but
+are not described as additional independent tasks.
 
 Order is seeded and either randomized or alternating. Pairing uses
 `(task_id, repetition)`. Task success uses absolute Clopper-Pearson intervals

@@ -83,6 +83,7 @@ runeconomy experiment init \
 
 runeconomy experiment validate experiment/ \
   --doctor-report doctor.json
+runeconomy experiment plan experiment/
 ```
 
 The workspace records the source digest, selected finding, intervention,
@@ -128,6 +129,13 @@ should use `experiment init`, `validate`, `run`, and `report` for both modes.
 
 Cache reuse, token reductions, TTFT, and latency remain conditional observations
 unless the declared quality and performance gates make the claim eligible.
+
+For a real agent, have Codex or Claude Code install the official skill and add
+the minimal `runeconomy.agent.Attempt` integration at the existing entry point.
+The coding agent should preserve existing tracing, add focused tests, and run a
+free compatibility trial first. `experiment plan` then explains whether the
+design needs input, is ready for calibration, is ready to freeze, or is
+blocked. It does not execute the agent or consume held-out data.
 
 ## 8. Prepare a privacy-minimized support artifact
 

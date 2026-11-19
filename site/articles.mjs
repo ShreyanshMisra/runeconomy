@@ -56,7 +56,7 @@ export const articles = [
     route: "articles/0-2-1",
     source: "docs/release-notes-0.2.1.md",
     title: "RunEconomy 0.2.1 release notes",
-    description: "Privacy-minimized support bundles and stable tester-facing error codes.",
+    description: "Tester support bundles, stable errors, a minimal agent runtime helper and read-only design planning.",
     type: "Release notes",
     status: "Prepared release",
     releaseVersion: "0.2.1",

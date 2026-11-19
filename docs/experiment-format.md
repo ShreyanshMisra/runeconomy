@@ -21,6 +21,7 @@ synthetic data.
 ```bash
 runeconomy experiment init --from-evidence evidence.json --output experiment/
 runeconomy experiment validate experiment/
+runeconomy experiment plan experiment/
 ```
 
 Validation reports `runnable`, `unresolved`, `invalid`,
@@ -31,6 +32,62 @@ applied with `--doctor-report` without changing server state.
 
 The `0.1`, `0.2`, and `0.3` static manifest formats remain readable. A legacy
 JSON manifest can still be passed directly to `validate` and `run`.
+
+## Optional planning declarations
+
+Static and agent-process manifests may add a versioned `design.planning`
+object. It is optional and separate from acceptance gates:
+
+```json
+{
+  "design": {
+    "planning": {
+      "schema_version": "0.1",
+      "hypothesis": "A stable prefix lowers successful-task workflow latency.",
+      "intervention": "Move changing metadata after stable instructions.",
+      "predicted_direction": "decrease",
+      "claim": {
+        "level": "workflow",
+        "primary_metric": "workflow_latency_ms"
+      },
+      "calibration": {"artifact_sha256": "sha256:..."},
+      "heldout": {
+        "artifact_sha256": "sha256:...",
+        "operator_declared_unseen": true
+      },
+      "evaluator_frozen": true,
+      "gates_frozen": true,
+      "stopping_rule": {
+        "kind": "fixed_sample",
+        "favorable_result_dependent": false
+      },
+      "claim_boundary": "One declared local workflow and environment.",
+      "intervention_variables": ["prompt_order"],
+      "latency_assumptions": {
+        "expected_difference_ms": -50,
+        "paired_standard_deviation_ms": 100
+      }
+    }
+  }
+}
+```
+
+Free-form hypothesis and claim-boundary text is never copied into planning
+output. The planner reports only a digest, presence, safe categories, counts,
+and stable issue codes. Static-manifest fingerprints already include `design`.
+For agent-process mode, the declaration remains in the versioned workspace and
+its digest is recorded in the planning result. It is not copied into the
+execution result.
+
+Latency assumptions are declared calibration assumptions, not observations or
+acceptance gates. When both values are present, planning shows a two-sided 95%
+normal approximation at 80% target power. The executed comparison still uses
+its paired Student-t interval. Without those assumptions, latency power remains
+unknown.
+
+RunEconomy can record `operator_declared_unseen`, but cannot independently know
+whether a workload was inspected or consumed. Matching calibration and
+held-out digests are treated as overlap.
 
 The `0.1`, `0.2`, and `0.3` experiment formats define a paired
 baseline/candidate replay against one vLLM backend. Versions `0.1` and `0.2`

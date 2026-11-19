@@ -41,6 +41,11 @@ Both static requests and complete agent processes use the same experiment
 command family. `compare` remains a compatibility wrapper and prints migration
 guidance.
 
+Real-agent integrations may use the optional dependency-free
+`runeconomy.agent.Attempt` helper at the existing entry point. It implements
+only the environment and status contract. `runeconomy experiment plan` performs
+a local read-only design assessment before calibration or held-out execution.
+
 When a workflow fails, public commands display a stable `runeconomy.*` error
 code. A local support bundle can preserve safe capability, workspace,
 validation, and error states without copying raw experiment content:

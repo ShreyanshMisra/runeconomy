@@ -3,6 +3,16 @@
 The support-bundle command keeps diagnostic collection local. It does not
 enable telemetry, upload traces, or send support bundles anywhere.
 
+`runeconomy.agent.Attempt` writes only status schema `0.1`, a terminal state,
+and fixed content-free component, stage, and code labels. It has no field for
+prompts, generated output, exception messages, URLs, or credentials. Do not
+derive labels from runtime text.
+
+`runeconomy experiment plan` reads local design metadata and emits counts,
+booleans, safe categories, confidence calculations, and stable issue codes. It
+does not echo task IDs, task contents, commands, paths, hypothesis text, claim
+boundaries, endpoint data, or artifact names.
+
 ## Create a support bundle
 
 ```bash
