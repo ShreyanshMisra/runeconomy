@@ -31,6 +31,7 @@ from .importers import (
     import_vllm_jsonl,
 )
 from .models import Trace, TraceValidationError
+from .planning import plan_experiment
 from .reports import (
     load_demo_result,
     render_demo_html,
@@ -343,6 +344,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="allow trusted python and command evaluators",
     )
+    plan = experiment_commands.add_parser(
+        "plan", help="assess claim-design readiness without executing the experiment"
+    )
+    plan.add_argument("manifest", type=Path)
+    plan.add_argument("--format", choices=("human", "json"), default="human")
+    plan.add_argument("--json", dest="format", action="store_const", const="json")
     run = experiment_commands.add_parser("run", help="run a manifest against vLLM")
     run.add_argument("manifest", type=Path)
     run.add_argument("--output", type=Path, required=True)
@@ -665,6 +672,87 @@ def _format_validation_report(report: Mapping[str, Any], path: Path) -> str:
             lines.append(f"Command: {issue['command']}")
     if report.get("next_command"):
         lines.extend(["", f"What to do next: {report['next_command']}"])
+    return "\n".join(lines)
+
+
+def _format_experiment_plan(plan: Mapping[str, Any]) -> str:
+    sample = plan.get("sample")
+    success = plan.get("task_success")
+    performance = plan.get("performance")
+    unit = plan.get("experimental_unit")
+    claim = plan.get("proposed_claim", {})
+    declarations = plan.get("design_declarations")
+    lines = [
+        f"RunEconomy experiment plan · {str(plan['state']).replace('_', ' ').title()}",
+        "This is a design-readiness assessment, not an experiment verdict.",
+        "",
+        "Proposed claim: "
+        f"{claim.get('level', 'unknown')} claim using {claim.get('primary_metric', 'unknown')}.",
+    ]
+    if isinstance(unit, Mapping) and isinstance(sample, Mapping):
+        lines.extend(
+            [
+                f"Experimental unit: {unit['name']}.",
+                "Planned sample: "
+                f"{sample['unique_task_count']} unique task(s), "
+                f"{sample['repetitions']} repetition(s), "
+                f"{sample['planned_pairs']} pair(s), "
+                f"{sample['total_attempts']} attempt(s).",
+            ]
+        )
+    if isinstance(success, Mapping):
+        required = success.get("minimum_successful_units")
+        required_text = (
+            "not achievable with this sample"
+            if required is None
+            else f"at least {required} of {success['planned_units']} planned units"
+        )
+        lines.extend(
+            [
+                "Task-success requirement: "
+                f"{required_text} must clear a {success['minimum_lower_bound']:.2%} "
+                "exact lower-confidence-bound gate.",
+                "All observed successes still do not imply a true 100% success rate.",
+            ]
+        )
+    if isinstance(performance, Mapping):
+        lines.extend(
+            [
+                "Performance evidence: "
+                f"{performance['primary_metric']} across at most "
+                f"{performance['maximum_analyzable_pairs']} pairs where both variants succeed.",
+                "Task failures reduce the analyzable latency sample.",
+            ]
+        )
+        if performance["power"]["status"] == "unknown":
+            lines.append(
+                "Unknown: latency power requires a calibration effect and paired variability estimate."
+            )
+    if isinstance(declarations, Mapping):
+        lines.append(
+            "Held-out status: "
+            f"{str(declarations['heldout_status']).replace('_', ' ')}. "
+            "RunEconomy cannot independently verify whether data was inspected."
+        )
+    issues = plan.get("issues", [])
+    unknown_count = sum(
+        issue.get("severity") == "warning" for issue in issues
+    )
+    lines.append(f"Unknown or unresolved design items: {unknown_count}.")
+    if issues:
+        lines.extend(["", "Design issues:"])
+        for issue in issues:
+            lines.append(
+                f"- [{str(issue['severity']).title()}] {issue['code']} · "
+                f"{issue['why']} Next: {issue['next_action']}"
+            )
+    lines.extend(
+        [
+            "",
+            f"Planning state: {plan['state']}",
+            f"What to do next: {plan['next_action_code']}",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -1137,6 +1225,15 @@ def main(argv: list[str] | None = None) -> int:
                 else _format_validation_report(report, args.manifest)
             )
             return 0 if report["status"] == "runnable" else 2 if report["status"] == "invalid" else 1
+
+        if args.experiment_command == "plan":
+            planning = plan_experiment(args.manifest)
+            print(
+                json.dumps(planning, indent=2, sort_keys=True)
+                if args.format == "json"
+                else _format_experiment_plan(planning)
+            )
+            return 2 if planning["state"] == "blocked" else 1 if planning["state"] == "needs_design_input" else 0
 
         result_path, artifacts_path = _result_output_path(args.output)
         if args.manifest.is_dir():

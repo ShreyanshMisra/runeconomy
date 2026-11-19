@@ -312,6 +312,45 @@ def validate_agent_manifest(manifest: Mapping[str, Any], workspace: Path) -> Non
         raise ExperimentValidationError("execution.order must be randomized or alternating")
     if not isinstance(acceptance, Mapping):
         raise ExperimentValidationError("acceptance must be an object")
+    repetitions = execution.get("repetitions", 1)
+    if (
+        not isinstance(repetitions, int)
+        or isinstance(repetitions, bool)
+        or repetitions <= 0
+    ):
+        raise ExperimentValidationError("execution.repetitions must be a positive integer")
+    seed = execution.get("seed", 0)
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        raise ExperimentValidationError("execution.seed must be an integer")
+    for field, default in (
+        ("timeout_seconds", 300.0),
+        ("evaluator_timeout_seconds", 30.0),
+    ):
+        value = execution.get(field, default)
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or value <= 0
+        ):
+            raise ExperimentValidationError(f"execution.{field} must be positive")
+    for field, default in (
+        ("max_task_success_regression", 0.05),
+        ("min_task_success_rate", 0.8),
+        ("min_completed_rate", 1.0),
+    ):
+        value = acceptance.get(field, default)
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not 0 <= float(value) <= 1
+        ):
+            raise ExperimentValidationError(
+                f"acceptance.{field} must be between 0 and 1"
+            )
+    if manifest.get("design") is not None and not isinstance(
+        manifest.get("design"), Mapping
+    ):
+        raise ExperimentValidationError("design must be an object when supplied")
 
 
 def _issue(
