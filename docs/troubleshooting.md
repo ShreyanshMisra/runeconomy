@@ -4,6 +4,10 @@ RunEconomy errors separate what failed, why it likely failed, whether evidence
 may be incomplete, and the next corrective action. Do not treat partial output
 or a checkpoint as a final verdict.
 
+Record the namespaced error code when opening an issue. Explanations may improve
+between patch releases, while codes such as `runeconomy.workspace.unresolved`
+are intended for issue templates and automation.
+
 ## `doctor` cannot connect
 
 Confirm that `--base-url` points to the OpenAI-compatible vLLM root, the server
@@ -72,3 +76,20 @@ Inspect the private artifacts directory and attempt status files. Verify that
 each agent wrote a complete trace and status, identity fields match, and actual
 dependencies use `runeconomy.depends_on`. Do not infer a DAG from span nesting
 or delete failed attempts to improve the apparent latency.
+
+## Prepare an issue without attaching private evidence
+
+Create a local support bundle from the workspace:
+
+```bash
+runeconomy support-bundle experiment/ \
+  --output runeconomy-support.zip
+```
+
+If saved JSON reports are available, pass them explicitly with
+`--doctor-report` and `--validation-report`. RunEconomy will not collect them by
+contacting a backend. The bundle excludes raw traces, results, prompts,
+responses, evaluator data, endpoints, credentials, paths, and arbitrary files.
+
+Extract and inspect every JSON file before sharing. Automated privacy controls
+reduce risk but cannot guarantee that an artifact is safe for every context.

@@ -11,7 +11,7 @@ attractive result when the quality evidence is not strong enough.
 ## Try the complete workflow locally
 
 ```bash
-python -m pip install runeconomy==0.2.0
+python -m pip install runeconomy==0.2.1
 runeconomy tutorial init ./runeconomy-tutorial
 runeconomy tutorial serve
 ```

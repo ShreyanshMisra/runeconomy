@@ -52,8 +52,12 @@ on this page after the site build.
 - preserve variant-local state and explicit workflow dependencies
 - read task-quality gates before mechanism metrics
 - distinguish verified, regression, inconclusive, and invalid
+- record stable error codes and create a local support bundle when needed
 - protect prompts, traces, answers, credentials, and raw artifacts
 - stop before paid, destructive, production, or publication actions
+
+The skill requires an agent to inspect a support bundle before sharing it. It
+also states that bundle creation never authorizes upload or public disclosure.
 
 The repository copy is the source of truth. Replace the installed directory
 from a tagged release rather than maintaining hand-edited copies.

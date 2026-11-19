@@ -9,7 +9,7 @@ compatible backend.
 RunEconomy requires Python 3.11 or newer.
 
 ```bash
-python -m pip install runeconomy==0.2.0
+python -m pip install runeconomy==0.2.1
 runeconomy --version
 ```
 
@@ -128,6 +128,22 @@ should use `experiment init`, `validate`, `run`, and `report` for both modes.
 
 Cache reuse, token reductions, TTFT, and latency remain conditional observations
 unless the declared quality and performance gates make the claim eligible.
+
+## 8. Prepare a privacy-minimized support artifact
+
+If setup or execution fails, record the displayed `runeconomy.*` error code and
+create a local support bundle:
+
+```bash
+runeconomy support-bundle experiment/ \
+  --output runeconomy-support.zip
+```
+
+The command does not upload anything or contact the backend. Inspect every file
+inside the archive before attaching it to an issue. Do not attach raw traces,
+results, prompts, generated output, evaluator data, or credentials.
+
+Read the complete [privacy and support-bundle contract](privacy.md).
 
 Continue with [Evidence formats](evidence-formats.md), the
 [experiment contract](experiment-format.md), [connector support](connectors.md),

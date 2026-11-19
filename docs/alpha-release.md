@@ -1,14 +1,14 @@
-# RunEconomy 0.2.0 alpha guide
+# RunEconomy 0.2.1 alpha guide
 
-RunEconomy `0.2.0` is the first complete evidence-to-verdict release. It is the
-default installable release, but RunEconomy remains alpha-stage software for
+RunEconomy `0.2.1` adds privacy-safe tester support to the complete
+evidence-to-verdict workflow. RunEconomy remains alpha-stage software for
 controlled experiments and private testing. It is a local CLI and Python
 package, not a production service or general observability platform.
 
 ## Install
 
 ```bash
-python -m pip install runeconomy==0.2.0
+python -m pip install runeconomy==0.2.1
 runeconomy --version
 runeconomy tutorial init ./runeconomy-tutorial
 runeconomy tutorial serve
@@ -41,6 +41,16 @@ Both static requests and complete agent processes use the same experiment
 command family. `compare` remains a compatibility wrapper and prints migration
 guidance.
 
+When a workflow fails, public commands display a stable `runeconomy.*` error
+code. A local support bundle can preserve safe capability, workspace,
+validation, and error states without copying raw experiment content:
+
+```bash
+runeconomy support-bundle experiment/ --output runeconomy-support.zip
+```
+
+The archive is never uploaded automatically. Inspect it before sharing.
+
 ## Connectors
 
 - OpenInference and OpenTelemetry are the golden path. Exact token boundaries
@@ -54,7 +64,7 @@ guidance.
 - AgenticLens has no claimed native adapter until a stable export contract is
   available.
 
-## Compatibility and migration from 0.2.0a3
+## Compatibility with 0.2.0
 
 Existing normalized traces, structured findings, static manifests, results, and
 the legacy importer commands remain supported. `analyze` remains available for
@@ -65,10 +75,9 @@ New workflows should replace importer-specific first steps with
 instead of calling `compare` directly. A `.json` output path still creates the
 legacy monolithic finding artifact where supported.
 
-Evidence bundle schema `0.1` and workspace schema `0.1` are new. They wrap
-existing artifacts without silently strengthening their evidence. Validation
-statuses now distinguish runnable, unresolved, invalid, unsupported backend,
-and incomplete claim evidence.
+Evidence bundle schema `0.1`, workspace schema `0.1`, experiment behavior, and
+validation statuses are unchanged from `0.2.0`. Support-bundle schema `0.1` and
+stable error-code metadata are additive.
 
 ## Privacy and limitations
 
@@ -80,6 +89,11 @@ the workspace rather than copied into it.
 The zero-edit public fixture uses a deterministic mock vLLM server. It validates
 workflow plumbing, not real serving performance. Live vLLM behavior still
 depends on deployment capabilities reported by `doctor`.
+
+Support bundles are built from a strict allowlist and exclude raw traces,
+results, prompts, responses, evaluator data, endpoints, credentials, paths, and
+arbitrary workspace files. Privacy minimization is not a guarantee of
+anonymity.
 
 RunEconomy does not provide a hosted dashboard, managed collector,
 framework-specific SDK, automatic production changes, automatic resume, SGLang

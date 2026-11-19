@@ -100,7 +100,7 @@ class ReleaseHygieneTests(unittest.TestCase):
         with (ROOT / "pyproject.toml").open("rb") as handle:
             project = tomllib.load(handle)["project"]
         self.assertEqual(project["name"], "runeconomy")
-        self.assertEqual(project["version"], "0.2.0")
+        self.assertEqual(project["version"], "0.2.1")
         self.assertIn(
             "Development Status :: 3 - Alpha",
             project["classifiers"],
@@ -117,6 +117,19 @@ class ReleaseHygieneTests(unittest.TestCase):
             self.assertIn("id-token: write", text)
             self.assertNotIn("secrets.", text)
             self.assertNotIn("password:", text)
+
+    def test_support_issue_template_requires_privacy_confirmation(self) -> None:
+        template = (
+            ROOT / ".github" / "ISSUE_TEMPLATE" / "support.yml"
+        ).read_text(encoding="utf-8")
+        for marker in (
+            "Stable error code",
+            "never uploaded automatically",
+            "I inspected every file I am attaching",
+            "I did not attach raw traces",
+            "did not authorize uploading",
+        ):
+            self.assertIn(marker, template)
 
     def test_removed_experiment_brand_is_absent_from_active_tracked_files(self) -> None:
         frozen = {

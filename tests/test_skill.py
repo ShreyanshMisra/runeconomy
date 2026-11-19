@@ -53,6 +53,9 @@ class AgentSkillTests(unittest.TestCase):
             "invalid",
             "Only call a change an improvement",
             "Do not start paid resources",
+            "runeconomy support-bundle",
+            "never probes a server",
+            "does not authorize",
         ):
             self.assertIn(required, combined)
 

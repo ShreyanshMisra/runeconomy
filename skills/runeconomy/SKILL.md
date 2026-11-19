@@ -40,6 +40,19 @@ runeconomy tutorial serve
 Treat it as a product-plumbing check, never as real inference validation or a
 performance benchmark.
 
+When a RunEconomy command fails, record its `runeconomy.*` error code. If a
+maintainer needs diagnostic context, create a local support bundle:
+
+```bash
+runeconomy support-bundle experiment/ --output runeconomy-support.zip
+```
+
+Inspect every JSON member before sharing it. Bundle creation never authorizes
+uploading the archive, opening an issue, or sharing it publicly. Do not attach
+raw traces, private results, prompts, generated output, evaluator answers, or
+credentials alongside it. Read the privacy and troubleshooting references
+before handling a support artifact.
+
 ## Evidence-first workflow
 
 Import the evidence without guessing its format:

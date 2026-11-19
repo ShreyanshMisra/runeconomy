@@ -11,7 +11,7 @@ export const siteConfig = {
   repository: "https://github.com/ShreyanshMisra/runeconomy",
   pypi: "https://pypi.org/project/runeconomy/",
   // Used only when the GitHub release list cannot be read during the build.
-  fallbackStableVersion: "0.2.0",
+  fallbackStableVersion: "0.2.1",
   currentVersion: packageVersion,
   defaultSocialImage: "/assets/thumbnails/workflow.png",
   owner: {

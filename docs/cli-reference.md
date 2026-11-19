@@ -14,10 +14,16 @@ where documented.
 | `runeconomy experiment validate experiment/` | Report runnable, unresolved, invalid, unsupported-backend, or claim-incomplete status. |
 | `runeconomy experiment run experiment/ --output results/` | Execute the workspace and preserve durable results. |
 | `runeconomy experiment report results/result.json --output report.html --open` | Render the evidence-derived report. |
+| `runeconomy support-bundle experiment/ --output runeconomy-support.zip` | Create a local privacy-minimized diagnostic archive. |
 
 `experiment validate --json` emits structured issues for coding agents and CI.
 `--doctor-report doctor.json` applies a saved read-only capability diagnosis
 without probing the backend again.
+
+`support-bundle` never contacts a backend or uploads anything. Optional
+`--doctor-report` and `--validation-report` inputs must already exist. Run with
+`--json` for a machine-readable creation summary. The command refuses to
+overwrite an existing archive and never follows workspace symlinks.
 
 ## Evidence and compatibility commands
 
@@ -60,7 +66,8 @@ gate, attempt classifications, and evidence integrity.
 
 ## Error contract
 
-Human errors state what failed, why RunEconomy believes it failed, whether
-evidence may be incomplete, and the next action. JSON output never includes an
-API-key value. Partial checkpoints and private artifacts are evidence, not
-final verdicts.
+Human errors state a stable `runeconomy.*` code, what failed, why RunEconomy
+believes it failed, whether evidence may be incomplete, and the next action.
+JSON errors expose the same code separately from mutable prose. JSON output
+never includes an API-key value. Partial checkpoints and private artifacts are
+evidence, not final verdicts.
