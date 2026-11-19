@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .experiment_init import initialize_experiment, select_finding
+from .errors import classify_exception
 from .experiments import ExperimentManifest, ExperimentValidationError
 
 
@@ -318,12 +319,14 @@ def _issue(
     field: str,
     reason: str,
     *,
+    code: str,
     execution_blocking: bool,
     claim_weakening: bool,
     next_action: str,
     command: str | None = None,
 ) -> dict[str, Any]:
     value = {
+        "code": code,
         "artifact_path": artifact,
         "field_path": field,
         "reason": reason,
@@ -359,6 +362,7 @@ def validate_experiment_artifact(
                                 "manifest.json",
                                 str(item.get("path", "unknown")),
                                 str(item.get("reason", "required field is unresolved")),
+                                code="runeconomy.workspace.unresolved",
                                 execution_blocking=True,
                                 claim_weakening=True,
                                 next_action="supply only evidence-backed values, then validate again",
@@ -398,6 +402,7 @@ def validate_experiment_artifact(
                                 str(path),
                                 str(item.get("path", "unknown")),
                                 str(item.get("reason", "required field is unresolved")),
+                                code="runeconomy.workspace.unresolved",
                                 execution_blocking=True,
                                 claim_weakening=True,
                                 next_action="supply only evidence-backed values, then validate again",
@@ -420,6 +425,9 @@ def validate_experiment_artifact(
                 str(path),
                 "unknown",
                 str(exc),
+                code=classify_exception(
+                    exc, stage="experiment.validate"
+                ).code,
                 execution_blocking=True,
                 claim_weakening=True,
                 next_action="correct the named artifact or field, then validate again",
@@ -450,6 +458,7 @@ def validate_experiment_artifact(
                     "doctor-report.json",
                     dialect_key,
                     f"the saved backend diagnosis reports {capability_status} for the required API dialect",
+                    code="runeconomy.backend.unsupported",
                     execution_blocking=True,
                     claim_weakening=True,
                     next_action="correct the backend capability or select a supported API dialect",
@@ -476,6 +485,7 @@ def validate_experiment_artifact(
                 "manifest.json",
                 "acceptance.require_environment_identity",
                 "a public verification claim requires complete stable serving identity",
+                code="runeconomy.claim.incomplete",
                 execution_blocking=False,
                 claim_weakening=True,
                 next_action="require environment identity or narrow the intended claim",

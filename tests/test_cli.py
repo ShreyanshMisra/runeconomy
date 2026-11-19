@@ -25,8 +25,17 @@ class CLITests(unittest.TestCase):
                 self.assertEqual(main(["analyze", str(path)]), 2)
             rendered = stderr.getvalue()
             self.assertIn("What failed:", rendered)
+            self.assertIn("Code: runeconomy.evidence.invalid", rendered)
             self.assertIn("Evidence:", rendered)
             self.assertIn("What to do next:", rendered)
+
+            machine = StringIO()
+            with redirect_stderr(machine):
+                self.assertEqual(main(["analyze", str(path), "--json"]), 2)
+            payload = json.loads(machine.getvalue())
+            self.assertEqual(
+                payload["error"]["code"], "runeconomy.evidence.invalid"
+            )
 
     def test_vllm_errors_redact_endpoint_and_response_body(self) -> None:
         with TemporaryDirectory() as directory:
@@ -253,6 +262,9 @@ class CLITests(unittest.TestCase):
         self.assertEqual(exit_code, 2)
         rendered = json.loads(output.call_args.args[0])
         self.assertEqual(rendered["error"]["category"], "authentication")
+        self.assertEqual(
+            rendered["error"]["code"], "runeconomy.backend.authentication"
+        )
         text = json.dumps(rendered)
         self.assertNotIn("do-not-print", text)
         self.assertNotIn("private.example", text)

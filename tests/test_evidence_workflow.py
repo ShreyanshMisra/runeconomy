@@ -116,6 +116,9 @@ class EvidenceWorkflowTests(unittest.TestCase):
             report = validate_experiment_artifact(workspace)
 
         self.assertEqual(report["status"], "unresolved")
+        self.assertTrue(
+            all(issue["code"] == "runeconomy.workspace.unresolved" for issue in report["issues"])
+        )
         self.assertFalse(report["runnable"])
         self.assertTrue(report["issues"][0]["execution_blocking"])
         self.assertIn("evaluator", {item["field_path"].split(".")[-1] for item in report["issues"]})
@@ -159,6 +162,9 @@ class EvidenceWorkflowTests(unittest.TestCase):
         self.assertEqual(report["status"], "unsupported_backend")
         self.assertFalse(report["runnable"])
         self.assertEqual(report["issues"][0]["field_path"], "chat_completions")
+        self.assertEqual(
+            report["issues"][0]["code"], "runeconomy.backend.unsupported"
+        )
 
     def test_public_claim_without_identity_is_reported_but_remains_runnable(self) -> None:
         bundle = import_evidence(self.fixture)

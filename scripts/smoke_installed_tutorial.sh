@@ -73,13 +73,16 @@ PY
 "$cli" experiment validate experiment/
 "$cli" experiment run experiment/ --output results/
 "$cli" experiment report results/result.json --output report.html
+"$cli" support-bundle experiment/ --output runeconomy-support.zip
 
 "$python_path" - <<'PY'
 import json
 import pathlib
+import zipfile
 
 result = json.loads(pathlib.Path("results/result.json").read_text(encoding="utf-8"))
 report = pathlib.Path("report.html")
+support = pathlib.Path("runeconomy-support.zip")
 if result["decision"]["status"] != "verified":
     raise SystemExit(f"unexpected tutorial verdict: {result['decision']['status']}")
 effect = result["summary"]["effects"]["cached_tokens"]["candidate_minus_baseline_mean"]
@@ -87,7 +90,22 @@ if effect != 8.0:
     raise SystemExit(f"unexpected cached-token effect: {effect}")
 if not report.is_file() or report.stat().st_size == 0:
     raise SystemExit("tutorial report is missing or empty")
+if not support.is_file() or support.stat().st_size == 0:
+    raise SystemExit("tutorial support bundle is missing or empty")
 text = report.read_text(encoding="utf-8")
+with zipfile.ZipFile(support) as archive:
+    if archive.namelist() != [
+        "manifest.json",
+        "environment.json",
+        "workspace.json",
+        "capabilities.json",
+        "validation.json",
+        "errors.json",
+    ]:
+        raise SystemExit("tutorial support bundle members differ from the allowlist")
+    support_text = "\n".join(
+        archive.read(name).decode("utf-8") for name in archive.namelist()
+    )
 for forbidden in (
     "Stable instructions",
     "Run metadata",
@@ -98,5 +116,7 @@ for forbidden in (
 ):
     if forbidden in text:
         raise SystemExit(f"tutorial report contains forbidden material: {forbidden}")
+    if forbidden in support_text:
+        raise SystemExit(f"tutorial support bundle contains forbidden material: {forbidden}")
 print("Installed-wheel tutorial completed with the expected verified plumbing verdict")
 PY
