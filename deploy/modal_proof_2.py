@@ -81,7 +81,6 @@ proof_image = (
             "HF_HOME": HF_CACHE_PATH,
             "VLLM_CACHE_ROOT": VLLM_CACHE_PATH,
             "TOKENIZERS_PARALLELISM": "false",
-            "VLLM_STRICT_QUANT_SCHEME": "1",
         }
     )
     .add_local_file("examples/proof_2/agent.py", str(REMOTE_AGENT), copy=True)
@@ -255,6 +254,23 @@ def _warm_structured_paths() -> None:
             )
 
 
+def _assert_backend_profiles(work: Path) -> None:
+    baseline = (work / "baseline-vllm.log").read_text(
+        encoding="utf-8", errors="replace"
+    )
+    candidate = (work / "candidate-vllm.log").read_text(
+        encoding="utf-8", errors="replace"
+    )
+    if "quantization=None" not in baseline:
+        raise RuntimeError("baseline did not start with unquantized BF16 weights")
+    if "quantization=fp8_per_tensor" not in candidate:
+        raise RuntimeError("candidate did not start with fp8_per_tensor quantization")
+    if "Selected CutlassFP8ScaledMMLinearKernel" not in candidate:
+        raise RuntimeError("candidate did not select the expected L40S FP8 kernel")
+    if "activations as unquantized" in candidate or "quantization fallback" in candidate:
+        raise RuntimeError("candidate quantization used an undeclared fallback")
+
+
 def _private_archive(
     root: Path, metadata_payload: dict[str, Any], *, metadata_name: str
 ) -> bytes:
@@ -338,6 +354,7 @@ def run_calibration(
             logs.append(log)
         for profile in ("baseline", "candidate"):
             _wait_until_healthy(profile, processes[profile])
+        _assert_backend_profiles(work)
         _warm_structured_paths()
         os.environ.update(
             {

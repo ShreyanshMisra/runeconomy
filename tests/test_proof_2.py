@@ -52,6 +52,18 @@ class Proof2AgentTests(unittest.TestCase):
             candidate["runeconomy.chat_template_digest"],
         )
 
+    def test_plan_validation_ignores_quote_style_and_surrounding_prose(self) -> None:
+        question = (
+            "Which Python function or class encloses the exact call expression "
+            "\"client.capture({'value': 1})\"?"
+        )
+        output = json.dumps(
+            {"query": 'Search for: client.capture({"value": 1}) in the repository.'}
+        )
+        self.assertEqual(
+            self.agent._plan_query(output, question), "client.capture({'value': 1})"
+        )
+
 
 class Proof2WorkloadTests(unittest.TestCase):
     @classmethod
@@ -118,7 +130,8 @@ class Proof2ModalTests(unittest.TestCase):
         self.assertIn('GPU = "L40S:2"', source)
         self.assertIn('"candidate": "fp8_per_tensor"', source)
         self.assertIn('"baseline": None', source)
-        self.assertIn('"VLLM_STRICT_QUANT_SCHEME": "1"', source)
+        self.assertIn("Selected CutlassFP8ScaledMMLinearKernel", source)
+        self.assertIn("quantization used an undeclared fallback", source)
         self.assertIn("expected_task_count not in {5, 40}", source)
         self.assertNotIn("def heldout(", source)
         self.assertIn('optimization_target="engine_change_latency"', source)

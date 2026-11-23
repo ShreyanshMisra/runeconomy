@@ -16,9 +16,10 @@ the same vLLM 0.34.0 stack and L40S hardware:
 The source model revision, tokenizer revision, chat template, request content,
 agent code, task order, generation parameters, tool, evaluator, and GPU class
 are controlled. The served-model identity differs deliberately so RunEconomy
-can establish the declared backend-identity intervention. Strict quantization
-mode makes startup fail instead of silently falling back to a different
-activation scheme.
+can establish the declared backend-identity intervention. The runner inspects
+startup evidence and fails unless the BF16 profile is unquantized, the candidate
+reports `fp8_per_tensor`, the L40S FP8 kernel is selected, and no activation
+fallback is reported.
 
 This intervention was selected because quantization is a common deployment
 decision with a real latency-versus-task-quality question. Online quantization
