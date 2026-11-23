@@ -297,6 +297,12 @@ or `invalid`. A verified decision requires all configured quality and
 performance guardrails. Static full-block cache predictions are compared with
 observed cached-token deltas in the same report.
 
+Future decisions use additive decision schema `0.2`. The original `status`,
+`reason`, and `checks` fields remain compatible, while evidence validity,
+execution terminality, task outcome, failure origin, performance eligibility,
+common-mode paired failures, and the precise decisive gate are recorded
+separately. See [Decision artifact semantics](decision-artifacts.md).
+
 Results contain both a full manifest fingerprint and a reproducibility
 fingerprint. The latter excludes only `backend.base_url` and
 `backend.api_key_env`, allowing a private measured manifest to be compared with

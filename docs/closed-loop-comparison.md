@@ -288,6 +288,11 @@ paired Student-t interval includes only pairs where both baseline and candidate
 succeeded. Consequently, a crash, timeout, invalid trace, or failed task can
 never improve the candidate's latency sample by disappearing from it.
 
+The planner also translates the completion-rate threshold into an exact
+integer failure tolerance. A 100% threshold reports that zero failed or
+incomplete attempts are tolerated. Lower thresholds report the exact minimum
+completed count and maximum failure count for the planned sample.
+
 Verdicts are:
 
 - `verified`: successful-task latency improved and task success was
@@ -299,6 +304,12 @@ Verdicts are:
   non-inferiority and a latency improvement.
 - `invalid`: baseline execution, trace evidence, or evaluator evidence could
   not support the comparison.
+
+Decision schema `0.2` preserves this verdict field while separately recording
+evidence validity, execution terminality, paired task outcomes, supported
+failure origin, and performance eligibility. Concordant paired failures are
+reported as common-mode diagnostics without claiming a causal origin. See
+[Decision artifact semantics](decision-artifacts.md).
 
 Statuses remain separate per attempt: `completed`, `task_failure`,
 `model_output_failure`, `application_failure`, `timeout`,

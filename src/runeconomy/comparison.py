@@ -21,6 +21,7 @@ from typing import Any, Mapping
 
 from .attempt_status import AttemptStatus, AttemptStatusError
 from .critical_path import calculate_critical_path
+from .decision_artifacts import enrich_decision_artifact
 from .evaluators import (
     EvaluatorError,
     EvaluatorInfrastructureError,
@@ -1199,7 +1200,9 @@ def _decision(
     else:
         status = "inconclusive"
         reason = "quality passed but successful-task latency improvement was not established"
-    return {"status": status, "reason": reason, "checks": checks}
+    return enrich_decision_artifact(
+        {"status": status, "reason": reason, "checks": checks}, summary
+    )
 
 
 def run_comparison(

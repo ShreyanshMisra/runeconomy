@@ -198,6 +198,14 @@ class ExperimentTests(unittest.TestCase):
         ]
         self.assertGreater(lower, -0.10)
         self.assertEqual(result["decision"]["status"], "verified")
+        self.assertEqual(result["decision"]["schema_version"], "0.2")
+        self.assertEqual(
+            result["decision"]["execution_terminality"]["status"], "terminal"
+        )
+        self.assertEqual(
+            result["decision"]["evidence_validity"]["status"], "unknown"
+        )
+        self.assertFalse(result["decision"]["performance_eligibility"]["eligible"])
 
     def test_absolute_success_floor_invalidates_weak_baseline(self) -> None:
         payload = _manifest()
@@ -255,6 +263,40 @@ class ExperimentTests(unittest.TestCase):
             "model_revision",
             result["provenance"]["environment_identity"]["drift"],
         )
+        self.assertEqual(
+            result["decision"]["evidence_validity"]["status"], "invalid"
+        )
+
+    def test_required_environment_identity_can_establish_valid_evidence(self) -> None:
+        payload = _manifest()
+        payload["acceptance"].update(
+            {
+                "task_success_method": "point_estimate",
+                "require_environment_identity": True,
+            }
+        )
+        expected = {
+            "model": "example/model",
+            "model_revision": "model-sha",
+            "tokenizer_revision": "tokenizer-sha",
+            "chat_template_digest": "sha256:template",
+            "backend_version": "0.12.0",
+            "engine_config": {
+                "enable_prefix_caching": True,
+                "tensor_parallel_size": 1,
+                "dtype": "bfloat16",
+            },
+        }
+
+        result = run_experiment(
+            ExperimentManifest.from_dict(payload),
+            _IdentityClient([expected, expected]),
+        )
+
+        evidence = result["decision"]["evidence_validity"]
+        self.assertEqual(evidence["status"], "valid")
+        self.assertEqual(evidence["required_check_count"], 1)
+        self.assertEqual(evidence["passed_required_checks"], ["environment_identity"])
 
     def test_earlier_trial_placeholder_name_remains_supported(self) -> None:
         payload = _manifest()
