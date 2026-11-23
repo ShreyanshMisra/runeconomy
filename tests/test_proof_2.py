@@ -113,6 +113,10 @@ class Proof2WorkloadTests(unittest.TestCase):
             self.assertEqual(
                 record["splits"]["draft_heldout_pool"]["task_count"], 240
             )
+            self.assertEqual(
+                record["splits"]["draft_heldout_pool"]["family_counts"],
+                {"call_expression": 120, "string_literal": 120},
+            )
             task_ids: list[set[str]] = []
             for name in ("pilot", "calibration", "draft-heldout"):
                 payload = json.loads(

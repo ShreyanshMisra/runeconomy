@@ -144,6 +144,7 @@ def _previous_queries() -> set[str]:
         path
         for preparation in (ROOT / "artifacts").glob("proof-2-preparation*")
         for path in preparation.glob("*-tasks.json")
+        if path.name != "draft-heldout-tasks.json"
     )
     for path in paths:
         try:
