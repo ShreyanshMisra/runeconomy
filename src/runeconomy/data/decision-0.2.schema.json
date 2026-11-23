@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://runeconomy.dev/schemas/decision-0.2.schema.json",
+  "title": "RunEconomy decision artifact 0.2",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "status",
+    "reason",
+    "checks",
+    "evidence_validity",
+    "execution_terminality",
+    "task_outcome",
+    "failure_origin",
+    "performance_eligibility",
+    "common_mode_paired_failures",
+    "decisive_gate"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.2"},
+    "status": {
+      "enum": ["verified", "regression", "inconclusive", "invalid", "unknown"]
+    },
+    "reason": {"type": "string"},
+    "checks": {"type": "array", "items": {"type": "object"}},
+    "evidence_validity": {
+      "type": "object",
+      "required": [
+        "status",
+        "required_check_count",
+        "passed_required_checks",
+        "failed_required_checks",
+        "unresolved_required_checks"
+      ],
+      "properties": {
+        "status": {"enum": ["valid", "invalid", "unknown"]},
+        "required_check_count": {"type": "integer", "minimum": 0},
+        "passed_required_checks": {"type": "array", "items": {"type": "string"}},
+        "failed_required_checks": {"type": "array", "items": {"type": "string"}},
+        "unresolved_required_checks": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "execution_terminality": {
+      "type": "object",
+      "required": ["status", "variants"],
+      "properties": {
+        "status": {"enum": ["terminal", "unterminated", "unknown"]},
+        "variants": {"type": "object"}
+      }
+    },
+    "task_outcome": {
+      "type": "object",
+      "required": ["status", "variants", "paired_outcome_counts"],
+      "properties": {
+        "status": {"enum": ["all_success", "failures_observed", "unknown"]},
+        "variants": {"type": "object"},
+        "paired_outcome_counts": {"type": "object"}
+      }
+    },
+    "failure_origin": {
+      "type": "object",
+      "required": ["category", "attribution", "paired_outcome_basis"],
+      "properties": {
+        "category": {"type": "string"},
+        "attribution": {"type": "string"},
+        "paired_outcome_basis": {"type": "object"}
+      }
+    },
+    "performance_eligibility": {
+      "type": "object",
+      "required": ["status", "eligible", "reason"],
+      "properties": {
+        "status": {"enum": ["eligible", "ineligible"]},
+        "eligible": {"type": "boolean"},
+        "reason": {"type": "string"}
+      }
+    },
+    "common_mode_paired_failures": {"type": "object"},
+    "decisive_gate": {"type": "object"}
+  },
+  "additionalProperties": true
+}

@@ -162,6 +162,51 @@ class ExperimentPlanningTests(unittest.TestCase):
         self.assertLess(failing[0], 0.8)
         self.assertLess(report["task_success"]["all_success_lower_bound"], 1.0)
 
+    def test_completion_warning_reports_exact_integer_failure_tolerance(self) -> None:
+        with TemporaryDirectory() as raw_directory:
+            workspace = _agent_workspace(
+                Path(raw_directory), planning=_complete_planning()
+            )
+            report = plan_experiment(workspace)
+
+        self.assertEqual(
+            report["completion"],
+            {
+                "threshold": 1.0,
+                "planned_attempts_per_variant": 40,
+                "minimum_completed_attempts_per_variant": 40,
+                "maximum_failed_or_incomplete_attempts_per_variant": 0,
+                "warning": (
+                    "A completion threshold of 1 requires at least 40 of 40 "
+                    "completed attempts per variant and tolerates exactly 0 failed "
+                    "or incomplete attempts per variant."
+                ),
+            },
+        )
+        warning = next(
+            issue
+            for issue in report["issues"]
+            if issue["code"] == "runeconomy.plan.completion_failure_tolerance"
+        )
+        self.assertIn("exactly 0 failed or incomplete attempts", warning["why"])
+
+    def test_completion_tolerance_rounds_threshold_to_an_exact_count(self) -> None:
+        with TemporaryDirectory() as raw_directory:
+            workspace = _agent_workspace(
+                Path(raw_directory), planning=_complete_planning()
+            )
+            manifest_path = workspace / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["acceptance"]["min_completed_rate"] = 0.95
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            report = plan_experiment(workspace)
+
+        completion = report["completion"]
+        self.assertEqual(completion["minimum_completed_attempts_per_variant"], 38)
+        self.assertEqual(
+            completion["maximum_failed_or_incomplete_attempts_per_variant"], 2
+        )
+
     def test_missing_design_inputs_and_power_are_reported(self) -> None:
         with TemporaryDirectory() as raw_directory:
             report = plan_experiment(_agent_workspace(Path(raw_directory)))

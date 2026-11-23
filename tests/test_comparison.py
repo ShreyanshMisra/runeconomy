@@ -400,6 +400,9 @@ class ComparisonTests(unittest.TestCase):
 
         self.assertEqual(decision["status"], "regression")
         self.assertIn("successful tasks were slower", decision["reason"])
+        self.assertEqual(decision["schema_version"], "0.2")
+        self.assertTrue(decision["performance_eligibility"]["eligible"])
+        self.assertEqual(decision["decisive_gate"]["category"], "performance")
         guardrail = next(
             check
             for check in decision["checks"]

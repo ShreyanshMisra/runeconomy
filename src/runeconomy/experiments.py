@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Mapping, Protocol
 
 from .cache import longest_common_prefix
+from .decision_artifacts import enrich_decision_artifact
 from .evaluators import EvaluatorError, evaluate_output, validate_evaluator_spec
 from .vllm import CapturedResponse
 
@@ -1776,21 +1777,24 @@ def run_experiment(
     identity_check = _environment_identity_check(
         expected_identity, identity_before, identity_after
     )
-    if (
-        manifest.acceptance.require_environment_identity
-        and not identity_check["verified"]
-    ):
+    if manifest.acceptance.require_environment_identity:
         decision = {
             **decision,
-            "status": "invalid",
-            "reason": (
-                "the live environment identity was missing, mismatched, or changed "
-                "during the experiment"
+            **(
+                {}
+                if identity_check["verified"]
+                else {
+                    "status": "invalid",
+                    "reason": (
+                        "the live environment identity was missing, mismatched, or "
+                        "changed during the experiment"
+                    ),
+                }
             ),
             "checks": [
                 {
                     "name": "environment_identity",
-                    "passed": False,
+                    "passed": identity_check["verified"],
                     "required": True,
                     "observed": identity_check,
                     "threshold": "all pinned fields observed before and after without drift",
@@ -1817,6 +1821,7 @@ def run_experiment(
                 *decision["checks"],
             ],
         }
+    decision = enrich_decision_artifact(decision, decision_basis)
     return {
         "result_schema_version": "0.3",
         "experiment_id": manifest.experiment_id,

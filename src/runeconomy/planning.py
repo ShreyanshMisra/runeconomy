@@ -71,6 +71,25 @@ def _minimum_successes_for_lower_bound(
     return None
 
 
+def _completion_tolerance(units: int, threshold: float) -> dict[str, Any]:
+    """Describe the exact integer consequence of a completion-rate gate."""
+
+    minimum_completed = min(units, max(0, math.ceil(threshold * units - 1e-12)))
+    maximum_failures = units - minimum_completed
+    return {
+        "threshold": threshold,
+        "planned_attempts_per_variant": units,
+        "minimum_completed_attempts_per_variant": minimum_completed,
+        "maximum_failed_or_incomplete_attempts_per_variant": maximum_failures,
+        "warning": (
+            f"A completion threshold of {threshold:g} requires at least "
+            f"{minimum_completed} of {units} completed attempts per variant and "
+            f"tolerates exactly {maximum_failures} failed or incomplete "
+            f"attempt{'s' if maximum_failures != 1 else ''} per variant."
+        ),
+    }
+
+
 def _paired_feasibility(
     pairs: int, margin: float, *, confidence: float = 0.95
 ) -> dict[str, Any]:
@@ -375,6 +394,7 @@ def plan_experiment(path: Path) -> dict[str, Any]:
             acceptance.get("max_latency_regression_ms", 0.0)
         )
         min_success = float(acceptance.get("min_task_success_rate", 0.8))
+        min_completed = float(acceptance.get("min_completed_rate", 1.0))
         margin = float(acceptance.get("max_task_success_regression", 0.05))
         unit_name = "task attempt identified by (task_id, repetition)"
         workflow_kind = "complete_agent_process"
@@ -388,6 +408,7 @@ def plan_experiment(path: Path) -> dict[str, Any]:
         latency_semantics = "superiority"
         max_latency_regression_ms = 0.0
         min_success = parsed.acceptance.min_task_success_rate
+        min_completed = parsed.acceptance.min_completed_rate
         margin = parsed.acceptance.max_task_success_regression
         unit_name = "paired case repetition"
         workflow_kind = (
@@ -398,6 +419,16 @@ def plan_experiment(path: Path) -> dict[str, Any]:
 
     planned_pairs = unique_tasks * repetitions
     total_attempts = planned_pairs * 2
+    completion = _completion_tolerance(planned_pairs, min_completed)
+    issues.append(
+        _issue(
+            "runeconomy.plan.completion_failure_tolerance",
+            "warning",
+            "acceptance.min_completed_rate",
+            completion["warning"],
+            "Freeze this exact integer failure tolerance before held-out execution.",
+        )
+    )
     if not ids_unique:
         issues.append(
             _issue(
@@ -794,6 +825,7 @@ def plan_experiment(path: Path) -> dict[str, Any]:
             "all_success_is_not_true_100_percent": True,
             "paired_noninferiority": paired,
         },
+        "completion": completion,
         "performance": {
             "primary_metric": primary_metric,
             "optimization_target": optimization_target,
