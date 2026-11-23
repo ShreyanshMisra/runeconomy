@@ -22,5 +22,24 @@ model-output failure, application failure, infrastructure failure, timeout,
 evaluator failure, and invalid trace separately. Failed attempts must not vanish
 from latency accounting.
 
+Use `runeconomy.agent.Attempt` at the existing agent entry point. It reads the
+runner environment, exposes typed paths and attempt identity, and writes one
+atomic schema `0.1` terminal status. Call exactly one of `completed`,
+`task_failure`, `model_output_failure`, `application_failure`, or
+`infrastructure_failure`. Pass only fixed content-free `stage` and `code`
+labels. Never pass an exception message or runtime data. An unhandled exception
+is recorded conservatively as `application_failure` and is re-raised. A clean
+exit without a declared terminal status is an integration error.
+
+Do not hand-write status JSON. Do not replace existing OpenTelemetry or
+OpenInference instrumentation. External RunEconomy timeouts still override an
+application status.
+
+`runeconomy experiment plan WORKSPACE` is read-only and separate from
+validation. Validation checks execution structure. Planning checks pairing,
+quality-gate feasibility, performance metric alignment, sample assumptions,
+and calibration versus held-out declarations. A planning state is not an
+experiment verdict. Run it before consuming held-out data or paid compute.
+
 The legacy `compare` command may exist in older releases. For new work, use
 `runeconomy experiment init --mode agent-process` followed by `experiment run`.

@@ -40,6 +40,19 @@ runeconomy tutorial serve
 Treat it as a product-plumbing check, never as real inference validation or a
 performance benchmark.
 
+When a RunEconomy command fails, record its `runeconomy.*` error code. If a
+maintainer needs diagnostic context, create a local support bundle:
+
+```bash
+runeconomy support-bundle experiment/ --output runeconomy-support.zip
+```
+
+Inspect every JSON member before sharing it. Bundle creation never authorizes
+uploading the archive, opening an issue, or sharing it publicly. Do not attach
+raw traces, private results, prompts, generated output, evaluator answers, or
+credentials alongside it. Read the privacy and troubleshooting references
+before handling a support artifact.
+
 ## Evidence-first workflow
 
 Import the evidence without guessing its format:
@@ -71,6 +84,36 @@ runeconomy experiment init --mode agent-process \
   --evaluator evaluator.py \
   --output experiment/
 ```
+
+Before initialization, integrate the repository's real agent entry point with
+the supported runtime helper:
+
+```python
+from runeconomy.agent import Attempt
+
+with Attempt.from_environment() as attempt:
+    result = run_agent(attempt.task_path)
+    attempt.completed()
+```
+
+Begin read-only. Locate the existing entry point and tracing, then explain the
+smallest proposed integration before editing. Preserve normal execution, exit
+behavior, and existing telemetry. Do not recreate the status JSON or replace
+the application's tracing. Map only failures the repository can identify
+truthfully. Use conservative `application_failure` for an otherwise unknown
+unhandled exception, and never put exception text, outputs, prompts, URLs, or
+credentials into `stage` or `code`. Add focused local tests.
+
+Run `experiment validate` and the read-only design check before execution:
+
+```bash
+runeconomy experiment validate experiment/
+runeconomy experiment plan experiment/
+```
+
+Run a free local compatibility trial before any benchmark. Stop before paid
+compute, backend changes, held-out execution, publication, or deployment unless
+the user explicitly approves that next action.
 
 Run and report through the same command family:
 

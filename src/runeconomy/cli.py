@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 import webbrowser
 from collections.abc import Mapping
@@ -14,9 +13,12 @@ from typing import Any
 
 from . import __version__
 from .analysis import analyze_trace
+from .attempt_status import AttemptStatusError
 from .backends import BackendProbeError, discover_vllm_capabilities
 from .comparison import run_comparison
 from .evidence import import_evidence, load_evidence_bundle
+from .errors import ERROR_CODE_VERSION, classify_exception
+from .evaluators import EvaluatorInfrastructureError
 from .experiment_init import initialize_experiment, select_finding
 from .experiments import (
     ExperimentManifest,
@@ -29,6 +31,7 @@ from .importers import (
     import_vllm_jsonl,
 )
 from .models import Trace, TraceValidationError
+from .planning import plan_experiment
 from .reports import (
     load_demo_result,
     render_demo_html,
@@ -41,7 +44,8 @@ from .tutorial import (
     materialize_tutorial,
     serve_tutorial,
 )
-from .vllm import VLLMClient, VLLMError, VLLMHTTPError
+from .support_bundle import SupportBundleError, create_support_bundle
+from .vllm import VLLMClient, VLLMError
 from .workspaces import (
     agent_run_arguments,
     create_agent_workspace,
@@ -242,6 +246,25 @@ def _build_parser() -> argparse.ArgumentParser:
         "--port", type=int, default=DEFAULT_TUTORIAL_PORT
     )
 
+    support = subparsers.add_parser(
+        "support-bundle",
+        help="create a local privacy-minimized diagnostic archive",
+    )
+    support.add_argument("workspace", type=Path)
+    support.add_argument("--output", type=Path, required=True)
+    support.add_argument(
+        "--doctor-report",
+        type=Path,
+        help="include only allowlisted states from a saved doctor JSON report",
+    )
+    support.add_argument(
+        "--validation-report",
+        type=Path,
+        help="include only allowlisted states from a saved validation JSON report",
+    )
+    support.add_argument("--format", choices=("human", "json"), default="human")
+    support.add_argument("--json", dest="format", action="store_const", const="json")
+
     doctor = subparsers.add_parser(
         "doctor", help="inspect a vLLM server without running inference"
     )
@@ -321,6 +344,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="allow trusted python and command evaluators",
     )
+    plan = experiment_commands.add_parser(
+        "plan", help="assess claim-design readiness without executing the experiment"
+    )
+    plan.add_argument("manifest", type=Path)
+    plan.add_argument("--format", choices=("human", "json"), default="human")
+    plan.add_argument("--json", dest="format", action="store_const", const="json")
     run = experiment_commands.add_parser("run", help="run a manifest against vLLM")
     run.add_argument("manifest", type=Path)
     run.add_argument("--output", type=Path, required=True)
@@ -516,6 +545,7 @@ def _format_capabilities(base_url: str, capabilities: Mapping[str, Any]) -> str:
 
 
 def _doctor_error_payload(exc: Exception) -> dict[str, Any]:
+    descriptor = classify_exception(exc, stage="doctor")
     if isinstance(exc, BackendProbeError):
         category = exc.category
         next_action = exc.next_action
@@ -527,11 +557,15 @@ def _doctor_error_payload(exc: Exception) -> dict[str, Any]:
         )
     return {
         "schema_version": "0.1",
+        "error_code_version": ERROR_CODE_VERSION,
         "status": "error",
         "error": {
+            "code": descriptor.code,
             "category": category,
-            "message": str(exc),
+            "stage": "doctor",
+            "message": descriptor.summary,
             "evidence_complete": False,
+            "next_action_code": descriptor.next_action_code,
             "next_action": next_action,
         },
     }
@@ -542,6 +576,7 @@ def _format_doctor_error(payload: Mapping[str, Any]) -> str:
     return "\n".join(
         [
             "RunEconomy doctor · ERROR",
+            f"Code: {error['code']}",
             f"What failed: {error['category'].replace('_', ' ')}.",
             f"Why: {error['message']}",
             "Evidence: capability discovery is incomplete; no compatibility verdict was produced.",
@@ -625,6 +660,7 @@ def _format_validation_report(report: Mapping[str, Any], path: Path) -> str:
         lines.extend(
             [
                 "",
+                f"Code: {issue['code']}",
                 f"Field: {issue['field_path']}",
                 f"Why it matters: {issue['reason']}",
                 "Blocks execution: " + ("Yes" if issue["execution_blocking"] else "No"),
@@ -636,6 +672,87 @@ def _format_validation_report(report: Mapping[str, Any], path: Path) -> str:
             lines.append(f"Command: {issue['command']}")
     if report.get("next_command"):
         lines.extend(["", f"What to do next: {report['next_command']}"])
+    return "\n".join(lines)
+
+
+def _format_experiment_plan(plan: Mapping[str, Any]) -> str:
+    sample = plan.get("sample")
+    success = plan.get("task_success")
+    performance = plan.get("performance")
+    unit = plan.get("experimental_unit")
+    claim = plan.get("proposed_claim", {})
+    declarations = plan.get("design_declarations")
+    lines = [
+        f"RunEconomy experiment plan · {str(plan['state']).replace('_', ' ').title()}",
+        "This is a design-readiness assessment, not an experiment verdict.",
+        "",
+        "Proposed claim: "
+        f"{claim.get('level', 'unknown')} claim using {claim.get('primary_metric', 'unknown')}.",
+    ]
+    if isinstance(unit, Mapping) and isinstance(sample, Mapping):
+        lines.extend(
+            [
+                f"Experimental unit: {unit['name']}.",
+                "Planned sample: "
+                f"{sample['unique_task_count']} unique task(s), "
+                f"{sample['repetitions']} repetition(s), "
+                f"{sample['planned_pairs']} pair(s), "
+                f"{sample['total_attempts']} attempt(s).",
+            ]
+        )
+    if isinstance(success, Mapping):
+        required = success.get("minimum_successful_units")
+        required_text = (
+            "not achievable with this sample"
+            if required is None
+            else f"at least {required} of {success['planned_units']} planned units"
+        )
+        lines.extend(
+            [
+                "Task-success requirement: "
+                f"{required_text} must clear a {success['minimum_lower_bound']:.2%} "
+                "exact lower-confidence-bound gate.",
+                "All observed successes still do not imply a true 100% success rate.",
+            ]
+        )
+    if isinstance(performance, Mapping):
+        lines.extend(
+            [
+                "Performance evidence: "
+                f"{performance['primary_metric']} across at most "
+                f"{performance['maximum_analyzable_pairs']} pairs where both variants succeed.",
+                "Task failures reduce the analyzable latency sample.",
+            ]
+        )
+        if performance["power"]["status"] == "unknown":
+            lines.append(
+                "Unknown: latency power requires a calibration effect and paired variability estimate."
+            )
+    if isinstance(declarations, Mapping):
+        lines.append(
+            "Held-out status: "
+            f"{str(declarations['heldout_status']).replace('_', ' ')}. "
+            "RunEconomy cannot independently verify whether data was inspected."
+        )
+    issues = plan.get("issues", [])
+    unknown_count = sum(
+        issue.get("severity") == "warning" for issue in issues
+    )
+    lines.append(f"Unknown or unresolved design items: {unknown_count}.")
+    if issues:
+        lines.extend(["", "Design issues:"])
+        for issue in issues:
+            lines.append(
+                f"- [{str(issue['severity']).title()}] {issue['code']} · "
+                f"{issue['why']} Next: {issue['next_action']}"
+            )
+    lines.extend(
+        [
+            "",
+            f"Planning state: {plan['state']}",
+            f"What to do next: {plan['next_action_code']}",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -672,25 +789,49 @@ def _next_action_for_error(args: argparse.Namespace) -> str:
         if getattr(args, "tutorial_command", None) == "init":
             return "Choose a new empty directory, then rerun `runeconomy tutorial init DIRECTORY`."
         return "Free the port or create a matching tutorial and server on another port."
+    if command == "support-bundle":
+        return "Review the support input, choose a new .zip output path, and rerun without uploading any private artifacts."
     return "Correct the reported input or configuration and rerun the command."
 
 
+def _error_stage(args: argparse.Namespace) -> str:
+    command = str(getattr(args, "command", "command"))
+    if command == "experiment":
+        return f"experiment.{getattr(args, 'experiment_command', 'unknown')}"
+    if command == "tutorial":
+        return f"tutorial.{getattr(args, 'tutorial_command', 'unknown')}"
+    return command
+
+
+def _cli_error_payload(exc: Exception, args: argparse.Namespace) -> dict[str, Any]:
+    stage = _error_stage(args)
+    descriptor = classify_exception(exc, stage=stage)
+    return {
+        "schema_version": "0.1",
+        "error_code_version": ERROR_CODE_VERSION,
+        "status": "error",
+        "error": {
+            "code": descriptor.code,
+            "category": descriptor.category,
+            "stage": stage,
+            "message": descriptor.summary,
+            "evidence_complete": False,
+            "next_action_code": descriptor.next_action_code,
+            "next_action": _next_action_for_error(args),
+        },
+    }
+
+
 def _format_cli_error(exc: Exception, args: argparse.Namespace) -> str:
-    if isinstance(exc, VLLMHTTPError):
-        reason = (
-            f"vLLM {exc.path} returned HTTP {exc.status}; the response body was redacted"
-        )
-    elif isinstance(exc, VLLMError):
-        reason = re.sub(r"https?://\S+", "<redacted-endpoint>", str(exc))
-    else:
-        reason = str(exc)
+    error = _cli_error_payload(exc, args)["error"]
     return "\n".join(
         [
             "RunEconomy · ERROR",
+            f"Code: {error['code']}",
             f"What failed: {getattr(args, 'command', 'command')} did not complete.",
-            f"Why: {reason}",
+            f"Why: {error['message']}",
             "Evidence: output may be absent or incomplete; do not treat a partial artifact as a verdict.",
-            f"What to do next: {_next_action_for_error(args)}",
+            f"What to do next: {error['next_action']}",
         ]
     )
 
@@ -865,6 +1006,28 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"What to do next: run `{serve_command}` in another terminal.")
                 return 0
             serve_tutorial(port=args.port)
+            return 0
+
+        if args.command == "support-bundle":
+            summary = create_support_bundle(
+                args.workspace,
+                args.output,
+                doctor_report=args.doctor_report,
+                validation_report=args.validation_report,
+            )
+            if args.format == "json":
+                print(json.dumps(summary, indent=2, sort_keys=True))
+            else:
+                print(f"RunEconomy support bundle · Created · {args.output}")
+                print("Included:")
+                for name in summary["included_sections"]:
+                    print(f"  - {name}")
+                print(
+                    "Private experiment content was excluded by a strict export allowlist."
+                )
+                print(
+                    "RunEconomy did not upload this archive. Inspect every file before sharing it."
+                )
             return 0
 
         if args.command == "doctor":
@@ -1063,6 +1226,15 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0 if report["status"] == "runnable" else 2 if report["status"] == "invalid" else 1
 
+        if args.experiment_command == "plan":
+            planning = plan_experiment(args.manifest)
+            print(
+                json.dumps(planning, indent=2, sort_keys=True)
+                if args.format == "json"
+                else _format_experiment_plan(planning)
+            )
+            return 2 if planning["state"] == "blocked" else 1 if planning["state"] == "needs_design_input" else 0
+
         result_path, artifacts_path = _result_output_path(args.output)
         if args.manifest.is_dir():
             descriptor, _ = load_workspace(args.manifest)
@@ -1138,8 +1310,16 @@ def main(argv: list[str] | None = None) -> int:
         VLLMError,
         BackendProbeError,
         TutorialError,
+        SupportBundleError,
+        AttemptStatusError,
+        EvaluatorInfrastructureError,
     ) as exc:
-        print(_format_cli_error(exc, args), file=sys.stderr)
+        rendered = (
+            json.dumps(_cli_error_payload(exc, args), indent=2, sort_keys=True)
+            if getattr(args, "format", None) == "json"
+            else _format_cli_error(exc, args)
+        )
+        print(rendered, file=sys.stderr)
         return 2
 
 

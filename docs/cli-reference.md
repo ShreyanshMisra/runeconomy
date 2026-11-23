@@ -12,12 +12,25 @@ where documented.
 | `runeconomy experiment init --from-evidence evidence.json --output experiment/` | Create a static experiment workspace or an honest unresolved workspace. |
 | `runeconomy experiment init --mode agent-process ... --output experiment/` | Create a complete-agent experiment workspace. |
 | `runeconomy experiment validate experiment/` | Report runnable, unresolved, invalid, unsupported-backend, or claim-incomplete status. |
+| `runeconomy experiment plan experiment/` | Assess claim-design readiness without execution or network access. |
 | `runeconomy experiment run experiment/ --output results/` | Execute the workspace and preserve durable results. |
 | `runeconomy experiment report results/result.json --output report.html --open` | Render the evidence-derived report. |
+| `runeconomy support-bundle experiment/ --output runeconomy-support.zip` | Create a local privacy-minimized diagnostic archive. |
 
 `experiment validate --json` emits structured issues for coding agents and CI.
 `--doctor-report doctor.json` applies a saved read-only capability diagnosis
 without probing the backend again.
+
+`experiment plan --json` reports `blocked`, `needs_design_input`,
+`ready_for_calibration`, or `ready_to_freeze`. Planning reuses validation and
+the exact task-success methods. It never produces an experiment verdict.
+Planning exits `0` for calibration or freeze readiness, `1` when design input
+is missing, and `2` when the design is blocked.
+
+`support-bundle` never contacts a backend or uploads anything. Optional
+`--doctor-report` and `--validation-report` inputs must already exist. Run with
+`--json` for a machine-readable creation summary. The command refuses to
+overwrite an existing archive and never follows workspace symlinks.
 
 ## Evidence and compatibility commands
 
@@ -60,7 +73,8 @@ gate, attempt classifications, and evidence integrity.
 
 ## Error contract
 
-Human errors state what failed, why RunEconomy believes it failed, whether
-evidence may be incomplete, and the next action. JSON output never includes an
-API-key value. Partial checkpoints and private artifacts are evidence, not
-final verdicts.
+Human errors state a stable `runeconomy.*` code, what failed, why RunEconomy
+believes it failed, whether evidence may be incomplete, and the next action.
+JSON errors expose the same code separately from mutable prose. JSON output
+never includes an API-key value. Partial checkpoints and private artifacts are
+evidence, not final verdicts.

@@ -9,7 +9,7 @@ compatible backend.
 RunEconomy requires Python 3.11 or newer.
 
 ```bash
-python -m pip install runeconomy==0.2.0
+python -m pip install runeconomy==0.2.1
 runeconomy --version
 ```
 
@@ -83,6 +83,7 @@ runeconomy experiment init \
 
 runeconomy experiment validate experiment/ \
   --doctor-report doctor.json
+runeconomy experiment plan experiment/
 ```
 
 The workspace records the source digest, selected finding, intervention,
@@ -128,6 +129,29 @@ should use `experiment init`, `validate`, `run`, and `report` for both modes.
 
 Cache reuse, token reductions, TTFT, and latency remain conditional observations
 unless the declared quality and performance gates make the claim eligible.
+
+For a real agent, have Codex or Claude Code install the official skill and add
+the minimal `runeconomy.agent.Attempt` integration at the existing entry point.
+The coding agent should preserve existing tracing, add focused tests, and run a
+free compatibility trial first. `experiment plan` then explains whether the
+design needs input, is ready for calibration, is ready to freeze, or is
+blocked. It does not execute the agent or consume held-out data.
+
+## 8. Prepare a privacy-minimized support artifact
+
+If setup or execution fails, record the displayed `runeconomy.*` error code and
+create a local support bundle:
+
+```bash
+runeconomy support-bundle experiment/ \
+  --output runeconomy-support.zip
+```
+
+The command does not upload anything or contact the backend. Inspect every file
+inside the archive before attaching it to an issue. Do not attach raw traces,
+results, prompts, generated output, evaluator data, or credentials.
+
+Read the complete [privacy and support-bundle contract](privacy.md).
 
 Continue with [Evidence formats](evidence-formats.md), the
 [experiment contract](experiment-format.md), [connector support](connectors.md),

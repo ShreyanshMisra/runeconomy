@@ -35,7 +35,7 @@ RunEconomy requires Python 3.11 or newer. The tutorial is CPU-only and makes no
 network or GPU calls.
 
 ```bash
-python -m pip install runeconomy==0.2.0
+python -m pip install runeconomy==0.2.1
 runeconomy tutorial init ./runeconomy-tutorial
 runeconomy tutorial serve
 ```
@@ -58,6 +58,19 @@ runeconomy doctor \
 `doctor` reports supported, unsupported, and unknown capabilities, safe
 experiment modes, and an exact next action. Use `--json` for automation.
 
+When a tester needs help, create a local privacy-minimized support archive:
+
+```bash
+runeconomy support-bundle experiment/ --output runeconomy-support.zip
+```
+
+RunEconomy does not upload the archive or copy raw traces, prompts, results,
+credentials, endpoints, or arbitrary workspace files. Inspect every file before
+sharing it.
+
+Read the [privacy and support-bundle contract](docs/privacy.md) before attaching
+an archive to an issue.
+
 [Follow the complete quickstart](https://runeconomy.vercel.app/start/) ·
 [Read the compatibility guide](https://runeconomy.vercel.app/doctor/) ·
 [CLI reference](https://runeconomy.vercel.app/cli/) ·
@@ -69,9 +82,14 @@ experiment modes, and an exact next action. Use `--json` for automation.
 runeconomy import otlp.json --output evidence.json
 runeconomy experiment init --from-evidence evidence.json --output experiment/
 runeconomy experiment validate experiment/
+runeconomy experiment plan experiment/
 runeconomy experiment run experiment/ --output results/
 runeconomy experiment report results/result.json --output report.html --open
 ```
+
+For real agents, the official coding-agent skill integrates the existing entry
+point with `runeconomy.agent.Attempt`. The helper implements only the status
+contract. It does not replace the application's tracing or agent framework.
 
 The importer explains which diagnoses, replay modes, and claims the evidence can
 support. An incomplete import creates an unresolved workspace with corrective

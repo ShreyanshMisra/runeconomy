@@ -19,7 +19,7 @@ const skillInstallCommand = "npx skills add ShreyanshMisra/runeconomy --skill ru
 const skillBootstrapPrompt = `Install the official RunEconomy skill for this project by running:
 ${skillInstallCommand}
 
-Review the installed files, read the RunEconomy SKILL.md completely, and follow it for this task. Begin read-only. Inspect the repository and available inference evidence, identify what is missing for a valid experiment, and propose the exact import, initialization, validation, run, and report commands. Do not start paid compute, reset caches, expose private traces, or modify production infrastructure without my explicit approval.`;
+Review the installed files, read the RunEconomy SKILL.md completely, and follow it for this task. Begin read-only. Inspect the repository and available inference evidence. Locate the real agent entry point and existing tracing, then explain the smallest integration before editing. Use from runeconomy.agent import Attempt instead of implementing attempt-status JSON manually. Preserve normal execution, exit behavior, and tracing. Map only failure classes the repository can establish truthfully, add focused local tests, and run a free compatibility trial before any benchmark. Initialize an agent-process workspace, run experiment validate, then run the read-only experiment plan check. Do not start paid compute, change a backend, consume held-out data, publish, or deploy without my explicit approval. Report what still requires my approval.`;
 
 const primaryNavigation = [
   { route: "", label: "Home", key: "home" },
@@ -94,6 +94,14 @@ const referencePages = [
     kind: "reference",
   },
   {
+    route: "privacy",
+    source: "docs/privacy.md",
+    title: "Privacy and support bundles",
+    description: "Create a local diagnostic archive without copying private experiment content.",
+    active: "start",
+    kind: "reference",
+  },
+  {
     route: "alpha",
     source: "docs/alpha-release.md",
     title: "Alpha boundaries",
@@ -149,6 +157,7 @@ routeBySource.set("closed-loop-comparison.md", "/compare/");
 routeBySource.set("trace-format.md", "/traces/");
 routeBySource.set("evidence-formats.md", "/evidence/");
 routeBySource.set("connectors.md", "/connectors/");
+routeBySource.set("privacy.md", "/privacy/");
 routeBySource.set("agent-skill.md", "/agents/");
 routeBySource.set("getting-started.md", "/start/");
 routeBySource.set("how-it-works.md", "/articles/how-runeconomy-works/");

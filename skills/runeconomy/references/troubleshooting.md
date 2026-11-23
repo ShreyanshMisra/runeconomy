@@ -1,5 +1,9 @@
 # Troubleshooting
 
+Record the stable `runeconomy.*` error code shown by the CLI. Preserve that code
+separately from the human explanation because the wording may improve between
+releases.
+
 ## Import cannot detect the source
 
 Run `runeconomy import --help`, choose the known `--type`, and retry. Do not
@@ -30,3 +34,17 @@ output into a successful or zero-latency attempt.
 
 Run `runeconomy --version` and use documentation from the matching release or
 Git tag. Ask before upgrading the installed package.
+
+## Preparing a maintainer report
+
+Create a local support bundle from the affected workspace:
+
+```bash
+runeconomy support-bundle WORKSPACE --output runeconomy-support.zip
+```
+
+Add `--doctor-report` or `--validation-report` only for saved reports already on
+disk. The command never probes a server. Inspect the archive before sharing it.
+Never attach raw traces, private results, prompts, model output, evaluator
+answers, credentials, or endpoint details. Bundle creation does not authorize
+upload or public disclosure.

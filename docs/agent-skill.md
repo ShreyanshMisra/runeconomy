@@ -33,6 +33,8 @@ Install the official RunEconomy skill for this project by running:
 npx skills add ShreyanshMisra/runeconomy --skill runeconomy --all
 
 Review the installed files, read the RunEconomy SKILL.md completely, and follow it for this task. Begin read-only. Inspect the repository and available inference evidence, identify what is missing for a valid experiment, and propose the exact import, initialization, validation, run, and report commands. Do not start paid compute, reset caches, expose private traces, or modify production infrastructure without my explicit approval.
+
+Locate the repository's real agent entry point and existing tracing. Explain the smallest integration before editing. Use `from runeconomy.agent import Attempt` instead of implementing the attempt-status JSON manually. Preserve normal application execution, exit behavior, and existing tracing. Map only failure classes the repository can establish truthfully, add focused local tests, and run a free compatibility trial before any benchmark. Initialize the agent-process workspace, run `experiment validate`, then run the read-only `experiment plan` check. Stop before paid compute, backend changes, held-out execution, publication, or deployment, and report exactly what still requires my approval.
 ```
 
 ## Version contract
@@ -48,12 +50,33 @@ on this page after the site build.
 - begin read-only and diagnose vLLM safely
 - choose the unified evidence importer and respect capability grades
 - create and validate an experiment workspace
+- integrate a real agent with the minimal supported `Attempt` helper
+- assess design readiness with the read-only `experiment plan` command
 - choose static request or agent-process mode
 - preserve variant-local state and explicit workflow dependencies
 - read task-quality gates before mechanism metrics
 - distinguish verified, regression, inconclusive, and invalid
+- record stable error codes and create a local support bundle when needed
 - protect prompts, traces, answers, credentials, and raw artifacts
 - stop before paid, destructive, production, or publication actions
+
+The skill requires an agent to inspect a support bundle before sharing it. It
+also states that bundle creation never authorizes upload or public disclosure.
+
+## One-paste integration flow
+
+1. Paste the bootstrap prompt above into Codex or Claude Code.
+2. The coding agent installs and reads the complete skill and focused references.
+3. It begins read-only, finds the real agent entry point and preserves existing tracing.
+4. It proposes and adds the minimal `Attempt.from_environment()` integration.
+5. It initializes an `agent-process` workspace and runs `experiment validate`.
+6. It runs `experiment plan` without executing the agent or contacting a backend.
+7. It explains whether the design is blocked, needs input, is ready for calibration, or is ready to freeze.
+8. It stops before any paid or held-out execution and requests the required approval.
+
+The coding agent cannot infer truthful success labels, failure classes,
+dependencies, or held-out status without repository evidence. Unknowns must
+remain explicit.
 
 The repository copy is the source of truth. Replace the installed directory
 from a tagged release rather than maintaining hand-edited copies.

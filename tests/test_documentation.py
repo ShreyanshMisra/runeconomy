@@ -24,10 +24,7 @@ class DocumentationTests(unittest.TestCase):
         release_notes = (ROOT / f"docs/release-notes-{version}.md").read_text(
             encoding="utf-8"
         )
-        self.assertIn(
-            "RunEconomy `0.2.0` is the first complete evidence-to-verdict release",
-            release_notes,
-        )
+        self.assertIn("privacy-safe tester support", release_notes)
 
         skill = (ROOT / "skills" / "runeconomy" / "SKILL.md").read_text(
             encoding="utf-8"

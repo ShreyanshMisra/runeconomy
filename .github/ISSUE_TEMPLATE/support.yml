@@ -1,0 +1,65 @@
+name: RunEconomy support request
+description: Report an import, workspace, validation, experiment, doctor, or tutorial failure.
+title: "[Support] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach raw traces, experiment results, prompts, generated output, evaluator answers, credentials, private endpoints, or environment files.
+
+        A RunEconomy support bundle is generated locally and never uploaded automatically. Extract and inspect every JSON file before attaching it. Creating a bundle does not authorize public sharing.
+  - type: input
+    id: version
+    attributes:
+      label: RunEconomy version
+      description: Copy the output of `runeconomy --version`.
+      placeholder: runeconomy 0.2.1
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Workflow stage
+      options:
+        - import
+        - experiment init
+        - experiment validate
+        - experiment run
+        - experiment report
+        - doctor
+        - tutorial
+        - support-bundle
+        - other
+    validations:
+      required: true
+  - type: input
+    id: error_code
+    attributes:
+      label: Stable error code
+      description: Copy the `runeconomy.*` code shown by the CLI. Write unavailable if no code appeared.
+      placeholder: runeconomy.workspace.unresolved
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and observed behavior
+      description: Describe the behavior without pasting private inputs, outputs, paths, endpoints, or exception payloads.
+    validations:
+      required: true
+  - type: textarea
+    id: bundle
+    attributes:
+      label: Inspected support bundle
+      description: Optionally attach a support bundle only after extracting and inspecting every JSON member. Do not attach raw supporting artifacts.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I inspected every file I am attaching.
+          required: true
+        - label: I did not attach raw traces, private results, prompts, generated output, evaluator answers, credentials, endpoints, or environment files.
+          required: true
+        - label: I understand that creating a support bundle did not authorize uploading or publicly sharing it.
+          required: true
