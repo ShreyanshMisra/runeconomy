@@ -1,4 +1,4 @@
-"""Cost-bounded dual-L40S pilot and calibration for Proof 2."""
+"""Cost-bounded dual-L40S calibration and crossover validation for Proof 2."""
 
 from __future__ import annotations
 
@@ -6,16 +6,20 @@ import hashlib
 import io
 import json
 import os
+import statistics
 import subprocess
 import tarfile
 import tempfile
 import time
 import urllib.request
+from collections import Counter
 from importlib import metadata
 from pathlib import Path
 from typing import Any, BinaryIO
 
 import modal
+
+from runeconomy.crossover import balanced_two_block_split
 
 
 APP_NAME = "runeconomy-proof-2-calibration"
@@ -38,6 +42,17 @@ MAX_MODEL_LEN = 4096
 GPU_MEMORY_UTILIZATION = 0.85
 MAX_NUM_SEQS = 4
 RUN_TIMEOUT_SECONDS = 30 * 60
+CROSSOVER_SEED = 20261123
+CONSUMED_CALIBRATION_TASKS_SHA256 = (
+    "sha256:313434d48f4a870db387a42217d8a898391f015b082f23dcd64a87830db9abc7"
+)
+CONSUMED_CALIBRATION_EVALUATOR_SHA256 = (
+    "sha256:5906611e49d74211503b1ec97942a1343a4295ebd0aa511f35c76f6d0bf8fa4f"
+)
+CROSSOVER_DEVICE_ASSIGNMENTS = {
+    "block_a": {"baseline": 0, "candidate": 1},
+    "block_b": {"baseline": 1, "candidate": 0},
+}
 
 HF_CACHE_PATH = "/root/.cache/huggingface"
 VLLM_CACHE_PATH = "/root/.cache/vllm"
@@ -64,9 +79,7 @@ download_image = (
 )
 
 proof_image = (
-    modal.Image.from_registry(
-        "nvidia/cuda:12.9.0-devel-ubuntu22.04", add_python="3.12"
-    )
+    modal.Image.from_registry("nvidia/cuda:12.9.0-devel-ubuntu22.04", add_python="3.12")
     .entrypoint([])
     .uv_pip_install(
         f"vllm=={VLLM_VERSION}",
@@ -81,6 +94,7 @@ proof_image = (
             "HF_HOME": HF_CACHE_PATH,
             "VLLM_CACHE_ROOT": VLLM_CACHE_PATH,
             "TOKENIZERS_PARALLELISM": "false",
+            "VLLM_SERVER_DEV_MODE": "1",
         }
     )
     .add_local_file("examples/proof_2/agent.py", str(REMOTE_AGENT), copy=True)
@@ -193,7 +207,7 @@ def _chat_template_digest() -> str:
     return "sha256:" + hashlib.sha256(template.encode()).hexdigest()
 
 
-def _warm_structured_paths() -> None:
+def _warm_and_reset_structured_paths() -> dict[str, Any]:
     from runeconomy.vllm import VLLMClient
 
     schemas = (
@@ -223,6 +237,11 @@ def _warm_structured_paths() -> None:
             },
         ),
     )
+    procedure: dict[str, Any] = {
+        "warmup_requests_per_profile": len(schemas),
+        "prefix_cache_resets_per_profile": 1,
+        "profiles": {},
+    }
     for profile in ("baseline", "candidate"):
         client = VLLMClient(
             f"http://127.0.0.1:{PORTS[profile]}",
@@ -252,13 +271,20 @@ def _warm_structured_paths() -> None:
                     },
                 }
             )
+        client.reset_prefix_cache()
+        procedure["profiles"][profile] = {
+            "warmup_response_schemas": [name for name, _ in schemas],
+            "prefix_cache_reset": True,
+        }
+    return procedure
 
 
-def _assert_backend_profiles(work: Path) -> None:
-    baseline = (work / "baseline-vllm.log").read_text(
+def _assert_backend_profiles(work: Path, block: str = "") -> None:
+    prefix = f"{block}-" if block else ""
+    baseline = (work / f"{prefix}baseline-vllm.log").read_text(
         encoding="utf-8", errors="replace"
     )
-    candidate = (work / "candidate-vllm.log").read_text(
+    candidate = (work / f"{prefix}candidate-vllm.log").read_text(
         encoding="utf-8", errors="replace"
     )
     if "quantization=None" not in baseline:
@@ -267,7 +293,10 @@ def _assert_backend_profiles(work: Path) -> None:
         raise RuntimeError("candidate did not start with fp8_per_tensor quantization")
     if "Selected CutlassFP8ScaledMMLinearKernel" not in candidate:
         raise RuntimeError("candidate did not select the expected L40S FP8 kernel")
-    if "activations as unquantized" in candidate or "quantization fallback" in candidate:
+    if (
+        "activations as unquantized" in candidate
+        or "quantization fallback" in candidate
+    ):
         raise RuntimeError("candidate quantization used an undeclared fallback")
 
 
@@ -288,12 +317,15 @@ def _private_archive(
 
 
 def _start_server(
-    profile: str, work: Path
+    profile: str, work: Path, *, block: str = "", device_index: int | None = None
 ) -> tuple[subprocess.Popen[bytes], BinaryIO]:
-    log = (work / f"{profile}-vllm.log").open("wb")
+    prefix = f"{block}-" if block else ""
+    log = (work / f"{prefix}{profile}-vllm.log").open("wb")
+    if device_index is None:
+        device_index = 0 if profile == "baseline" else 1
     environment = {
         **os.environ,
-        "CUDA_VISIBLE_DEVICES": "0" if profile == "baseline" else "1",
+        "CUDA_VISIBLE_DEVICES": str(device_index),
     }
     process = subprocess.Popen(
         vllm_command(profile),
@@ -302,6 +334,145 @@ def _start_server(
         stderr=subprocess.STDOUT,
     )
     return process, log
+
+
+def _digest_bytes(value: bytes) -> str:
+    return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def _canonical_payload_digest(payload: dict[str, Any]) -> str:
+    encoded = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
+    return _digest_bytes(encoded)
+
+
+def _balanced_blocks(tasks: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    return balanced_two_block_split(
+        tasks,
+        seed=CROSSOVER_SEED,
+        family_names=("call_expression", "string_literal"),
+    )
+
+
+def _physical_gpu_inventory() -> list[dict[str, Any]]:
+    completed = subprocess.run(
+        [
+            "nvidia-smi",
+            "--query-gpu=index,uuid,name,pci.bus_id",
+            "--format=csv,noheader,nounits",
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=30,
+    )
+    inventory: list[dict[str, Any]] = []
+    for line in completed.stdout.splitlines():
+        fields = [field.strip() for field in line.split(",")]
+        if len(fields) != 4:
+            raise RuntimeError("unexpected nvidia-smi GPU inventory format")
+        inventory.append(
+            {
+                "index": int(fields[0]),
+                "uuid": fields[1],
+                "name": fields[2],
+                "pci_bus_id": fields[3],
+            }
+        )
+    if len(inventory) != 2 or len({gpu["uuid"] for gpu in inventory}) != 2:
+        raise RuntimeError("crossover requires exactly two distinct physical GPUs")
+    if any("L40S" not in gpu["name"] for gpu in inventory):
+        raise RuntimeError("crossover requires two physical L40S GPUs")
+    return sorted(inventory, key=lambda gpu: gpu["index"])
+
+
+def _annotated_attempts(
+    result: dict[str, Any],
+    *,
+    block: str,
+    artifacts: Path,
+) -> list[dict[str, Any]]:
+    annotated: list[dict[str, Any]] = []
+    device_assignment = CROSSOVER_DEVICE_ASSIGNMENTS[block]
+    for original in result["attempts"]:
+        attempt = dict(original)
+        attempt_dir = artifacts / original["artifacts"]["directory"]
+        task = json.loads((attempt_dir / "task.json").read_text(encoding="utf-8"))
+        attempt["crossover_block"] = block
+        attempt["physical_device_index"] = device_assignment[attempt["variant"]]
+        attempt["task_family"] = task["family"]
+        attempt["attempt_id"] = f"{block}-{attempt['attempt_id']}"
+        artifact_paths = dict(attempt["artifacts"])
+        artifact_paths["directory"] = str(
+            attempt_dir.relative_to(artifacts.parent.parent)
+        )
+        attempt["artifacts"] = artifact_paths
+        annotated.append(attempt)
+    return annotated
+
+
+def _descriptive_crossover_sensitivity(
+    attempts: list[dict[str, Any]],
+) -> dict[str, Any]:
+    def effect(subset: list[dict[str, Any]]) -> dict[str, Any]:
+        by_key = {
+            (attempt["task_id"], attempt["variant"]): attempt for attempt in subset
+        }
+        differences: list[float] = []
+        for task_id in sorted({attempt["task_id"] for attempt in subset}):
+            baseline = by_key.get((task_id, "baseline"))
+            candidate = by_key.get((task_id, "candidate"))
+            if not baseline or not candidate:
+                continue
+            if not baseline["task_success"] or not candidate["task_success"]:
+                continue
+            differences.append(
+                float(candidate["workflow_latency_ms"])
+                - float(baseline["workflow_latency_ms"])
+            )
+        return {
+            "both_successful_pair_count": len(differences),
+            "candidate_minus_baseline_mean_ms": (
+                sum(differences) / len(differences) if differences else None
+            ),
+            "candidate_minus_baseline_median_ms": (
+                statistics.median(differences) if differences else None
+            ),
+        }
+
+    block_effects = {
+        block: effect(
+            [attempt for attempt in attempts if attempt["crossover_block"] == block]
+        )
+        for block in CROSSOVER_DEVICE_ASSIGNMENTS
+    }
+    family_effects = {
+        family: effect(
+            [attempt for attempt in attempts if attempt["task_family"] == family]
+        )
+        for family in ("call_expression", "string_literal")
+    }
+    cells: dict[str, Any] = {}
+    for block, assignments in CROSSOVER_DEVICE_ASSIGNMENTS.items():
+        for profile, device in assignments.items():
+            successful = [
+                float(attempt["workflow_latency_ms"])
+                for attempt in attempts
+                if attempt["crossover_block"] == block
+                and attempt["variant"] == profile
+                and attempt["task_success"]
+            ]
+            cells[f"{block}:gpu_{device}:{profile}"] = {
+                "successful_attempt_count": len(successful),
+                "mean_workflow_latency_ms": (
+                    sum(successful) / len(successful) if successful else None
+                ),
+            }
+    return {
+        "role": "descriptive_sensitivity_only",
+        "block_effects": block_effects,
+        "family_effects": family_effects,
+        "device_profile_cells": cells,
+    }
 
 
 @app.function(
@@ -326,7 +497,9 @@ def run_calibration(
     from runeconomy.comparison import run_comparison
 
     if expected_task_count not in {5, 40}:
-        raise ValueError("Proof 2 runner permits only 5-task pilot or 40-task calibration")
+        raise ValueError(
+            "Proof 2 runner permits only 5-task pilot or 40-task calibration"
+        )
     tasks = tasks_payload.get("tasks")
     if not isinstance(tasks, list) or len(tasks) != expected_task_count:
         raise ValueError(f"workload must contain exactly {expected_task_count} tasks")
@@ -355,7 +528,7 @@ def run_calibration(
         for profile in ("baseline", "candidate"):
             _wait_until_healthy(profile, processes[profile])
         _assert_backend_profiles(work)
-        _warm_structured_paths()
+        _warm_and_reset_structured_paths()
         os.environ.update(
             {
                 "RUNECONOMY_BASELINE_URL": f"http://127.0.0.1:{PORTS['baseline']}",
@@ -383,13 +556,17 @@ def run_calibration(
             latency_semantics="superiority",
             max_latency_regression_ms=0.0,
         )
-        result["provenance"]["driver_location"] = "same Modal container as both vLLM servers"
+        result["provenance"]["driver_location"] = (
+            "same Modal container as both vLLM servers"
+        )
         (artifacts / "result.json").write_text(
             json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         metadata_payload = {
             "purpose": (
-                "40-task calibration" if expected_task_count == 40 else "five-task pilot"
+                "40-task calibration"
+                if expected_task_count == 40
+                else "five-task pilot"
             ),
             "held_out": False,
             "task_count": expected_task_count,
@@ -424,6 +601,209 @@ def run_calibration(
             _stop_process(process)
         for log in logs:
             log.close()
+
+
+@app.function(
+    image=proof_image,
+    gpu=GPU,
+    volumes={
+        HF_CACHE_PATH: hf_cache,
+        VLLM_CACHE_PATH: vllm_cache,
+        FLASHINFER_CACHE_PATH: flashinfer_cache,
+    },
+    timeout=RUN_TIMEOUT_SECONDS,
+    cpu=8,
+    memory=32768,
+)
+def run_crossover_validation(
+    tasks_payload: dict[str, Any],
+    evaluator_source: str,
+) -> bytes:
+    """Validate crossover mechanics only on the consumed 40-task calibration."""
+
+    from runeconomy.comparison import _decision, _summarize, run_comparison
+
+    if _canonical_payload_digest(tasks_payload) != CONSUMED_CALIBRATION_TASKS_SHA256:
+        raise ValueError("crossover validation requires the consumed calibration tasks")
+    if (
+        _digest_bytes(evaluator_source.encode())
+        != CONSUMED_CALIBRATION_EVALUATOR_SHA256
+    ):
+        raise ValueError(
+            "crossover validation requires the consumed calibration evaluator"
+        )
+    tasks = tasks_payload.get("tasks")
+    if not isinstance(tasks, list) or len(tasks) != 40:
+        raise ValueError("crossover validation requires exactly 40 consumed tasks")
+    blocks = _balanced_blocks(tasks)
+    if any(len(block_tasks) != 20 for block_tasks in blocks.values()):
+        raise ValueError("crossover validation requires two 20-task blocks")
+    if _chat_template_digest() != CHAT_TEMPLATE_DIGEST:
+        raise RuntimeError("chat-template identity differs from the pin")
+    if metadata.version("vllm") != VLLM_VERSION:
+        raise RuntimeError("vLLM version differs from the pin")
+
+    work = Path(tempfile.mkdtemp(prefix="runeconomy-proof-2-crossover-"))
+    evaluator = work / "evaluator.py"
+    evaluator.write_text(evaluator_source, encoding="utf-8")
+    gpu_inventory = _physical_gpu_inventory()
+    pooled_attempts: list[dict[str, Any]] = []
+    block_results: dict[str, dict[str, Any]] = {}
+    procedures: dict[str, dict[str, Any]] = {}
+    started = time.monotonic()
+
+    for block, block_tasks in blocks.items():
+        block_root = work / block
+        dataset = block_root / "tasks.json"
+        artifacts = block_root / "run"
+        block_root.mkdir(parents=True, exist_ok=True)
+        dataset.write_text(
+            json.dumps({"tasks": block_tasks}, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        processes: dict[str, subprocess.Popen[bytes]] = {}
+        logs: list[BinaryIO] = []
+        try:
+            assignment = CROSSOVER_DEVICE_ASSIGNMENTS[block]
+            for profile in ("baseline", "candidate"):
+                process, log = _start_server(
+                    profile,
+                    work,
+                    block=block,
+                    device_index=assignment[profile],
+                )
+                processes[profile] = process
+                logs.append(log)
+            for profile in ("baseline", "candidate"):
+                _wait_until_healthy(profile, processes[profile])
+            _assert_backend_profiles(work, block)
+            procedures[block] = _warm_and_reset_structured_paths()
+            os.environ.update(
+                {
+                    "RUNECONOMY_BASELINE_URL": (
+                        f"http://127.0.0.1:{PORTS['baseline']}"
+                    ),
+                    "RUNECONOMY_CANDIDATE_URL": (
+                        f"http://127.0.0.1:{PORTS['candidate']}"
+                    ),
+                    "RUNECONOMY_REPO_ROOT": str(REMOTE_REPOSITORY),
+                }
+            )
+            result = run_comparison(
+                baseline_command=f"python {REMOTE_AGENT}",
+                candidate_command=f"python {REMOTE_AGENT}",
+                dataset_path=dataset,
+                evaluator_path=evaluator,
+                output_path=artifacts / "result.json",
+                artifacts_dir=artifacts,
+                workdir=REMOTE_REPOSITORY,
+                repetitions=1,
+                order="randomized",
+                seed=CROSSOVER_SEED,
+                timeout_seconds=180,
+                evaluator_timeout_seconds=30,
+                max_task_success_regression=0.1,
+                min_task_success_rate=0.8,
+                min_completed_rate=1.0,
+                optimization_target="engine_change_latency",
+                latency_semantics="superiority",
+                max_latency_regression_ms=0.0,
+            )
+            result["provenance"].update(
+                {
+                    "crossover_block": block,
+                    "physical_device_assignment": assignment,
+                    "driver_location": "same Modal container as both vLLM servers",
+                    "warmup_and_cache_reset": procedures[block],
+                }
+            )
+            (artifacts / "result.json").write_text(
+                json.dumps(result, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            block_results[block] = result
+            pooled_attempts.extend(
+                _annotated_attempts(result, block=block, artifacts=artifacts)
+            )
+        finally:
+            for process in processes.values():
+                _stop_process(process)
+            for log in logs:
+                log.close()
+
+        if block == "block_a" and time.monotonic() - started >= 15 * 60:
+            raise TimeoutError(
+                "crossover abort: block A consumed the preregistered half-window"
+            )
+
+    pooled_summary = _summarize(pooled_attempts)
+    pooled_decision = _decision(
+        pooled_summary,
+        max_task_success_regression=0.1,
+        min_task_success_rate=0.8,
+        min_completed_rate=1.0,
+        optimization_target="engine_change_latency",
+        latency_semantics="superiority",
+        max_latency_regression_ms=0.0,
+    )
+    crossover_result = {
+        "result_type": "runeconomy.proof_2_crossover_validation",
+        "schema_version": "0.1",
+        "purpose": "consumed calibration task crossover validation",
+        "held_out": False,
+        "design": {
+            "seed": CROSSOVER_SEED,
+            "tasks_sha256": CONSUMED_CALIBRATION_TASKS_SHA256,
+            "evaluator_sha256": CONSUMED_CALIBRATION_EVALUATOR_SHA256,
+            "device_assignments": CROSSOVER_DEVICE_ASSIGNMENTS,
+            "block_task_counts": {
+                block: len(block_tasks) for block, block_tasks in blocks.items()
+            },
+            "block_family_counts": {
+                block: dict(Counter(task["family"] for task in block_tasks))
+                for block, block_tasks in blocks.items()
+            },
+            "warmup_and_cache_reset": procedures,
+        },
+        "gpu_inventory": gpu_inventory,
+        "primary_pooled_summary": pooled_summary,
+        "validation_decision": pooled_decision,
+        "descriptive_sensitivity": _descriptive_crossover_sensitivity(pooled_attempts),
+        "block_results": {
+            block: {
+                "summary": result["summary"],
+                "decision": result["decision"],
+                "provenance": result["provenance"],
+            }
+            for block, result in block_results.items()
+        },
+        "attempts": pooled_attempts,
+        "provenance": {
+            "source_model": SOURCE_MODEL,
+            "model_revision": MODEL_REVISION,
+            "chat_template_digest": CHAT_TEMPLATE_DIGEST,
+            "backend_version": VLLM_VERSION,
+            "hardware": GPU,
+            "remote_elapsed_seconds": time.monotonic() - started,
+        },
+    }
+    (work / "crossover-result.json").write_text(
+        json.dumps(crossover_result, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return _private_archive(
+        work,
+        {
+            "purpose": "consumed calibration task crossover validation",
+            "held_out": False,
+            "tasks_sha256": CONSUMED_CALIBRATION_TASKS_SHA256,
+            "evaluator_sha256": CONSUMED_CALIBRATION_EVALUATOR_SHA256,
+            "device_assignments": CROSSOVER_DEVICE_ASSIGNMENTS,
+            "warmup_and_cache_reset": procedures,
+            "remote_elapsed_seconds": time.monotonic() - started,
+        },
+        metadata_name="crossover-validation-metadata.json",
+    )
 
 
 @app.local_entrypoint()
@@ -470,3 +850,35 @@ def calibration(
     """Run the approved 40-task calibration split."""
 
     _run_local(tasks, evaluator, output, 40)
+
+
+@app.local_entrypoint()
+def crossover_validation(
+    tasks: str = "artifacts/proof-2-preparation/calibration-tasks.json",
+    evaluator: str = "artifacts/proof-2-preparation/calibration-evaluator.py",
+    output: str = "artifacts/proof-2-crossover-validation.tar.gz",
+) -> None:
+    """Validate the two-block crossover only on consumed calibration tasks."""
+
+    task_path = Path(tasks).resolve()
+    evaluator_path = Path(evaluator).resolve()
+    output_path = Path(output).resolve()
+    if _digest_bytes(task_path.read_bytes()) != CONSUMED_CALIBRATION_TASKS_SHA256:
+        raise ValueError("crossover validation tasks are not the consumed calibration")
+    if (
+        _digest_bytes(evaluator_path.read_bytes())
+        != CONSUMED_CALIBRATION_EVALUATOR_SHA256
+    ):
+        raise ValueError(
+            "crossover validation evaluator is not the consumed calibration evaluator"
+        )
+    if output_path.exists():
+        raise FileExistsError(f"refusing to overwrite evidence: {output_path}")
+    task_payload = json.loads(task_path.read_text(encoding="utf-8"))
+    evaluator_source = evaluator_path.read_text(encoding="utf-8")
+    archive = run_crossover_validation.remote(task_payload, evaluator_source)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output_path.with_name(output_path.name + ".tmp")
+    temporary.write_bytes(archive)
+    temporary.replace(output_path)
+    print(f"wrote private crossover validation evidence to {output_path}")
