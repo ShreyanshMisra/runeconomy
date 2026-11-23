@@ -1,6 +1,6 @@
 # Proof 2 calibration design
 
-Status: calibration complete; proposed held-out contract remains unfrozen
+Status: crossover validation complete; freeze-ready held-out contract remains unfrozen
 Selection date: 2026-11-23
 Source branch: `proof-2`
 
@@ -91,6 +91,33 @@ The proposed preregistration fixes a 180-pair balanced sample only if it is
 approved and subsequently frozen. Its detailed estimands, quality gates,
 sample-size rationale, outcome-independent stop rules, and publication paths
 are in [the unfrozen proposal](proof-2-preregistration-proposal.md). The current
-runner still permits only five- and 40-task calibration workloads. Explicit
-approval is required before freezing the contract or enabling any held-out
-execution.
+runner permits only five- and 40-task calibration workloads plus a digest-locked
+crossover validation on the already-consumed 40-task calibration split. It has
+no held-out entrypoint. Explicit approval is required before freezing the
+contract or enabling any held-out execution.
+
+## Balanced physical-device crossover
+
+The revised proposal removes permanent GPU assignment as a potential confound.
+Its 180 private tasks are deterministically assigned to two 90-pair blocks,
+each containing 45 call-expression and 45 string-literal tasks. Block A assigns
+BF16 to physical device 0 and FP8 to device 1; block B stops both servers and
+restarts BF16 on device 1 and FP8 on device 0.
+
+Each block uses the same two fixed structured warm-up requests per profile and
+then exactly one successful prefix-cache reset per profile before measurement.
+The pooled 180-pair result is the sole primary analysis. Per-family, per-block,
+and block/device/profile cell results are prespecified descriptive sensitivity
+outputs and cannot change the decision.
+
+The runner mechanics were validated on the consumed 40-task calibration split,
+not the private held-out proposal. Both 20-task blocks contained 10 tasks from
+each family, used distinct physical L40S devices, recorded the required device
+swap and warm-up/reset procedure, and completed 40/40 successful workflows per
+profile. The pooled candidate-minus-baseline effect was -380.907 ms with a 95%
+paired interval of [-393.889, -367.925] ms. This is calibration evidence only.
+
+The proposed one-shot held-out run has an $8 hard spending ceiling, a 30-minute
+resource deadline, and a block-A half-window abort at 15 minutes. Identity,
+assignment, hash, warm-up, or cache-reset failure aborts the run and makes it
+invalid without authorizing a rerun.

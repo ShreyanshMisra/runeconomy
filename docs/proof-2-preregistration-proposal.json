@@ -1,8 +1,9 @@
 {
   "artifact_type": "runeconomy.preregistration_proposal",
-  "schema_version": "0.1",
+  "schema_version": "0.2",
   "proposal_date": "2026-11-23",
   "status": "proposed_unfrozen",
+  "review_state": "freeze_ready",
   "contract_frozen": false,
   "heldout_executed": false,
   "freeze_state": {
@@ -27,7 +28,7 @@
     "vllm_version": "0.34.0",
     "transformers_version": "5.18.0",
     "huggingface_hub_version": "2.0.0",
-    "hardware": "two L40S GPUs in one Modal container, one profile per GPU",
+    "hardware": "two distinct physical L40S GPUs in one Modal container, one profile per GPU in each block",
     "baseline": "BF16 weights and activations; quantization unset",
     "candidate": "vLLM online fp8_per_tensor; FP8 E4M3 per-tensor weights and dynamic activations",
     "single_changed_variable": "backend quantization identity",
@@ -36,28 +37,58 @@
       "candidate quantization is fp8_per_tensor",
       "candidate selects CutlassFP8ScaledMMLinearKernel",
       "no candidate activation-quantization fallback is present"
-    ]
+    ],
+    "crossover": {
+      "design": "balanced two-block physical-device crossover",
+      "block_a_device_assignment": {
+        "baseline_bf16": 0,
+        "candidate_fp8": 1
+      },
+      "block_b_device_assignment": {
+        "baseline_bf16": 1,
+        "candidate_fp8": 0
+      },
+      "physical_device_identity": "Two distinct L40S UUIDs and PCI bus IDs must be observed before block A; raw identifiers remain private.",
+      "purpose": "Remove permanent profile-to-device assignment as a confound."
+    }
   },
   "proposed_sample": {
     "repository_commit": "0921c71d9d2dab9b84decd6824e210266b1f9126",
     "task_count": 180,
     "attempt_count": 360,
     "repetitions": 1,
-    "order": "randomized task-paired order",
+    "order": "fixed block assignment with randomized task-paired order within each block",
     "seed": 20261123,
     "family_counts": {
       "call_expression": 90,
       "string_literal": 90
     },
+    "blocks": {
+      "block_a": {
+        "task_count": 90,
+        "family_counts": {
+          "call_expression": 45,
+          "string_literal": 45
+        }
+      },
+      "block_b": {
+        "task_count": 90,
+        "family_counts": {
+          "call_expression": 45,
+          "string_literal": 45
+        }
+      }
+    },
     "operator_declared_unseen": true,
     "source": "A deterministic balanced selection from the untouched 240-task draft pool; raw tasks and answers remain private.",
-    "dataset_sha256": "sha256:3fe04b2d9bd499871a85ddbd4b65b7c39ff88bf72f0571f1323378ddbfb08b94",
+    "dataset_sha256": "sha256:c945014bc7aed8cd6164b9c12da060a05880bea35a2ed29850e27612aa9924b2",
     "evaluator_sha256": "sha256:8de9593491d146f7d81126f911165d85ae9353b13f7fa9f9065a05325d089810"
   },
   "estimands": {
     "primary_latency": {
       "metric": "candidate minus baseline workflow_latency_ms",
       "population": "task pairs where both variants succeed",
+      "pooling": "Pool all eligible pairs from both preregistered crossover blocks without a block or device adjustment.",
       "method": "paired Student-t confidence interval",
       "confidence_level": 0.95,
       "decision": "superiority passes only when the upper confidence bound is below 0 ms"
@@ -78,18 +109,41 @@
     },
     "completion": {
       "minimum_completed_rate": 1.0
+    },
+    "descriptive_sensitivity": {
+      "decision_role": "descriptive only; cannot overturn, rescue, or replace the pooled primary decision",
+      "outputs": [
+        "candidate-minus-baseline successful-pair latency by task family",
+        "candidate-minus-baseline successful-pair latency by crossover block",
+        "successful-workflow latency for each block, physical-device index, and profile cell"
+      ],
+      "multiplicity": "No confirmatory hypothesis tests or additional acceptance gates."
+    }
+  },
+  "measurement_window": {
+    "applied_identically_before_each_block": true,
+    "server_lifecycle": "Stop both block-A servers, confirm process exit, then start fresh block-B servers with swapped physical-device assignments.",
+    "per_profile_per_block": {
+      "structured_warmup_requests": 2,
+      "warmup_schemas": [
+        "proof_2_search_plan",
+        "proof_2_identifier_answer"
+      ],
+      "prefix_cache_resets_after_warmup": 1,
+      "measured_requests_before_reset": 0
     }
   },
   "sample_size_plan": {
     "calibration_pair_count": 40,
     "calibration_baseline_successes": 40,
     "calibration_candidate_successes": 40,
-    "calibration_candidate_minus_baseline_mean_ms": -381.19381985,
+    "calibration_candidate_minus_baseline_mean_ms": -380.906646175,
     "calibration_candidate_minus_baseline_95_ci_ms": [
-      -394.1317559388008,
-      -368.25588376119924
+      -393.88855488857354,
+      -367.92473746142645
     ],
-    "calibration_paired_standard_deviation_ms": 40.071837671205536,
+    "calibration_paired_standard_deviation_ms": 40.208031254925345,
+    "calibration_design": "balanced two-block crossover on the already-consumed 40-task calibration set",
     "minimum_relevant_latency_effect_ms": -50.0,
     "alpha": 0.05,
     "power": 0.8,
@@ -122,6 +176,9 @@
     "all proposed task IDs are unique and present for both variants",
     "the complete paired DAG, attempt artifacts, backend identities, and evaluator evidence are present",
     "model, revision, tokenizer, chat template, software, hardware, generation, tool, evaluator, seed, and ordering controls match the frozen contract",
+    "two distinct physical L40S identities are recorded and the BF16/FP8 device assignment swaps exactly between blocks",
+    "each block contains exactly 90 tasks with 45 tasks from each family",
+    "both blocks complete the identical two-warmup-then-one-cache-reset procedure per profile before measurement",
     "no unexpected retry, replacement, partial rerun, or second held-out execution occurs"
   ],
   "missing_evidence_rule": "Missing, mutated, incomplete, duplicated, or identity-mismatched evidence makes the corresponding claim invalid or unknown; it is not imputed as success, failure-free latency, or zero.",
@@ -133,6 +190,25 @@
     "rerun_on_invalid_result": false,
     "partial_rerun": false,
     "replacement": false
+  },
+  "heldout_spending": {
+    "currency": "USD",
+    "hard_ceiling": 8.0,
+    "phase_cumulative_ceiling": 40.0,
+    "pricing_snapshot": {
+      "date": "2026-11-23",
+      "l40s_per_gpu_second": 0.000542,
+      "cpu_per_core_second": 0.0000131,
+      "memory_per_gib_second": 0.00000222
+    },
+    "resource_limit": "two L40S GPUs, eight CPU cores, 32 GiB memory, and a 30-minute hard function deadline",
+    "maximum_resource_projection_before_egress": 2.267712,
+    "abort_rules": [
+      "Do not allocate GPUs if current pricing makes the declared resource limit exceed $8 or if cumulative Phase 4 spend could exceed $40.",
+      "Abort before block B if block A consumes 15 minutes of remote elapsed time.",
+      "Abort immediately on task/evaluator hash mismatch, physical-device identity failure, assignment mismatch, backend identity failure, warm-up failure, or cache-reset failure.",
+      "The 30-minute platform deadline is a final cost backstop; any abort or platform interruption makes the held-out result invalid and does not authorize a rerun."
+    ]
   },
   "reporting_commitment": {
     "prepare_all_outcomes": true,
@@ -146,8 +222,12 @@
   "provenance": {
     "pilot_archive_sha256": "sha256:8af23d85eb918e215551e6c0e7e1ab85b9100515ec12aa2a1e2cb98027237057",
     "calibration_archive_sha256": "sha256:3b00f9514e12876c5a8c2ea2eeeec0a2f01da4c8c03529e236516c91878b120c",
-    "proposal_plan_sha256": "sha256:e9349525d2ffc85c8e260802ee5ecb78645c4c52c7e3eff87ee4ad4f83bf212b",
+    "crossover_validation_archive_sha256": "sha256:baa1e7af3885d7dcd747ce7166b0757c94bac3f43eba608ca489976063830957",
+    "proposal_plan_sha256": "sha256:62955ec3b0e211df3e2e6b05acc77215cf8422fb2bfe27cdd091070a65da4685",
+    "crossover_validation_runner_commit": "23acfe2c4246278269035faa859c6c973864b38e",
     "calibration_and_pilot_actual_cost_usd": 2.00556691,
+    "crossover_validation_actual_cost_usd": 0.24695705,
+    "phase_4_actual_cost_to_date_usd": 2.25252396,
     "heldout_compute_used": false,
     "heldout_compute_authorized": false
   },

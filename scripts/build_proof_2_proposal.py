@@ -10,6 +10,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from runeconomy.crossover import balanced_two_block_split
 from runeconomy.planning import plan_experiment
 from runeconomy.workspaces import create_agent_workspace
 
@@ -18,9 +19,18 @@ ROOT = Path(__file__).resolve().parents[1]
 PREPARATION = ROOT / "artifacts" / "proof-2-preparation"
 CALIBRATION = ROOT / "artifacts" / "proof-2-calibration-extracted"
 CALIBRATION_ARCHIVE = ROOT / "artifacts" / "proof-2-calibration.tar.gz"
-OUTPUT = ROOT / "artifacts" / "proof-2-proposed-contract"
+CROSSOVER_VALIDATION = ROOT / "artifacts" / "proof-2-crossover-validation-extracted"
+CROSSOVER_VALIDATION_ARCHIVE = (
+    ROOT / "artifacts" / "proof-2-crossover-validation.tar.gz"
+)
+OUTPUT = ROOT / "artifacts" / "proof-2-proposed-crossover-contract-v2"
 PROPOSED_TASKS = 180
 TASKS_PER_FAMILY = 90
+CROSSOVER_SEED = 20261123
+CROSSOVER_DEVICE_ASSIGNMENTS = {
+    "block_a": {"baseline": 0, "candidate": 1},
+    "block_b": {"baseline": 1, "candidate": 0},
+}
 
 
 def _digest(path: Path) -> str:
@@ -62,18 +72,15 @@ json.dump({{"success": success, "score": float(success), "details": {{}}}}, sys.
 
 
 def _calibration_statistics() -> dict[str, Any]:
-    run = CALIBRATION / "run"
-    result = json.loads((run / "result.json").read_text(encoding="utf-8"))
+    result = json.loads(
+        (CROSSOVER_VALIDATION / "crossover-result.json").read_text(encoding="utf-8")
+    )
+    summary = result["primary_pooled_summary"]
     attempts: dict[tuple[str, str], dict[str, Any]] = {}
     families: dict[str, str] = {}
     for attempt in result["attempts"]:
-        task = json.loads(
-            (run / attempt["artifacts"]["directory"] / "task.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        attempts[(task["task_id"], attempt["variant"])] = attempt
-        families[task["task_id"]] = task["family"]
+        attempts[(attempt["task_id"], attempt["variant"])] = attempt
+        families[attempt["task_id"]] = attempt["task_family"]
 
     differences: list[float] = []
     baseline: list[float] = []
@@ -89,22 +96,23 @@ def _calibration_statistics() -> dict[str, Any]:
 
     return {
         "pair_count": len(differences),
-        "baseline_successes": result["summary"]["variants"]["baseline"][
-            "task_success_count"
-        ],
-        "candidate_successes": result["summary"]["variants"]["candidate"][
-            "task_success_count"
-        ],
+        "baseline_successes": summary["variants"]["baseline"]["task_success_count"],
+        "candidate_successes": summary["variants"]["candidate"]["task_success_count"],
         "baseline_mean_workflow_latency_ms": statistics.fmean(baseline),
         "candidate_mean_workflow_latency_ms": statistics.fmean(candidate),
         "candidate_minus_baseline_mean_ms": statistics.fmean(differences),
         "candidate_minus_baseline_median_ms": statistics.median(differences),
         "paired_standard_deviation_ms": statistics.stdev(differences),
-        "candidate_minus_baseline_95_ci_ms": result["summary"]["effects"][
-            "workflow_latency_ms"
-        ]["confidence_interval"],
-        "client_ttft_difference_ms": result["summary"]["effects"]["client_ttft_ms"][
+        "candidate_minus_baseline_95_ci_ms": summary["effects"]["workflow_latency_ms"][
+            "confidence_interval"
+        ],
+        "client_ttft_difference_ms": summary["effects"]["client_ttft_ms"][
             "candidate_minus_baseline_mean"
+        ],
+        "crossover_validation_archive_sha256": _digest(CROSSOVER_VALIDATION_ARCHIVE),
+        "block": result["descriptive_sensitivity"]["block_effects"],
+        "device_profile_cells": result["descriptive_sensitivity"][
+            "device_profile_cells"
         ],
         "family": {
             family: {
@@ -141,10 +149,20 @@ def build(output: Path = OUTPUT) -> dict[str, Any]:
     selected_answers = {
         task["task_id"]: all_answers[task["task_id"]] for task in selected
     }
+    blocks = balanced_two_block_split(
+        selected,
+        seed=CROSSOVER_SEED,
+        family_names=("call_expression", "string_literal"),
+    )
+    assigned_tasks = [
+        {**task, "crossover_block": block}
+        for block, block_tasks in blocks.items()
+        for task in block_tasks
+    ]
     dataset = output / "tasks.json"
     evaluator = output / "evaluator.py"
     dataset.write_text(
-        json.dumps({"tasks": selected}, indent=2, sort_keys=True) + "\n",
+        json.dumps({"tasks": assigned_tasks}, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     evaluator.write_text(_evaluator_source(selected_answers), encoding="utf-8")
@@ -177,7 +195,13 @@ def build(output: Path = OUTPUT) -> dict[str, Any]:
                 "level": "workflow",
                 "primary_metric": "workflow_latency_ms",
             },
-            "calibration": {"artifact_sha256": _digest(CALIBRATION_ARCHIVE)},
+            "calibration": {
+                "artifact_sha256": _digest(CROSSOVER_VALIDATION_ARCHIVE),
+                "initial_artifact_sha256": _digest(CALIBRATION_ARCHIVE),
+                "crossover_validation_artifact_sha256": _digest(
+                    CROSSOVER_VALIDATION_ARCHIVE
+                ),
+            },
             "heldout": {
                 "artifact_sha256": _digest(dataset),
                 "operator_declared_unseen": True,
@@ -187,6 +211,17 @@ def build(output: Path = OUTPUT) -> dict[str, Any]:
             "stopping_rule": {
                 "kind": "fixed_sample",
                 "favorable_result_dependent": False,
+            },
+            "crossover": {
+                "blocks": 2,
+                "pairs_per_block": 90,
+                "families_per_block": {
+                    "call_expression": 45,
+                    "string_literal": 45,
+                },
+                "device_assignments": CROSSOVER_DEVICE_ASSIGNMENTS,
+                "primary_analysis": "pooled across both blocks",
+                "sensitivity_role": "descriptive_only",
             },
             "claim_boundary": "One pinned Qwen2.5-14B repository agent workload on vLLM 0.34.0 and two L40S GPUs.",
             "intervention_variables": ["backend_identity"],
@@ -218,9 +253,18 @@ def build(output: Path = OUTPUT) -> dict[str, Any]:
         "heldout_executed": False,
         "proposed_task_count": len(selected),
         "family_counts": dict(sorted(family_counts.items())),
+        "block_counts": {
+            block: {
+                "task_count": len(block_tasks),
+                "family_counts": dict(Counter(task["family"] for task in block_tasks)),
+            }
+            for block, block_tasks in blocks.items()
+        },
+        "device_assignments": CROSSOVER_DEVICE_ASSIGNMENTS,
         "dataset_sha256": _digest(dataset),
         "evaluator_sha256": _digest(evaluator),
         "calibration_archive_sha256": _digest(CALIBRATION_ARCHIVE),
+        "crossover_validation_archive_sha256": _digest(CROSSOVER_VALIDATION_ARCHIVE),
         "calibration": _calibration_statistics(),
         "planner": plan,
     }
