@@ -198,7 +198,10 @@ def _question(candidate: Candidate) -> str:
 
 
 def _task(
-    candidate: Candidate, files: list[Path], commit: str
+    candidate: Candidate,
+    files: list[Path],
+    commit: str,
+    answer_pool: list[str],
 ) -> tuple[dict[str, object], str]:
     rng = random.Random(int(candidate.fingerprint[:16], 16))
     relative_files = [path.relative_to(ROOT).as_posix() for path in files]
@@ -206,6 +209,10 @@ def _task(
     rng.shuffle(distractors)
     paths = [candidate.path, *distractors[:4]]
     rng.shuffle(paths)
+    other_answers = [answer for answer in answer_pool if answer != candidate.answer]
+    rng.shuffle(other_answers)
+    answer_choices = [candidate.answer, *other_answers[:3]]
+    rng.shuffle(answer_choices)
     task_id = f"proof2-{candidate.family}-{candidate.fingerprint[:12]}"
     return (
         {
@@ -213,6 +220,7 @@ def _task(
             "family": candidate.family,
             "question": _question(candidate),
             "candidate_paths": paths,
+            "answer_choices": answer_choices,
             "repository_commit": commit,
         },
         candidate.answer,
@@ -247,8 +255,11 @@ def _write_split(
     candidates: list[Candidate],
     files: list[Path],
     commit: str,
+    answer_pool: list[str],
 ) -> dict[str, object]:
-    tasks_and_answers = [_task(candidate, files, commit) for candidate in candidates]
+    tasks_and_answers = [
+        _task(candidate, files, commit, answer_pool) for candidate in candidates
+    ]
     tasks = [item[0] for item in tasks_and_answers]
     answers = {task["task_id"]: answer for task, answer in tasks_and_answers}
     tasks_path = output / f"{name}-tasks.json"
@@ -302,6 +313,7 @@ def build(output: Path) -> dict[str, object]:
     combined = [*pilot, *calibration, *draft_heldout]
     _assert_static_audit(combined, candidates)
     commit = _git_commit()
+    answer_pool = sorted({candidate.answer for candidate in candidates})
     record = {
         "schema_version": "0.1",
         "status": "draft_heldout_not_frozen",
@@ -311,12 +323,19 @@ def build(output: Path) -> dict[str, object]:
         "prior_workload_queries_excluded": len(previous),
         "eligible_candidate_count": len(candidates),
         "splits": {
-            "pilot": _write_split(output, "pilot", pilot, files, commit),
+            "pilot": _write_split(
+                output, "pilot", pilot, files, commit, answer_pool
+            ),
             "calibration": _write_split(
-                output, "calibration", calibration, files, commit
+                output, "calibration", calibration, files, commit, answer_pool
             ),
             "draft_heldout_pool": _write_split(
-                output, "draft-heldout", draft_heldout, files, commit
+                output,
+                "draft-heldout",
+                draft_heldout,
+                files,
+                commit,
+                answer_pool,
             ),
         },
         "separation": {

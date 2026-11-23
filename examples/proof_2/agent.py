@@ -178,6 +178,12 @@ def _response_format(name: str, schema: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _answer_schema(choices: list[str]) -> dict[str, Any]:
+    schema = json.loads(json.dumps(_ANSWER_SCHEMA))
+    schema["properties"]["answer"]["enum"] = choices
+    return schema
+
+
 def _request(
     *,
     messages: list[dict[str, str]],
@@ -301,11 +307,16 @@ def _run(attempt: Attempt) -> None:
     variant = attempt.variant
     task = json.loads(attempt.task_path.read_text(encoding="utf-8"))
     candidates = task.get("candidate_paths")
+    answer_choices = task.get("answer_choices")
     question = task.get("question")
     if (
         not isinstance(candidates, list)
         or not candidates
         or any(not isinstance(value, str) for value in candidates)
+        or not isinstance(answer_choices, list)
+        or len(answer_choices) != 4
+        or len(set(answer_choices)) != 4
+        or any(_IDENTIFIER.fullmatch(value) is None for value in answer_choices)
         or not isinstance(question, str)
         or not question.strip()
     ):
@@ -391,8 +402,8 @@ def _run(attempt: Attempt) -> None:
                         "The bounded repository search returned:\n"
                         f"{search_result}\n\nThere is exactly one "
                         "ENCLOSING_IDENTIFIER line. Ignore every other source-code "
-                        "identifier and copy only that line's value into the "
-                        "constrained answer field."
+                        "identifier and select that line's value from these allowed "
+                        f"answers: {json.dumps(answer_choices)}."
                     ),
                 },
             ]
@@ -408,7 +419,7 @@ def _run(attempt: Attempt) -> None:
                         messages=answer_messages,
                         variant=variant,
                         response_name="proof_2_identifier_answer",
-                        response_schema=_ANSWER_SCHEMA,
+                        response_schema=_answer_schema(answer_choices),
                         max_tokens=32,
                     )
                 )

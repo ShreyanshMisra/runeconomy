@@ -113,6 +113,13 @@ class Proof2WorkloadTests(unittest.TestCase):
                 )
                 ids = {task["task_id"] for task in payload["tasks"]}
                 families = {task["family"] for task in payload["tasks"]}
+                self.assertTrue(
+                    all(
+                        len(task["answer_choices"]) == 4
+                        and len(set(task["answer_choices"])) == 4
+                        for task in payload["tasks"]
+                    )
+                )
                 self.assertEqual(
                     families, {"call_expression", "string_literal"}
                 )
@@ -152,6 +159,7 @@ class Proof2WorkloadTests(unittest.TestCase):
             answers = namespace["ANSWERS"]
             assert isinstance(answers, dict)
             task_id = tasks[0]["task_id"]
+            self.assertIn(answers[task_id], tasks[0]["answer_choices"])
             completed = subprocess.run(
                 [sys.executable, str(evaluator)],
                 input=json.dumps(
