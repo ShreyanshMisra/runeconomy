@@ -1,0 +1,41 @@
+{
+  "artifact_type": "runeconomy.contract_freeze",
+  "schema_version": "0.1",
+  "freeze_date": "2026-11-23",
+  "status": "frozen_awaiting_execution_authorization",
+  "heldout_executed": false,
+  "separate_execution_authorization_required": true,
+  "artifacts": {
+    "contract_sha256": "sha256:b349073a6f93a9391d628f9abe38d49120cbd0f4b5cc4202f190f924da6a9816",
+    "human_rendering_sha256": "sha256:be79b1c0f9fafc8f4545f61afcb890735c634ac2fadffad80a5997d164564739",
+    "dataset_sha256": "sha256:c945014bc7aed8cd6164b9c12da060a05880bea35a2ed29850e27612aa9924b2",
+    "evaluator_sha256": "sha256:8de9593491d146f7d81126f911165d85ae9353b13f7fa9f9065a05325d089810",
+    "planner_sha256": "sha256:62955ec3b0e211df3e2e6b05acc77215cf8422fb2bfe27cdd091070a65da4685",
+    "runner_sha256": "sha256:927983955eb874393946f63fc991141dee55668ffa197f1b46a58389399b9db0",
+    "agent_sha256": "sha256:e49f0208db4271b258be95446eff86cce114d82d1ce60aef6d33f976c8414254",
+    "crossover_allocator_sha256": "sha256:4e568d127d03ef97e5010b519d724ac3ddde477cdf2ad44fe9ca484459113b39"
+  },
+  "execution_safeguards": {
+    "task_and_evaluator_digest_locked": true,
+    "contract_digest_locked": true,
+    "task_count": 180,
+    "pairs_per_block": 90,
+    "seed": 20261123,
+    "physical_device_crossover_locked": true,
+    "warmup_and_cache_reset_locked": true,
+    "statistical_gates_locked": true,
+    "descriptive_sensitivity_locked": true,
+    "hard_spending_ceiling_usd": 8.0,
+    "block_a_abort_seconds": 900,
+    "function_timeout_seconds": 1800,
+    "atomic_one_shot_ledger": true,
+    "rerun_after_failure": false,
+    "local_output_overwrite_refused": true
+  },
+  "privacy": {
+    "raw_tasks_committed": false,
+    "evaluator_answer_map_committed": false,
+    "physical_gpu_identifiers_public": false
+  },
+  "next_action": "Push this freeze commit, verify its remote SHA, and wait for separate explicit held-out execution authorization."
+}
