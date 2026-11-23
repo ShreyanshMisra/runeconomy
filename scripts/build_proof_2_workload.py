@@ -82,6 +82,7 @@ def _safe_literal(value: str) -> bool:
 
 def _collect_candidates(files: Iterable[Path]) -> list[Candidate]:
     provisional: list[Candidate] = []
+    sources: dict[str, str] = {}
     for path in files:
         source = path.read_text(encoding="utf-8")
         try:
@@ -93,6 +94,7 @@ def _collect_candidates(files: Iterable[Path]) -> list[Candidate]:
             for child in ast.iter_child_nodes(parent):
                 parents[child] = parent
         relative = path.relative_to(ROOT).as_posix()
+        sources[relative] = source
         for node in ast.walk(tree):
             answer = _owner(node, parents)
             if answer is None:
@@ -124,6 +126,10 @@ def _collect_candidates(files: Iterable[Path]) -> list[Candidate]:
             candidate
             for candidate in provisional
             if counts[candidate.query] == 1
+            and len(candidate.answer) <= 32
+            and not candidate.answer.startswith("__")
+            and len(candidate.query) <= 96
+            and sum(source.count(candidate.query) for source in sources.values()) == 1
         ),
         key=lambda candidate: candidate.fingerprint,
     )
@@ -131,8 +137,15 @@ def _collect_candidates(files: Iterable[Path]) -> list[Candidate]:
 
 def _previous_queries() -> set[str]:
     queries: set[str] = set()
-    preparation = ROOT / "artifacts" / "public-proof-preparation"
-    for path in preparation.glob("*-tasks.json"):
+    paths = list(
+        (ROOT / "artifacts" / "public-proof-preparation").glob("*-tasks.json")
+    )
+    paths.extend(
+        path
+        for preparation in (ROOT / "artifacts").glob("proof-2-preparation*")
+        for path in preparation.glob("*-tasks.json")
+    )
+    for path in paths:
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -145,6 +158,8 @@ def _previous_queries() -> set[str]:
                     "exact docstring phrase ",
                     "exact unique string literal ",
                     "unique call ",
+                    "exact string literal ",
+                    "exact call expression ",
                 ):
                     if marker in question and question.endswith("?"):
                         encoded = question.split(marker, 1)[1][:-1]
@@ -293,7 +308,7 @@ def build(output: Path) -> dict[str, object]:
         "repository_commit": commit,
         "seed": SEED,
         "source_file_count": len(files),
-        "prior_proof_queries_excluded": len(previous),
+        "prior_workload_queries_excluded": len(previous),
         "eligible_candidate_count": len(candidates),
         "splits": {
             "pilot": _write_split(output, "pilot", pilot, files, commit),

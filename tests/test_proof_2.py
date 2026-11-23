@@ -97,6 +97,20 @@ class Proof2WorkloadTests(unittest.TestCase):
             self.assertFalse(task_ids[0] & task_ids[2])
             self.assertFalse(task_ids[1] & task_ids[2])
 
+    def test_candidates_have_one_search_match_and_simple_owner(self) -> None:
+        files = self.builder._source_files()
+        sources = {
+            path.relative_to(ROOT).as_posix(): path.read_text(encoding="utf-8")
+            for path in files
+        }
+        candidates = self.builder._collect_candidates(files)
+        self.assertGreater(len(candidates), 285)
+        for candidate in candidates:
+            self.assertLessEqual(len(candidate.answer), 32)
+            self.assertEqual(
+                sum(source.count(candidate.query) for source in sources.values()), 1
+            )
+
     def test_generated_evaluator_accepts_only_exact_answer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "proof-2"

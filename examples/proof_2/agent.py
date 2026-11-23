@@ -364,7 +364,7 @@ def _run(attempt: Attempt) -> None:
                         variant=variant,
                         response_name="proof_2_search_plan",
                         response_schema=_PLAN_SCHEMA,
-                        max_tokens=128,
+                        max_tokens=256,
                     )
                 )
                 _record_capture(plan_span, plan_capture)
@@ -396,8 +396,10 @@ def _run(attempt: Attempt) -> None:
                     "role": "user",
                     "content": (
                         "The bounded repository search returned:\n"
-                        f"{search_result}\n\nCopy ENCLOSING_IDENTIFIER exactly into "
-                        "the constrained answer field."
+                        f"{search_result}\n\nThere is exactly one "
+                        "ENCLOSING_IDENTIFIER line. Ignore every other source-code "
+                        "identifier and copy only that line's value into the "
+                        "constrained answer field."
                     ),
                 },
             ]
