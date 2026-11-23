@@ -1,0 +1,160 @@
+{
+  "artifact_type": "runeconomy.preregistration_proposal",
+  "schema_version": "0.1",
+  "proposal_date": "2026-11-23",
+  "status": "proposed_unfrozen",
+  "contract_frozen": false,
+  "heldout_executed": false,
+  "freeze_state": {
+    "evaluator_frozen": false,
+    "gates_frozen": false,
+    "heldout_runner_enabled": false
+  },
+  "execution_readiness": {
+    "ready": false,
+    "reason": "Explicit approval and a reviewed contract-freeze checkpoint are required before held-out execution."
+  },
+  "claim": {
+    "level": "workflow",
+    "statement": "For this pinned Qwen2.5-14B repository-agent workload on vLLM 0.34.0 and L40S GPUs, online FP8 reduces successful paired workflow latency without more than a 5 percentage-point task-success regression.",
+    "boundary": "One pinned checkpoint, one two-call bounded repository-search workflow, two balanced task families, vLLM 0.34.0, and L40S hardware. No general model-quality, throughput, concurrency, routing, or production-behavior claim."
+  },
+  "intervention": {
+    "source_model": "Qwen/Qwen2.5-14B-Instruct",
+    "model_revision": "cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8",
+    "tokenizer_revision": "cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8",
+    "chat_template_sha256": "sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+    "vllm_version": "0.34.0",
+    "transformers_version": "5.18.0",
+    "huggingface_hub_version": "2.0.0",
+    "hardware": "two L40S GPUs in one Modal container, one profile per GPU",
+    "baseline": "BF16 weights and activations; quantization unset",
+    "candidate": "vLLM online fp8_per_tensor; FP8 E4M3 per-tensor weights and dynamic activations",
+    "single_changed_variable": "backend quantization identity",
+    "startup_assertions": [
+      "baseline quantization is unset",
+      "candidate quantization is fp8_per_tensor",
+      "candidate selects CutlassFP8ScaledMMLinearKernel",
+      "no candidate activation-quantization fallback is present"
+    ]
+  },
+  "proposed_sample": {
+    "repository_commit": "0921c71d9d2dab9b84decd6824e210266b1f9126",
+    "task_count": 180,
+    "attempt_count": 360,
+    "repetitions": 1,
+    "order": "randomized task-paired order",
+    "seed": 20261123,
+    "family_counts": {
+      "call_expression": 90,
+      "string_literal": 90
+    },
+    "operator_declared_unseen": true,
+    "source": "A deterministic balanced selection from the untouched 240-task draft pool; raw tasks and answers remain private.",
+    "dataset_sha256": "sha256:3fe04b2d9bd499871a85ddbd4b65b7c39ff88bf72f0571f1323378ddbfb08b94",
+    "evaluator_sha256": "sha256:8de9593491d146f7d81126f911165d85ae9353b13f7fa9f9065a05325d089810"
+  },
+  "estimands": {
+    "primary_latency": {
+      "metric": "candidate minus baseline workflow_latency_ms",
+      "population": "task pairs where both variants succeed",
+      "method": "paired Student-t confidence interval",
+      "confidence_level": 0.95,
+      "decision": "superiority passes only when the upper confidence bound is below 0 ms"
+    },
+    "absolute_task_success": {
+      "unit": "task attempt",
+      "method": "two-sided Clopper-Pearson exact binomial interval",
+      "confidence_level": 0.95,
+      "minimum_lower_bound": 0.9,
+      "minimum_successful_units": 170
+    },
+    "paired_task_success": {
+      "unit": "baseline-candidate task pair",
+      "method": "exact marginal binomial bounds with Bonferroni coverage",
+      "confidence_level": 0.95,
+      "noninferiority_margin": 0.05,
+      "decision": "candidate-minus-baseline one-sided lower bound must be at least -0.05"
+    },
+    "completion": {
+      "minimum_completed_rate": 1.0
+    }
+  },
+  "sample_size_plan": {
+    "calibration_pair_count": 40,
+    "calibration_baseline_successes": 40,
+    "calibration_candidate_successes": 40,
+    "calibration_candidate_minus_baseline_mean_ms": -381.19381985,
+    "calibration_candidate_minus_baseline_95_ci_ms": [
+      -394.1317559388008,
+      -368.25588376119924
+    ],
+    "calibration_paired_standard_deviation_ms": 40.071837671205536,
+    "minimum_relevant_latency_effect_ms": -50.0,
+    "alpha": 0.05,
+    "power": 0.8,
+    "approximate_required_latency_pairs": 6,
+    "selected_pairs": 180,
+    "selection_rationale": "The larger fixed sample preserves 90 tasks per family and is driven by quality-gate feasibility, not by the large calibration latency effect.",
+    "absolute_all_success_lower_bound": 0.979714795429887,
+    "paired_best_case_one_sided_lower_bound": -0.020285204570113013,
+    "maximum_baseline_only_with_zero_candidate_only": 3,
+    "minimum_pairs_by_baseline_only_with_zero_candidate_only": {
+      "0": 72,
+      "1": 110,
+      "2": 142
+    }
+  },
+  "inclusion_and_exclusion": {
+    "include": [
+      "exactly one attempt for every proposed task and variant",
+      "all complete attempts in absolute task-success and completion gates",
+      "only both-successful task pairs in the primary latency estimand"
+    ],
+    "exclude_from_latency_only": [
+      "task pairs where either variant fails the deterministic evaluator"
+    ],
+    "failure_treatment": "Task, model-output, timeout, evaluator, and infrastructure failures remain failures or invalid evidence under their declared gate; they are never converted to zero latency or silently dropped.",
+    "replacement": "No task replacement."
+  },
+  "validity_requirements": [
+    "dataset and evaluator hashes match this proposal",
+    "all proposed task IDs are unique and present for both variants",
+    "the complete paired DAG, attempt artifacts, backend identities, and evaluator evidence are present",
+    "model, revision, tokenizer, chat template, software, hardware, generation, tool, evaluator, seed, and ordering controls match the frozen contract",
+    "no unexpected retry, replacement, partial rerun, or second held-out execution occurs"
+  ],
+  "missing_evidence_rule": "Missing, mutated, incomplete, duplicated, or identity-mismatched evidence makes the corresponding claim invalid or unknown; it is not imputed as success, failure-free latency, or zero.",
+  "stopping_and_rerun_rules": {
+    "sample": "fixed at 180 pairs if this proposal is approved and frozen",
+    "favorable_result_dependent": false,
+    "heldout_runs": 1,
+    "rerun_on_negative_result": false,
+    "rerun_on_invalid_result": false,
+    "partial_rerun": false,
+    "replacement": false
+  },
+  "reporting_commitment": {
+    "prepare_all_outcomes": true,
+    "external_publication_requires_separate_approval": true,
+    "outcome_paths": [
+      "verified latency superiority with both quality gates passing",
+      "rejected or inconclusive quality/validity result",
+      "mechanism-only or inconclusive latency result"
+    ]
+  },
+  "provenance": {
+    "pilot_archive_sha256": "sha256:8af23d85eb918e215551e6c0e7e1ab85b9100515ec12aa2a1e2cb98027237057",
+    "calibration_archive_sha256": "sha256:3b00f9514e12876c5a8c2ea2eeeec0a2f01da4c8c03529e236516c91878b120c",
+    "proposal_plan_sha256": "sha256:e9349525d2ffc85c8e260802ee5ecb78645c4c52c7e3eff87ee4ad4f83bf212b",
+    "calibration_and_pilot_actual_cost_usd": 2.00556691,
+    "heldout_compute_used": false,
+    "heldout_compute_authorized": false
+  },
+  "approval_boundary": {
+    "required_before_contract_freeze": true,
+    "required_before_heldout_execution": true,
+    "required_before_external_publication": true,
+    "next_action": "Obtain explicit user approval of this proposal before changing either freeze declaration or enabling any held-out runner."
+  }
+}

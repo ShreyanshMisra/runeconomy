@@ -1,6 +1,6 @@
 # Proof 2 calibration design
 
-Status: calibration contract only; not frozen for held-out execution
+Status: calibration complete; proposed held-out contract remains unfrozen
 Selection date: 2026-11-23
 Source branch: `proof-2`
 
@@ -77,3 +77,20 @@ cost $3.90 per GPU-hour. The five-task pilot is budgeted for at most 12 minutes
 an expected GPU ceiling of $2.08 plus small CPU, memory, storage, and network
 charges. The operational calibration stop limit is $5, below the Phase 4
 ceiling. No paid held-out compute is authorized by this document.
+
+## Completed calibration and proposed next boundary
+
+The final five-task pilot completed successfully for both profiles. The final
+40-task calibration completed 40/40 successful workflows per profile. Baseline
+mean workflow latency was 1,305.125 ms and candidate mean workflow latency was
+923.931 ms. The paired candidate-minus-baseline mean was -381.194 ms, its 95%
+interval was [-394.132, -368.256] ms, and its paired standard deviation was
+40.072 ms. These are calibration observations, not held-out evidence.
+
+The proposed preregistration fixes a 180-pair balanced sample only if it is
+approved and subsequently frozen. Its detailed estimands, quality gates,
+sample-size rationale, outcome-independent stop rules, and publication paths
+are in [the unfrozen proposal](proof-2-preregistration-proposal.md). The current
+runner still permits only five- and 40-task calibration workloads. Explicit
+approval is required before freezing the contract or enabling any held-out
+execution.
