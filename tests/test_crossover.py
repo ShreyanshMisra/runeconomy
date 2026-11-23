@@ -67,7 +67,7 @@ class BalancedCrossoverTests(unittest.TestCase):
                 family_names=("call_expression", "string_literal"),
             )
 
-    def test_runner_is_consumed_calibration_only(self) -> None:
+    def test_validation_runner_remains_consumed_calibration_only(self) -> None:
         source = (ROOT / "deploy" / "modal_proof_2.py").read_text(encoding="utf-8")
         self.assertIn("CONSUMED_CALIBRATION_TASKS_SHA256", source)
         self.assertIn("CONSUMED_CALIBRATION_EVALUATOR_SHA256", source)
@@ -75,8 +75,10 @@ class BalancedCrossoverTests(unittest.TestCase):
         self.assertIn("def crossover_validation(", source)
         self.assertIn("CROSSOVER_DEVICE_ASSIGNMENTS", source)
         self.assertIn("client.reset_prefix_cache()", source)
-        self.assertNotIn("def heldout(", source)
-        self.assertNotIn("expected_task_count == 180", source)
+        self.assertIn("def heldout(", source)
+        self.assertIn("FROZEN_HELDOUT_TASKS_SHA256", source)
+        self.assertIn("FROZEN_HELDOUT_EVALUATOR_SHA256", source)
+        self.assertIn("heldout_run_ledger.put", source)
 
 
 if __name__ == "__main__":

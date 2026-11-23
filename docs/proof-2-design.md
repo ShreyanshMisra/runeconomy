@@ -1,6 +1,6 @@
 # Proof 2 calibration design
 
-Status: crossover validation complete; freeze-ready held-out contract remains unfrozen
+Status: crossover validation complete; held-out contract approved and frozen
 Selection date: 2026-11-23
 Source branch: `proof-2`
 
@@ -93,8 +93,9 @@ sample-size rationale, outcome-independent stop rules, and publication paths
 are in [the unfrozen proposal](proof-2-preregistration-proposal.md). The current
 runner permits only five- and 40-task calibration workloads plus a digest-locked
 crossover validation on the already-consumed 40-task calibration split. It has
-no held-out entrypoint. Explicit approval is required before freezing the
-contract or enabling any held-out execution.
+no held-out entrypoint in the validation-only checkpoint. The immutable freeze
+adds a separately authorized, digest-locked held-out entrypoint; it must not be
+invoked without a new explicit authorization.
 
 ## Balanced physical-device crossover
 

@@ -2,18 +2,19 @@
   "artifact_type": "runeconomy.preregistration_proposal",
   "schema_version": "0.2",
   "proposal_date": "2026-11-23",
-  "status": "proposed_unfrozen",
-  "review_state": "freeze_ready",
-  "contract_frozen": false,
+  "status": "frozen",
+  "review_state": "approved_frozen",
+  "freeze_date": "2026-11-23",
+  "contract_frozen": true,
   "heldout_executed": false,
   "freeze_state": {
-    "evaluator_frozen": false,
-    "gates_frozen": false,
-    "heldout_runner_enabled": false
+    "evaluator_frozen": true,
+    "gates_frozen": true,
+    "heldout_runner_enabled": true
   },
   "execution_readiness": {
     "ready": false,
-    "reason": "Explicit approval and a reviewed contract-freeze checkpoint are required before held-out execution."
+    "reason": "The contract is frozen; separate explicit authorization is still required before held-out execution."
   },
   "claim": {
     "level": "workflow",
@@ -183,7 +184,7 @@
   ],
   "missing_evidence_rule": "Missing, mutated, incomplete, duplicated, or identity-mismatched evidence makes the corresponding claim invalid or unknown; it is not imputed as success, failure-free latency, or zero.",
   "stopping_and_rerun_rules": {
-    "sample": "fixed at 180 pairs if this proposal is approved and frozen",
+    "sample": "fixed at 180 pairs",
     "favorable_result_dependent": false,
     "heldout_runs": 1,
     "rerun_on_negative_result": false,
@@ -232,9 +233,9 @@
     "heldout_compute_authorized": false
   },
   "approval_boundary": {
-    "required_before_contract_freeze": true,
+    "required_before_contract_freeze": false,
     "required_before_heldout_execution": true,
     "required_before_external_publication": true,
-    "next_action": "Obtain explicit user approval of this proposal before changing either freeze declaration or enabling any held-out runner."
+    "next_action": "Wait for separate explicit user authorization before invoking the one-shot held-out runner. Any contract change requires renewed approval."
   }
 }

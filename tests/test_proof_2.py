@@ -91,8 +91,7 @@ class Proof2AgentTests(unittest.TestCase):
             )
             self.assertEqual(
                 evidence,
-                "PATH: module.py\nMATCH_LINE: 2\n"
-                "ENCLOSING_IDENTIFIER: selected_owner",
+                "PATH: module.py\nMATCH_LINE: 2\nENCLOSING_IDENTIFIER: selected_owner",
             )
 
 
@@ -110,9 +109,7 @@ class Proof2WorkloadTests(unittest.TestCase):
             self.assertEqual(record["status"], "draft_heldout_not_frozen")
             self.assertEqual(record["splits"]["pilot"]["task_count"], 5)
             self.assertEqual(record["splits"]["calibration"]["task_count"], 40)
-            self.assertEqual(
-                record["splits"]["draft_heldout_pool"]["task_count"], 240
-            )
+            self.assertEqual(record["splits"]["draft_heldout_pool"]["task_count"], 240)
             self.assertEqual(
                 record["splits"]["draft_heldout_pool"]["family_counts"],
                 {"call_expression": 120, "string_literal": 120},
@@ -131,9 +128,7 @@ class Proof2WorkloadTests(unittest.TestCase):
                         for task in payload["tasks"]
                     )
                 )
-                self.assertEqual(
-                    families, {"call_expression", "string_literal"}
-                )
+                self.assertEqual(families, {"call_expression", "string_literal"})
                 task_ids.append(ids)
             self.assertFalse(task_ids[0] & task_ids[1])
             self.assertFalse(task_ids[0] & task_ids[2])
@@ -173,9 +168,7 @@ class Proof2WorkloadTests(unittest.TestCase):
             self.assertIn(answers[task_id], tasks[0]["answer_choices"])
             completed = subprocess.run(
                 [sys.executable, str(evaluator)],
-                input=json.dumps(
-                    {"task_id": task_id, "output_text": answers[task_id]}
-                ),
+                input=json.dumps({"task_id": task_id, "output_text": answers[task_id]}),
                 text=True,
                 capture_output=True,
                 check=True,
@@ -184,7 +177,9 @@ class Proof2WorkloadTests(unittest.TestCase):
 
 
 class Proof2ModalTests(unittest.TestCase):
-    def test_runner_is_calibration_only_and_pins_one_intervention(self) -> None:
+    def test_runner_pins_intervention_and_separates_calibration_from_heldout(
+        self,
+    ) -> None:
         source = (ROOT / "deploy" / "modal_proof_2.py").read_text(encoding="utf-8")
         self.assertIn('GPU = "L40S:2"', source)
         self.assertIn('"candidate": "fp8_per_tensor"', source)
@@ -192,7 +187,10 @@ class Proof2ModalTests(unittest.TestCase):
         self.assertIn("Selected CutlassFP8ScaledMMLinearKernel", source)
         self.assertIn("quantization used an undeclared fallback", source)
         self.assertIn("expected_task_count not in {5, 40}", source)
-        self.assertNotIn("def heldout(", source)
+        self.assertIn("def heldout(", source)
+        self.assertIn("FROZEN_HELDOUT_TASKS_SHA256", source)
+        self.assertIn("FROZEN_HELDOUT_EVALUATOR_SHA256", source)
+        self.assertIn("skip_if_exists=True", source)
         self.assertIn('optimization_target="engine_change_latency"', source)
 
 

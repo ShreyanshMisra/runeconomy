@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import unittest
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PROPOSAL_JSON = ROOT / "docs" / "proof-2-preregistration-proposal.json"
 PROPOSAL_MD = ROOT / "docs" / "proof-2-preregistration-proposal.md"
+FREEZE_RECORD = ROOT / "docs" / "proof-2-freeze-record.json"
 
 
 class Proof2PreregistrationProposalTests(unittest.TestCase):
@@ -16,23 +18,49 @@ class Proof2PreregistrationProposalTests(unittest.TestCase):
         cls.proposal = json.loads(PROPOSAL_JSON.read_text(encoding="utf-8"))
         cls.narrative = PROPOSAL_MD.read_text(encoding="utf-8")
 
-    def test_proposal_is_explicitly_unfrozen_and_unexecuted(self) -> None:
-        self.assertEqual(self.proposal["status"], "proposed_unfrozen")
-        self.assertEqual(self.proposal["review_state"], "freeze_ready")
-        self.assertFalse(self.proposal["contract_frozen"])
+    def test_contract_is_frozen_but_unexecuted_and_unauthorized(self) -> None:
+        self.assertEqual(self.proposal["status"], "frozen")
+        self.assertEqual(self.proposal["review_state"], "approved_frozen")
+        self.assertTrue(self.proposal["contract_frozen"])
         self.assertFalse(self.proposal["heldout_executed"])
-        self.assertFalse(self.proposal["freeze_state"]["evaluator_frozen"])
-        self.assertFalse(self.proposal["freeze_state"]["gates_frozen"])
-        self.assertFalse(self.proposal["freeze_state"]["heldout_runner_enabled"])
+        self.assertTrue(self.proposal["freeze_state"]["evaluator_frozen"])
+        self.assertTrue(self.proposal["freeze_state"]["gates_frozen"])
+        self.assertTrue(self.proposal["freeze_state"]["heldout_runner_enabled"])
         self.assertFalse(self.proposal["execution_readiness"]["ready"])
         self.assertFalse(self.proposal["provenance"]["heldout_compute_used"])
         self.assertFalse(self.proposal["provenance"]["heldout_compute_authorized"])
-        self.assertTrue(
+        self.assertFalse(
             self.proposal["approval_boundary"]["required_before_contract_freeze"]
         )
         self.assertTrue(
             self.proposal["approval_boundary"]["required_before_heldout_execution"]
         )
+
+    def test_frozen_contract_digest_matches_runner_lock(self) -> None:
+        digest = "sha256:" + hashlib.sha256(PROPOSAL_JSON.read_bytes()).hexdigest()
+        self.assertEqual(
+            digest,
+            "sha256:b349073a6f93a9391d628f9abe38d49120cbd0f4b5cc4202f190f924da6a9816",
+        )
+        runner = (ROOT / "deploy" / "modal_proof_2.py").read_text(encoding="utf-8")
+        self.assertIn(digest, runner)
+
+    def test_freeze_record_digests_match_public_artifacts(self) -> None:
+        record = json.loads(FREEZE_RECORD.read_text(encoding="utf-8"))
+        paths = {
+            "contract_sha256": PROPOSAL_JSON,
+            "human_rendering_sha256": PROPOSAL_MD,
+            "runner_sha256": ROOT / "deploy" / "modal_proof_2.py",
+            "agent_sha256": ROOT / "examples" / "proof_2" / "agent.py",
+            "crossover_allocator_sha256": ROOT / "src" / "runeconomy" / "crossover.py",
+        }
+        for name, path in paths.items():
+            digest = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+            self.assertEqual(record["artifacts"][name], digest)
+        self.assertFalse(record["heldout_executed"])
+        self.assertTrue(record["separate_execution_authorization_required"])
+        self.assertTrue(record["execution_safeguards"]["atomic_one_shot_ledger"])
+        self.assertFalse(record["privacy"]["raw_tasks_committed"])
 
     def test_fixed_sample_matches_quality_planning(self) -> None:
         sample = self.proposal["proposed_sample"]
@@ -134,13 +162,13 @@ class Proof2PreregistrationProposalTests(unittest.TestCase):
             "bearer ",
         ):
             self.assertNotIn(private_term, lowered)
-        self.assertIn("freeze-ready, proposed, and unfrozen", lowered)
+        self.assertIn("approved and frozen", lowered)
         self.assertIn("not executed and not authorized", lowered)
         self.assertIn("$2.25252396", self.narrative)
         self.assertIn("180 task pairs", lowered)
         self.assertIn("pooled test is the sole confirmatory", lowered)
 
-    def test_calibration_runner_cannot_execute_the_proposed_sample(self) -> None:
+    def test_heldout_runner_is_digest_locked_and_separately_authorized(self) -> None:
         runner = (ROOT / "deploy" / "modal_proof_2.py").read_text(encoding="utf-8")
         builder = (ROOT / "scripts" / "build_proof_2_proposal.py").read_text(
             encoding="utf-8"
@@ -148,8 +176,15 @@ class Proof2PreregistrationProposalTests(unittest.TestCase):
         self.assertIn("expected_task_count not in {5, 40}", runner)
         self.assertIn("CONSUMED_CALIBRATION_TASKS_SHA256", runner)
         self.assertIn("CONSUMED_CALIBRATION_EVALUATOR_SHA256", runner)
-        self.assertNotIn("def heldout(", runner)
-        self.assertNotIn("expected_task_count == 180", runner)
+        self.assertIn("def heldout(", runner)
+        self.assertIn("def run_heldout(", runner)
+        self.assertIn("FROZEN_HELDOUT_TASKS_SHA256", runner)
+        self.assertIn("FROZEN_HELDOUT_EVALUATOR_SHA256", runner)
+        self.assertIn("FROZEN_HELDOUT_AUTHORIZATION", runner)
+        self.assertIn("skip_if_exists=True", runner)
+        self.assertIn("max_task_success_regression=0.05", runner)
+        self.assertIn("min_task_success_rate=0.90", runner)
+        self.assertIn("block A consumed the frozen half-window", runner)
         self.assertIn('"evaluator_frozen": False', builder)
         self.assertIn('"gates_frozen": False', builder)
         self.assertNotIn("run_comparison", builder)

@@ -1,17 +1,16 @@
 # Proof 2 preregistration proposal
 
-Status: **freeze-ready, proposed, and unfrozen**
+Status: **approved and frozen; held-out execution not authorized**
 
 Proposal date: 2026-11-23
 
 Held-out run: **not executed and not authorized**
 
-This document proposes the Proof 2 contract for approval. It is not a frozen
-contract. The evaluator and decision gates remain explicitly unfrozen, the
-private proposed tasks have never been sent to either backend, and the Modal
-runner exposes only the completed five-task pilot, 40-task calibration, and a
-digest-locked crossover validation on those same consumed calibration tasks.
-No 180-task entrypoint exists, and no held-out run may begin from this document.
+This is the immutable Proof 2 contract approved on 2026-11-23. Its evaluator,
+decision gates, sample, crossover allocation, measurement procedure, spending
+ceiling, abort rules, and no-rerun policy are frozen. The private tasks have
+never been sent to either backend. A digest-locked 180-pair runner exists, but
+separate explicit authorization is required before it may be invoked.
 
 ## Proposed claim and intervention
 
@@ -174,8 +173,7 @@ the initial calibration archive digest is
 `sha256:3b00f9514e12876c5a8c2ea2eeeec0a2f01da4c8c03529e236516c91878b120c`.
 Zero held-out compute has been used.
 
-Explicit approval is required before either freeze declaration changes, before
-any held-out runner is enabled or invoked, and again before external
-publication. After approval, the immutable freeze commit must be pushed
-remotely before the one-shot run. Until then, the contract stays proposed and
-unfrozen.
+The immutable freeze commit must be pushed and its remote SHA verified before
+the one-shot run. Separate explicit authorization is required before invoking
+the held-out runner and again before external publication. Any contract change
+requires renewed approval and a new freeze; it cannot be made in place.

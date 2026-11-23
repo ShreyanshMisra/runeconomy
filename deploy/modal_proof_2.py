@@ -43,6 +43,19 @@ GPU_MEMORY_UTILIZATION = 0.85
 MAX_NUM_SEQS = 4
 RUN_TIMEOUT_SECONDS = 30 * 60
 CROSSOVER_SEED = 20261123
+FROZEN_CONTRACT_SHA256 = (
+    "sha256:b349073a6f93a9391d628f9abe38d49120cbd0f4b5cc4202f190f924da6a9816"
+)
+FROZEN_HELDOUT_TASKS_SHA256 = (
+    "sha256:c945014bc7aed8cd6164b9c12da060a05880bea35a2ed29850e27612aa9924b2"
+)
+FROZEN_HELDOUT_EVALUATOR_SHA256 = (
+    "sha256:8de9593491d146f7d81126f911165d85ae9353b13f7fa9f9065a05325d089810"
+)
+FROZEN_HELDOUT_AUTHORIZATION = "AUTHORIZE_PROOF_2_HELDOUT_B349073A6F93"
+HELDOUT_HARD_CEILING_USD = 8.0
+PHASE_4_CUMULATIVE_CEILING_USD = 40.0
+PHASE_4_SPEND_AT_FREEZE_USD = 2.25252396
 CONSUMED_CALIBRATION_TASKS_SHA256 = (
     "sha256:313434d48f4a870db387a42217d8a898391f015b082f23dcd64a87830db9abc7"
 )
@@ -70,6 +83,9 @@ vllm_cache = modal.Volume.from_name(
 )
 flashinfer_cache = modal.Volume.from_name(
     "agent-inference-doctor-flashinfer-cache", create_if_missing=True, version=2
+)
+heldout_run_ledger = modal.Dict.from_name(
+    "runeconomy-proof-2-heldout-ledger", create_if_missing=True
 )
 
 download_image = (
@@ -350,6 +366,54 @@ def _balanced_blocks(tasks: list[dict[str, Any]]) -> dict[str, list[dict[str, An
         tasks,
         seed=CROSSOVER_SEED,
         family_names=("call_expression", "string_literal"),
+    )
+
+
+def _frozen_heldout_blocks(
+    tasks_payload: dict[str, Any], evaluator_source: str
+) -> dict[str, list[dict[str, Any]]]:
+    if _canonical_payload_digest(tasks_payload) != FROZEN_HELDOUT_TASKS_SHA256:
+        raise ValueError("held-out tasks do not match the frozen dataset digest")
+    if _digest_bytes(evaluator_source.encode()) != FROZEN_HELDOUT_EVALUATOR_SHA256:
+        raise ValueError("held-out evaluator does not match the frozen digest")
+    tasks = tasks_payload.get("tasks")
+    if not isinstance(tasks, list) or len(tasks) != 180:
+        raise ValueError("frozen held-out execution requires exactly 180 tasks")
+    blocks = _balanced_blocks(tasks)
+    expected_block_by_id = {
+        task["task_id"]: block
+        for block, block_tasks in blocks.items()
+        for task in block_tasks
+    }
+    for task in tasks:
+        if task.get("crossover_block") != expected_block_by_id[task["task_id"]]:
+            raise ValueError("held-out task crossover assignment differs from freeze")
+    for block, block_tasks in blocks.items():
+        if len(block_tasks) != 90:
+            raise ValueError(f"{block} does not contain exactly 90 frozen tasks")
+        if Counter(task["family"] for task in block_tasks) != {
+            "call_expression": 45,
+            "string_literal": 45,
+        }:
+            raise ValueError(f"{block} is not balanced across the frozen families")
+    return blocks
+
+
+def _projected_resource_cost_usd(
+    *,
+    l40s_per_gpu_second: float,
+    cpu_per_core_second: float,
+    memory_per_gib_second: float,
+) -> float:
+    rates = (
+        l40s_per_gpu_second,
+        cpu_per_core_second,
+        memory_per_gib_second,
+    )
+    if any(rate <= 0 for rate in rates):
+        raise ValueError("current Modal resource rates must be positive")
+    return RUN_TIMEOUT_SECONDS * (
+        2 * l40s_per_gpu_second + 8 * cpu_per_core_second + 32 * memory_per_gib_second
     )
 
 
@@ -806,6 +870,254 @@ def run_crossover_validation(
     )
 
 
+def _execute_frozen_heldout(
+    tasks_payload: dict[str, Any],
+    evaluator_source: str,
+    *,
+    projected_cost_usd: float,
+) -> bytes:
+    from runeconomy.comparison import _decision, _summarize, run_comparison
+
+    blocks = _frozen_heldout_blocks(tasks_payload, evaluator_source)
+    if _chat_template_digest() != CHAT_TEMPLATE_DIGEST:
+        raise RuntimeError("chat-template identity differs from the freeze")
+    if metadata.version("vllm") != VLLM_VERSION:
+        raise RuntimeError("vLLM version differs from the freeze")
+
+    work = Path(tempfile.mkdtemp(prefix="runeconomy-proof-2-heldout-"))
+    evaluator = work / "evaluator.py"
+    evaluator.write_text(evaluator_source, encoding="utf-8")
+    gpu_inventory = _physical_gpu_inventory()
+    pooled_attempts: list[dict[str, Any]] = []
+    block_results: dict[str, dict[str, Any]] = {}
+    procedures: dict[str, dict[str, Any]] = {}
+    started = time.monotonic()
+
+    for block, block_tasks in blocks.items():
+        block_root = work / block
+        dataset = block_root / "tasks.json"
+        artifacts = block_root / "run"
+        block_root.mkdir(parents=True, exist_ok=True)
+        dataset.write_text(
+            json.dumps({"tasks": block_tasks}, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        processes: dict[str, subprocess.Popen[bytes]] = {}
+        logs: list[BinaryIO] = []
+        try:
+            assignment = CROSSOVER_DEVICE_ASSIGNMENTS[block]
+            for profile in ("baseline", "candidate"):
+                process, log = _start_server(
+                    profile,
+                    work,
+                    block=block,
+                    device_index=assignment[profile],
+                )
+                processes[profile] = process
+                logs.append(log)
+            for profile in ("baseline", "candidate"):
+                _wait_until_healthy(profile, processes[profile])
+            _assert_backend_profiles(work, block)
+            procedures[block] = _warm_and_reset_structured_paths()
+            os.environ.update(
+                {
+                    "RUNECONOMY_BASELINE_URL": (
+                        f"http://127.0.0.1:{PORTS['baseline']}"
+                    ),
+                    "RUNECONOMY_CANDIDATE_URL": (
+                        f"http://127.0.0.1:{PORTS['candidate']}"
+                    ),
+                    "RUNECONOMY_REPO_ROOT": str(REMOTE_REPOSITORY),
+                }
+            )
+            result = run_comparison(
+                baseline_command=f"python {REMOTE_AGENT}",
+                candidate_command=f"python {REMOTE_AGENT}",
+                dataset_path=dataset,
+                evaluator_path=evaluator,
+                output_path=artifacts / "result.json",
+                artifacts_dir=artifacts,
+                workdir=REMOTE_REPOSITORY,
+                repetitions=1,
+                order="randomized",
+                seed=CROSSOVER_SEED,
+                timeout_seconds=180,
+                evaluator_timeout_seconds=30,
+                max_task_success_regression=0.05,
+                min_task_success_rate=0.90,
+                min_completed_rate=1.0,
+                optimization_target="engine_change_latency",
+                latency_semantics="superiority",
+                max_latency_regression_ms=0.0,
+            )
+            result["provenance"].update(
+                {
+                    "crossover_block": block,
+                    "physical_device_assignment": assignment,
+                    "driver_location": "same Modal container as both vLLM servers",
+                    "warmup_and_cache_reset": procedures[block],
+                    "frozen_contract_sha256": FROZEN_CONTRACT_SHA256,
+                }
+            )
+            (artifacts / "result.json").write_text(
+                json.dumps(result, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            block_results[block] = result
+            pooled_attempts.extend(
+                _annotated_attempts(result, block=block, artifacts=artifacts)
+            )
+        finally:
+            for process in processes.values():
+                _stop_process(process)
+            for log in logs:
+                log.close()
+
+        if block == "block_a" and time.monotonic() - started >= 15 * 60:
+            raise TimeoutError(
+                "held-out abort: block A consumed the frozen half-window"
+            )
+
+    pooled_summary = _summarize(pooled_attempts)
+    pooled_decision = _decision(
+        pooled_summary,
+        max_task_success_regression=0.05,
+        min_task_success_rate=0.90,
+        min_completed_rate=1.0,
+        optimization_target="engine_change_latency",
+        latency_semantics="superiority",
+        max_latency_regression_ms=0.0,
+    )
+    heldout_result = {
+        "result_type": "runeconomy.proof_2_frozen_heldout",
+        "schema_version": "0.1",
+        "purpose": "one-shot frozen Proof 2 held-out execution",
+        "held_out": True,
+        "frozen_contract_sha256": FROZEN_CONTRACT_SHA256,
+        "design": {
+            "seed": CROSSOVER_SEED,
+            "tasks_sha256": FROZEN_HELDOUT_TASKS_SHA256,
+            "evaluator_sha256": FROZEN_HELDOUT_EVALUATOR_SHA256,
+            "task_count": 180,
+            "device_assignments": CROSSOVER_DEVICE_ASSIGNMENTS,
+            "block_task_counts": {
+                block: len(block_tasks) for block, block_tasks in blocks.items()
+            },
+            "block_family_counts": {
+                block: dict(Counter(task["family"] for task in block_tasks))
+                for block, block_tasks in blocks.items()
+            },
+            "warmup_and_cache_reset": procedures,
+            "spending": {
+                "hard_ceiling_usd": HELDOUT_HARD_CEILING_USD,
+                "projected_cost_usd": projected_cost_usd,
+            },
+        },
+        "gpu_inventory": gpu_inventory,
+        "primary_pooled_summary": pooled_summary,
+        "decision": pooled_decision,
+        "descriptive_sensitivity": _descriptive_crossover_sensitivity(pooled_attempts),
+        "block_results": {
+            block: {
+                "summary": result["summary"],
+                "decision": result["decision"],
+                "provenance": result["provenance"],
+            }
+            for block, result in block_results.items()
+        },
+        "attempts": pooled_attempts,
+        "provenance": {
+            "source_model": SOURCE_MODEL,
+            "model_revision": MODEL_REVISION,
+            "chat_template_digest": CHAT_TEMPLATE_DIGEST,
+            "backend_version": VLLM_VERSION,
+            "hardware": GPU,
+            "remote_elapsed_seconds": time.monotonic() - started,
+        },
+    }
+    (work / "heldout-result.json").write_text(
+        json.dumps(heldout_result, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return _private_archive(
+        work,
+        {
+            "purpose": "one-shot frozen Proof 2 held-out execution",
+            "held_out": True,
+            "frozen_contract_sha256": FROZEN_CONTRACT_SHA256,
+            "tasks_sha256": FROZEN_HELDOUT_TASKS_SHA256,
+            "evaluator_sha256": FROZEN_HELDOUT_EVALUATOR_SHA256,
+            "device_assignments": CROSSOVER_DEVICE_ASSIGNMENTS,
+            "warmup_and_cache_reset": procedures,
+            "projected_cost_usd": projected_cost_usd,
+            "remote_elapsed_seconds": time.monotonic() - started,
+        },
+        metadata_name="heldout-metadata.json",
+    )
+
+
+@app.function(
+    image=proof_image,
+    gpu=GPU,
+    volumes={
+        HF_CACHE_PATH: hf_cache,
+        VLLM_CACHE_PATH: vllm_cache,
+        FLASHINFER_CACHE_PATH: flashinfer_cache,
+    },
+    timeout=RUN_TIMEOUT_SECONDS,
+    cpu=8,
+    memory=32768,
+)
+def run_heldout(
+    tasks_payload: dict[str, Any],
+    evaluator_source: str,
+    authorization: str,
+    frozen_contract_sha256: str,
+    projected_cost_usd: float,
+) -> bytes:
+    """Execute the frozen held-out contract at most once after authorization."""
+
+    if authorization != FROZEN_HELDOUT_AUTHORIZATION:
+        raise PermissionError("held-out execution lacks the frozen authorization")
+    if frozen_contract_sha256 != FROZEN_CONTRACT_SHA256:
+        raise ValueError("held-out invocation does not name the frozen contract")
+    if projected_cost_usd <= 0 or projected_cost_usd > HELDOUT_HARD_CEILING_USD:
+        raise ValueError("held-out projected cost exceeds the frozen ceiling")
+    if (
+        PHASE_4_SPEND_AT_FREEZE_USD + projected_cost_usd
+        > PHASE_4_CUMULATIVE_CEILING_USD
+    ):
+        raise ValueError("held-out projected cost exceeds the Phase 4 ceiling")
+    _frozen_heldout_blocks(tasks_payload, evaluator_source)
+
+    ledger_key = FROZEN_CONTRACT_SHA256
+    started = {
+        "state": "started",
+        "contract_sha256": FROZEN_CONTRACT_SHA256,
+        "tasks_sha256": FROZEN_HELDOUT_TASKS_SHA256,
+        "evaluator_sha256": FROZEN_HELDOUT_EVALUATOR_SHA256,
+    }
+    if not heldout_run_ledger.put(ledger_key, started, skip_if_exists=True):
+        raise RuntimeError("the frozen held-out contract has already been invoked")
+    try:
+        archive = _execute_frozen_heldout(
+            tasks_payload,
+            evaluator_source,
+            projected_cost_usd=projected_cost_usd,
+        )
+    except BaseException as exc:
+        heldout_run_ledger.put(
+            ledger_key,
+            {**started, "state": "invalid", "error_type": type(exc).__name__},
+        )
+        raise
+    heldout_run_ledger.put(
+        ledger_key,
+        {**started, "state": "completed", "archive_sha256": _digest_bytes(archive)},
+    )
+    return archive
+
+
 @app.local_entrypoint()
 def prepare() -> None:
     """Cache the pinned source checkpoint without allocating a GPU."""
@@ -882,3 +1194,64 @@ def crossover_validation(
     temporary.write_bytes(archive)
     temporary.replace(output_path)
     print(f"wrote private crossover validation evidence to {output_path}")
+
+
+@app.local_entrypoint()
+def heldout(
+    authorization: str,
+    current_l40s_rate_per_second: float,
+    current_cpu_rate_per_core_second: float,
+    current_memory_rate_per_gib_second: float,
+    tasks: str = "artifacts/proof-2-proposed-crossover-contract-v2/tasks.json",
+    evaluator: str = "artifacts/proof-2-proposed-crossover-contract-v2/evaluator.py",
+    contract: str = "docs/proof-2-preregistration-proposal.json",
+    output: str = "artifacts/proof-2-heldout.tar.gz",
+) -> None:
+    """Invoke the immutable one-shot runner only after separate authorization."""
+
+    if authorization != FROZEN_HELDOUT_AUTHORIZATION:
+        raise PermissionError("held-out execution lacks the frozen authorization")
+    task_path = Path(tasks).resolve()
+    evaluator_path = Path(evaluator).resolve()
+    contract_path = Path(contract).resolve()
+    output_path = Path(output).resolve()
+    if _digest_bytes(task_path.read_bytes()) != FROZEN_HELDOUT_TASKS_SHA256:
+        raise ValueError("held-out tasks do not match the frozen dataset digest")
+    if _digest_bytes(evaluator_path.read_bytes()) != FROZEN_HELDOUT_EVALUATOR_SHA256:
+        raise ValueError("held-out evaluator does not match the frozen digest")
+    if _digest_bytes(contract_path.read_bytes()) != FROZEN_CONTRACT_SHA256:
+        raise ValueError("local held-out contract differs from the immutable freeze")
+    if output_path.exists():
+        raise FileExistsError(f"refusing to overwrite held-out evidence: {output_path}")
+
+    projected_cost_usd = _projected_resource_cost_usd(
+        l40s_per_gpu_second=current_l40s_rate_per_second,
+        cpu_per_core_second=current_cpu_rate_per_core_second,
+        memory_per_gib_second=current_memory_rate_per_gib_second,
+    )
+    if projected_cost_usd > HELDOUT_HARD_CEILING_USD:
+        raise ValueError(
+            f"projected held-out cost ${projected_cost_usd:.6f} exceeds "
+            f"the frozen ${HELDOUT_HARD_CEILING_USD:.2f} ceiling"
+        )
+    if (
+        PHASE_4_SPEND_AT_FREEZE_USD + projected_cost_usd
+        > PHASE_4_CUMULATIVE_CEILING_USD
+    ):
+        raise ValueError("projected held-out cost exceeds the Phase 4 ceiling")
+
+    task_payload = json.loads(task_path.read_text(encoding="utf-8"))
+    evaluator_source = evaluator_path.read_text(encoding="utf-8")
+    _frozen_heldout_blocks(task_payload, evaluator_source)
+    archive = run_heldout.remote(
+        task_payload,
+        evaluator_source,
+        authorization,
+        FROZEN_CONTRACT_SHA256,
+        projected_cost_usd,
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output_path.with_name(output_path.name + ".tmp")
+    temporary.write_bytes(archive)
+    temporary.replace(output_path)
+    print(f"wrote one-shot private held-out evidence to {output_path}")
