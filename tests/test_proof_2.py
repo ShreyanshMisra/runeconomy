@@ -63,6 +63,13 @@ class Proof2AgentTests(unittest.TestCase):
         self.assertEqual(
             self.agent._plan_query(output, question), "client.capture({'value': 1})"
         )
+        expanded = json.dumps(
+            {"query": 'Search for client.capture({"value": number 1}) exactly.'}
+        )
+        self.assertEqual(
+            self.agent._plan_query(expanded, question),
+            "client.capture({'value': 1})",
+        )
 
     def test_search_returns_only_bounded_ast_owner_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -124,6 +131,7 @@ class Proof2WorkloadTests(unittest.TestCase):
         self.assertGreater(len(candidates), 285)
         for candidate in candidates:
             self.assertLessEqual(len(candidate.answer), 24)
+            self.assertFalse(candidate.answer.startswith("_"))
             self.assertLessEqual(len(candidate.query), 64)
             self.assertEqual(
                 sum(source.count(candidate.query) for source in sources.values()), 1

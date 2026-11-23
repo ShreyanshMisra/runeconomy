@@ -230,11 +230,9 @@ def _plan_query(text: str | None, question: str) -> str:
     phrase = _search_phrase(question)
     expected_tokens = _QUERY_TOKEN.findall(phrase)
     observed_tokens = _QUERY_TOKEN.findall(value["query"])
-    contains_phrase = any(
-        observed_tokens[index : index + len(expected_tokens)] == expected_tokens
-        for index in range(len(observed_tokens) - len(expected_tokens) + 1)
-    )
-    if not expected_tokens or not contains_phrase:
+    observed = iter(observed_tokens)
+    preserves_phrase = all(any(token == value for value in observed) for token in expected_tokens)
+    if not expected_tokens or not preserves_phrase:
         raise ModelOutputFailure(
             "planning query did not preserve the exact task-phrase tokens"
         )
