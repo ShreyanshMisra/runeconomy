@@ -52,6 +52,13 @@ class Proof2AgentTests(unittest.TestCase):
             candidate["runeconomy.chat_template_digest"],
         )
 
+    def test_plan_schema_constrains_the_supplied_query(self) -> None:
+        schema = self.agent._plan_schema("client.capture(payload)")
+        self.assertEqual(
+            schema["properties"]["query"]["enum"], ["client.capture(payload)"]
+        )
+        self.assertNotIn("enum", self.agent._PLAN_SCHEMA["properties"]["query"])
+
     def test_plan_validation_ignores_quote_style_and_surrounding_prose(self) -> None:
         question = (
             "Which Python function or class encloses the exact call expression "

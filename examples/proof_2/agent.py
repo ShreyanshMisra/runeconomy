@@ -184,6 +184,12 @@ def _answer_schema(choices: list[str]) -> dict[str, Any]:
     return schema
 
 
+def _plan_schema(query: str) -> dict[str, Any]:
+    schema = json.loads(json.dumps(_PLAN_SCHEMA))
+    schema["properties"]["query"]["enum"] = [query]
+    return schema
+
+
 def _request(
     *,
     messages: list[dict[str, str]],
@@ -358,6 +364,7 @@ def _run(attempt: Attempt) -> None:
                     ),
                 },
             ]
+            expected_query = _search_phrase(question)
             with tracer.start_as_current_span(
                 "proof_2.plan",
                 attributes={**_identity_attributes(variant), "runeconomy.depends_on": "[]"},
@@ -367,7 +374,7 @@ def _run(attempt: Attempt) -> None:
                         messages=plan_messages,
                         variant=variant,
                         response_name="proof_2_search_plan",
-                        response_schema=_PLAN_SCHEMA,
+                        response_schema=_plan_schema(expected_query),
                         max_tokens=256,
                     )
                 )
