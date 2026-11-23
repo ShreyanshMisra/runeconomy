@@ -1,14 +1,15 @@
-# RunEconomy 0.2.1 alpha guide
+# RunEconomy 0.2.2 tester guide
 
-RunEconomy `0.2.1` adds privacy-safe tester support to the complete
-evidence-to-verdict workflow. RunEconomy remains alpha-stage software for
-controlled experiments and private testing. It is a local CLI and Python
-package, not a production service or general observability platform.
+RunEconomy `0.2.2` adds engine-change verification, resumable agent-process
+experiments, conservative evidence-quality semantics, and decision schema
+`0.2`. RunEconomy remains alpha-stage software for controlled experiments and
+private testing. It is a local CLI and Python package, not a production service
+or general observability platform.
 
 ## Install
 
 ```bash
-python -m pip install runeconomy==0.2.1
+python -m pip install runeconomy==0.2.2
 runeconomy --version
 runeconomy tutorial init ./runeconomy-tutorial
 runeconomy tutorial serve

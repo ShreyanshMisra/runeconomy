@@ -83,10 +83,15 @@ fi
 
 "$python_path" - <<'PY'
 import json
+import math
 import pathlib
 import zipfile
+from importlib.resources import files
 
+import jsonschema
 from runeconomy.agent import Attempt
+from runeconomy.decision_artifacts import enrich_decision_artifact
+from runeconomy.planning import plan_experiment
 
 result = json.loads(pathlib.Path("results/result.json").read_text(encoding="utf-8"))
 report = pathlib.Path("report.html")
@@ -118,6 +123,85 @@ if plan.get("state") not in {
     "blocked", "needs_design_input", "ready_for_calibration", "ready_to_freeze"
 }:
     raise SystemExit(f"unexpected installed experiment plan state: {plan.get('state')}")
+completion = plan.get("completion", {})
+planned = completion.get("planned_attempts_per_variant")
+minimum = completion.get("minimum_completed_attempts_per_variant")
+maximum = completion.get("maximum_failed_or_incomplete_attempts_per_variant")
+if not isinstance(planned, int) or completion.get("threshold") != 1.0:
+    raise SystemExit(f"unexpected installed completion plan: {completion}")
+if minimum != planned or maximum != 0:
+    raise SystemExit(f"100% completion tolerance is not exact: {completion}")
+
+manifest_path = pathlib.Path("experiment/manifest.json")
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+manifest["acceptance"]["min_completed_rate"] = 0.95
+manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+rounded_completion = plan_experiment(pathlib.Path("experiment"))["completion"]
+rounded_planned = rounded_completion["planned_attempts_per_variant"]
+rounded_minimum = rounded_completion["minimum_completed_attempts_per_variant"]
+rounded_maximum = rounded_completion[
+    "maximum_failed_or_incomplete_attempts_per_variant"
+]
+expected_minimum = math.ceil(0.95 * rounded_planned - 1e-12)
+if rounded_minimum != expected_minimum or rounded_maximum != rounded_planned - expected_minimum:
+    raise SystemExit(f"95% completion tolerance is not exact: {rounded_completion}")
+
+summary = {
+    "variants": {
+        name: {
+            "attempt_count": 1,
+            "evaluated_count": 1,
+            "task_success_count": 1,
+            "task_success_rate": 1.0,
+            "status_counts": {"completed": 1},
+        }
+        for name in ("baseline", "candidate")
+    },
+    "effects": {
+        "task_success": {
+            "outcome_counts": {
+                "both_success": 1,
+                "both_failure": 0,
+                "baseline_only": 0,
+                "candidate_only": 0,
+            }
+        }
+    },
+}
+base_decision = {
+    "status": "verified",
+    "reason": "sanitized installed-wheel semantic smoke",
+}
+unknown = enrich_decision_artifact(
+    {**base_decision, "checks": [{"name": "workflow_latency_ms_improvement", "passed": True}]},
+    summary,
+)
+valid = enrich_decision_artifact(
+    {**base_decision, "checks": [{"name": "evaluator_integrity", "passed": True}]},
+    summary,
+)
+invalid = enrich_decision_artifact(
+    {
+        **base_decision,
+        "status": "invalid",
+        "checks": [{"name": "evaluator_integrity", "passed": False}],
+    },
+    summary,
+)
+if unknown["evidence_validity"]["status"] != "unknown" or unknown["performance_eligibility"]["eligible"]:
+    raise SystemExit("missing evidence checks were not conservative")
+if valid["evidence_validity"]["status"] != "valid" or not valid["performance_eligibility"]["eligible"]:
+    raise SystemExit("passing required evidence was not valid and eligible")
+if invalid["evidence_validity"]["status"] != "invalid" or invalid["performance_eligibility"]["eligible"]:
+    raise SystemExit("failed required evidence was not invalid and ineligible")
+schema_path = files("runeconomy").joinpath("data/decision-0.2.schema.json")
+if not schema_path.is_file():
+    raise SystemExit("decision schema 0.2 is missing from the installed wheel")
+schema = json.loads(schema_path.read_text(encoding="utf-8"))
+for artifact in (unknown, valid, invalid):
+    if artifact.get("schema_version") != "0.2":
+        raise SystemExit("installed decision artifact does not use schema 0.2")
+    jsonschema.validate(artifact, schema)
 if result["decision"]["status"] != "verified":
     raise SystemExit(f"unexpected tutorial verdict: {result['decision']['status']}")
 effect = result["summary"]["effects"]["cached_tokens"]["candidate_minus_baseline_mean"]
@@ -153,5 +237,5 @@ for forbidden in (
         raise SystemExit(f"tutorial report contains forbidden material: {forbidden}")
     if forbidden in support_text:
         raise SystemExit(f"tutorial support bundle contains forbidden material: {forbidden}")
-print("Installed-wheel tutorial completed with the expected verified plumbing verdict")
+print("Installed-wheel tutorial and decision semantics completed successfully")
 PY

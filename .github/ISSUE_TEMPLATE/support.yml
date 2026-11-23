@@ -13,7 +13,7 @@ body:
     attributes:
       label: RunEconomy version
       description: Copy the output of `runeconomy --version`.
-      placeholder: runeconomy 0.2.1
+      placeholder: runeconomy 0.2.2rc1
     validations:
       required: true
   - type: dropdown

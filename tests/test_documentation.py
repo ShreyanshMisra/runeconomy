@@ -13,18 +13,24 @@ class DocumentationTests(unittest.TestCase):
     def test_current_release_is_consistent_with_versioned_release_sources(self) -> None:
         with (ROOT / "pyproject.toml").open("rb") as handle:
             version = tomllib.load(handle)["project"]["version"]
+        documented_version = re.sub(r"(?:a|b|rc)\d+$", "", version)
         for relative in (
             "docs/alpha-release.md",
-            f"docs/release-notes-{version}.md",
+            f"docs/release-notes-{documented_version}.md",
         ):
             text = (ROOT / relative).read_text(encoding="utf-8")
-            self.assertIn(f"runeconomy=={version}", text, relative)
+            self.assertIn(f"runeconomy=={documented_version}", text, relative)
             self.assertNotIn("--pre", text, relative)
 
-        release_notes = (ROOT / f"docs/release-notes-{version}.md").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("privacy-safe tester support", release_notes)
+        release_notes = (
+            ROOT / f"docs/release-notes-{documented_version}.md"
+        ).read_text(encoding="utf-8")
+        for marker in (
+            "Decision schema `0.2`",
+            "Evidence validity is conservative",
+            "permanently `invalid`",
+        ):
+            self.assertIn(marker, release_notes)
 
         skill = (ROOT / "skills" / "runeconomy" / "SKILL.md").read_text(
             encoding="utf-8"
