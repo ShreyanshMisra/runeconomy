@@ -126,9 +126,9 @@ def _collect_candidates(files: Iterable[Path]) -> list[Candidate]:
             candidate
             for candidate in provisional
             if counts[candidate.query] == 1
-            and len(candidate.answer) <= 32
+            and len(candidate.answer) <= 24
             and not candidate.answer.startswith("__")
-            and len(candidate.query) <= 96
+            and len(candidate.query) <= 64
             and sum(source.count(candidate.query) for source in sources.values()) == 1
         ),
         key=lambda candidate: candidate.fingerprint,

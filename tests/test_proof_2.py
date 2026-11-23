@@ -64,6 +64,23 @@ class Proof2AgentTests(unittest.TestCase):
             self.agent._plan_query(output, question), "client.capture({'value': 1})"
         )
 
+    def test_search_returns_only_bounded_ast_owner_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "module.py"
+            source.write_text(
+                "def selected_owner():\n    return 'unique proof phrase'\n",
+                encoding="utf-8",
+            )
+            evidence = self.agent._search_candidate_paths(
+                root, ["module.py"], "unique proof phrase"
+            )
+            self.assertEqual(
+                evidence,
+                "PATH: module.py\nMATCH_LINE: 2\n"
+                "ENCLOSING_IDENTIFIER: selected_owner",
+            )
+
 
 class Proof2WorkloadTests(unittest.TestCase):
     @classmethod
@@ -106,7 +123,8 @@ class Proof2WorkloadTests(unittest.TestCase):
         candidates = self.builder._collect_candidates(files)
         self.assertGreater(len(candidates), 285)
         for candidate in candidates:
-            self.assertLessEqual(len(candidate.answer), 32)
+            self.assertLessEqual(len(candidate.answer), 24)
+            self.assertLessEqual(len(candidate.query), 64)
             self.assertEqual(
                 sum(source.count(candidate.query) for source in sources.values()), 1
             )

@@ -290,14 +290,9 @@ def _search_candidate_paths(
         indexes = [index for index, line in enumerate(lines) if query in line]
         for match in indexes[:3]:
             identifier = _enclosing_identifier(source, match + 1)
-            start = max(0, match - 4)
-            end = min(len(lines), match + 5)
-            context = "\n".join(
-                f"{index + 1}: {lines[index]}" for index in range(start, end)
-            )
             matches.append(
                 f"PATH: {relative}\nMATCH_LINE: {match + 1}\n"
-                f"ENCLOSING_IDENTIFIER: {identifier}\n{context}"
+                f"ENCLOSING_IDENTIFIER: {identifier}"
             )
     if len(matches) != 1:
         raise RepositorySearchFailure("exact query did not produce one search match")
