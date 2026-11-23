@@ -42,6 +42,35 @@ class _VisibleText(HTMLParser):
         return " ".join(self.parts)
 
 
+def _assert_json_equivalent(
+    testcase: unittest.TestCase,
+    expected: object,
+    actual: object,
+    path: str = "$",
+) -> None:
+    """Compare JSON values while tolerating cross-Python float rounding."""
+
+    testcase.assertIs(type(actual), type(expected), path)
+    if isinstance(expected, dict):
+        testcase.assertEqual(expected.keys(), actual.keys(), path)
+        for key in expected:
+            _assert_json_equivalent(
+                testcase, expected[key], actual[key], f"{path}.{key}"
+            )
+    elif isinstance(expected, list):
+        testcase.assertEqual(len(expected), len(actual), path)
+        for index, (expected_item, actual_item) in enumerate(
+            zip(expected, actual, strict=True)
+        ):
+            _assert_json_equivalent(
+                testcase, expected_item, actual_item, f"{path}[{index}]"
+            )
+    elif isinstance(expected, float):
+        testcase.assertAlmostEqual(expected, actual, places=14, msg=path)
+    else:
+        testcase.assertEqual(expected, actual, path)
+
+
 class ReportTests(unittest.TestCase):
     def test_public_report_uses_required_order_and_plain_verdict(self) -> None:
         rendered = render_demo_html(load_demo_result())
@@ -215,7 +244,7 @@ class ReportTests(unittest.TestCase):
             / "experiments"
             / "repository-agent-tool-pruning-recorded.json",
         )
-        self.assertEqual(sanitized, rebuilt)
+        _assert_json_equivalent(self, sanitized, rebuilt)
 
 
 if __name__ == "__main__":

@@ -42,6 +42,7 @@ const requiredRoutes = [
   "/evidence/", "/connectors/", "/privacy/", "/compatibility/",
   "/articles/0-2-0a2/", "/articles/0-2-0a3/", "/articles/0-2-0/",
   "/articles/0-2-1/",
+  "/articles/0-2-2/",
   "/articles/how-runeconomy-works/", "/getting-started/", "/skill/",
   "/how-it-works/", "/404.html",
 ];
@@ -192,9 +193,9 @@ if (release?.date !== "2026-11-14" || release?.dateLabel !== "November 14, 2026"
   failures.push("0.2.0a2 release date differs from the GitHub release");
 }
 const currentRelease = articles.find((article) => article.slug === "release-0-2-0");
-const preparedRelease = articles.find((article) => article.slug === "release-0-2-1");
+const preparedRelease = articles.find((article) => article.slug === "release-0-2-2");
 if (preparedRelease?.releaseVersion !== siteConfig.currentVersion || preparedRelease?.status !== "Prepared release") {
-  failures.push("0.2.1 article is not the prepared package release");
+  failures.push("current release article is not the prepared package release");
 }
 if (currentRelease?.status !== "Previous release") {
   failures.push("0.2.0 article is not marked as the previous package release");

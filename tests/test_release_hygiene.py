@@ -100,7 +100,7 @@ class ReleaseHygieneTests(unittest.TestCase):
         with (ROOT / "pyproject.toml").open("rb") as handle:
             project = tomllib.load(handle)["project"]
         self.assertEqual(project["name"], "runeconomy")
-        self.assertEqual(project["version"], "0.2.1")
+        self.assertEqual(project["version"], "0.2.2")
         self.assertIn(
             "Development Status :: 3 - Alpha",
             project["classifiers"],
@@ -117,6 +117,14 @@ class ReleaseHygieneTests(unittest.TestCase):
             self.assertIn("id-token: write", text)
             self.assertNotIn("secrets.", text)
             self.assertNotIn("password:", text)
+
+    def test_official_agent_skill_is_version_neutral(self) -> None:
+        skill_root = ROOT / "skills" / "runeconomy"
+        text = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(skill_root.rglob("*.md"))
+        )
+        self.assertNotRegex(text, r"runeconomy(?:==|>=|<=|~=)\d")
 
     def test_support_issue_template_requires_privacy_confirmation(self) -> None:
         template = (
