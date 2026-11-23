@@ -42,6 +42,11 @@ class EvidenceWorkflowTests(unittest.TestCase):
             assessment["capabilities"]["public_verification_claim"]["status"],
             "missing",
         )
+        self.assertIn("evidence_quality", assessment)
+        self.assertIn(
+            assessment["evidence_quality"]["fields"]["server_ttft"]["grade"],
+            {"directly_observed", "weakly_inferred", "unresolved"},
+        )
         self.assertEqual(len(bundle["analysis"]["findings"]), 1)
         finding = bundle["analysis"]["findings"][0]
         self.assertEqual(

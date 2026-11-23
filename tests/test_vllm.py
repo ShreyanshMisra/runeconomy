@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import io
 import json
 import pickle
 import threading
 import unittest
+import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest.mock import patch
 
 from runeconomy.vllm import VLLMClient, VLLMError, VLLMHTTPError
 
@@ -333,6 +336,53 @@ class InterruptedStreamTests(unittest.TestCase):
         with self.assertRaises(VLLMError):
             client.render({"model": "example/model", "input": "x"})
         self.assertEqual(notices, [])
+
+    def test_429_is_terminal_and_preserves_status(self) -> None:
+        error = urllib.error.HTTPError(
+            "https://private.invalid/tokenize",
+            429,
+            "rate limited",
+            {},
+            io.BytesIO(b'{"error":"busy"}'),
+        )
+        client = VLLMClient("https://private.invalid", startup_retry_seconds=30)
+        with patch("urllib.request.urlopen", side_effect=error):
+            with self.assertRaises(VLLMHTTPError) as caught:
+                client.tokenize_chat({"model": "example/model", "messages": []})
+        self.assertEqual(caught.exception.status, 429)
+
+    def test_503_is_retried_inside_explicit_startup_window(self) -> None:
+        class Response(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                self.close()
+
+        error = urllib.error.HTTPError(
+            "https://private.invalid/tokenize",
+            503,
+            "starting",
+            {},
+            io.BytesIO(b"starting"),
+        )
+        notices: list[float] = []
+        client = VLLMClient(
+            "https://private.invalid",
+            startup_retry_seconds=30,
+            on_startup_retry=notices.append,
+        )
+        with (
+            patch(
+                "urllib.request.urlopen",
+                side_effect=[error, Response(b'{"tokens":[1,2,3]}')],
+            ),
+            patch("runeconomy.startup.StartupRetry.wait", autospec=True),
+        ):
+            tokens = client.tokenize_chat(
+                {"model": "example/model", "messages": []}
+            )
+        self.assertEqual(tokens, (1, 2, 3))
 
 
 if __name__ == "__main__":

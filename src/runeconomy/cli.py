@@ -271,6 +271,12 @@ def _build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--base-url", required=True)
     doctor.add_argument("--api-key-env")
     doctor.add_argument("--timeout", type=float, default=10.0)
+    doctor.add_argument(
+        "--startup-timeout",
+        type=float,
+        default=0.0,
+        help="seconds to retry 502/503 and connection failures during cold start",
+    )
     doctor.add_argument("--format", choices=("human", "json"), default="human")
     doctor.add_argument("--json", dest="format", action="store_const", const="json")
 
@@ -294,6 +300,18 @@ def _build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--max-task-success-regression", type=float, default=0.05)
     compare.add_argument("--min-task-success-rate", type=float, default=0.8)
     compare.add_argument("--min-completed-rate", type=float, default=1.0)
+    compare.add_argument(
+        "--optimization-target",
+        choices=("successful-workflow-latency", "engine-change-latency"),
+        default="successful-workflow-latency",
+    )
+    compare.add_argument(
+        "--latency-semantics",
+        choices=("superiority", "noninferiority"),
+        default="superiority",
+    )
+    compare.add_argument("--max-latency-regression-ms", type=float, default=0.0)
+    compare.add_argument("--resume", action="store_true")
     compare.add_argument(
         "--require-verified",
         action="store_true",
@@ -329,6 +347,17 @@ def _build_parser() -> argparse.ArgumentParser:
     initialize.add_argument("--max-task-success-regression", type=float, default=0.05)
     initialize.add_argument("--min-task-success-rate", type=float, default=0.8)
     initialize.add_argument("--min-completed-rate", type=float, default=1.0)
+    initialize.add_argument(
+        "--optimization-target",
+        choices=("successful-workflow-latency", "engine-change-latency"),
+        default="successful-workflow-latency",
+    )
+    initialize.add_argument(
+        "--latency-semantics",
+        choices=("superiority", "noninferiority"),
+        default="superiority",
+    )
+    initialize.add_argument("--max-latency-regression-ms", type=float, default=0.0)
     initialize.add_argument("--cost-ceiling-usd", type=float)
     validate = experiment_commands.add_parser("validate", help="validate a manifest")
     validate.add_argument("manifest", type=Path)
@@ -615,10 +644,33 @@ def _format_evidence_assessment(payload: Mapping[str, Any]) -> str:
     lines = [
         "RunEconomy import",
         f"Imported {len(requests)} inference request(s), {len(spans)} work span(s), and {len(findings)} finding(s)",
-        "",
-        "Evidence capability                 Status      Evidence",
-        "----------------------------------  ----------  ----------------------------------------",
     ]
+    quality = assessment.get("evidence_quality")
+    if isinstance(quality, Mapping):
+        lines.extend(
+            [
+                f"Overall evidence grade: {quality.get('overall_grade', 'unresolved')}",
+                "",
+                "Field evidence                     Grade               Source",
+                "---------------------------------  ------------------  ----------------------------------------",
+            ]
+        )
+        fields = quality.get("fields", {})
+        if isinstance(fields, Mapping):
+            for name, field in fields.items():
+                if isinstance(field, Mapping):
+                    lines.append(
+                        f"{str(name).replace('_', ' ').title():<34} "
+                        f"{str(field.get('grade', 'unresolved')):<19} "
+                        f"{field.get('source', 'unknown')}"
+                    )
+    lines.extend(
+        [
+            "",
+            "Evidence capability                 Status      Evidence",
+            "----------------------------------  ----------  ----------------------------------------",
+        ]
+    )
     labels = {
         "basic_diagnosis": "Basic diagnosis",
         "structural_prompt_attribution": "Structural prompt attribution",
@@ -1032,10 +1084,19 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "doctor":
             try:
+                doctor_options: dict[str, Any] = {
+                    "api_key": _api_key(args.api_key_env),
+                    "timeout_seconds": args.timeout,
+                }
+                if args.startup_timeout:
+                    doctor_options.update(
+                        {
+                            "startup_retry_seconds": args.startup_timeout,
+                            "on_startup_retry": _startup_retry_notice,
+                        }
+                    )
                 capabilities = discover_vllm_capabilities(
-                    args.base_url,
-                    api_key=_api_key(args.api_key_env),
-                    timeout_seconds=args.timeout,
+                    args.base_url, **doctor_options
                 ).to_dict()
             except (BackendProbeError, ExperimentValidationError) as exc:
                 payload = _doctor_error_payload(exc)
@@ -1082,6 +1143,10 @@ def main(argv: list[str] | None = None) -> int:
                 max_task_success_regression=args.max_task_success_regression,
                 min_task_success_rate=args.min_task_success_rate,
                 min_completed_rate=args.min_completed_rate,
+                optimization_target=args.optimization_target.replace("-", "_"),
+                latency_semantics=args.latency_semantics,
+                max_latency_regression_ms=args.max_latency_regression_ms,
+                resume=args.resume,
             )
             _write_json(args.output, result)
             print(
@@ -1162,6 +1227,9 @@ def main(argv: list[str] | None = None) -> int:
                     max_task_success_regression=args.max_task_success_regression,
                     min_task_success_rate=args.min_task_success_rate,
                     min_completed_rate=args.min_completed_rate,
+                    optimization_target=args.optimization_target.replace("-", "_"),
+                    latency_semantics=args.latency_semantics,
+                    max_latency_regression_ms=args.max_latency_regression_ms,
                     cost_ceiling_usd=args.cost_ceiling_usd,
                 )
                 print(f"RunEconomy experiment init · Runnable agent-process workspace · {args.output}")
@@ -1250,6 +1318,7 @@ def main(argv: list[str] | None = None) -> int:
                     output_path=result_path,
                     artifacts_dir=artifacts_path,
                     workdir=Path.cwd(),
+                    resume=args.resume,
                 )
                 _write_json(result_path, result)
                 print(

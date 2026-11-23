@@ -163,10 +163,11 @@ def vllm_command() -> list[str]:
     },
     port=PORT,
     # Private Modal proxy authentication remains enabled.
-    # Modal Servers reject requests at zero replicas instead of cold-starting.
-    # Keep exactly one replica only for a validation window, then stop the app.
+    # Normal operation retains no warm GPU. An authenticated request can trigger
+    # a cold start; validation windows temporarily pin one container and restore
+    # this declared minimum in a finally block.
     max_containers=1,
-    min_containers=1,
+    min_containers=0,
     target_concurrency=1,
     scaledown_window=60,
     startup_timeout=10 * 60,

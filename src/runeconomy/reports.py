@@ -375,7 +375,7 @@ def _generic_summary(
 def _generic_outcomes(variants: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
     items: list[tuple[str, str]] = []
     for name in ("baseline", "candidate"):
-        outcomes = variants[name].get("outcomes", {})
+        outcomes = variants[name].get("outcomes", variants[name])
         if not isinstance(outcomes, Mapping):
             outcomes = {}
         count = outcomes.get("task_success_count")
@@ -451,6 +451,24 @@ def _generic_technical_sections(
         ),
         ("Generated content", "Generated output is not embedded in this report."),
     )
+    evidence_quality = result.get("evidence_quality")
+    evidence_rows: tuple[tuple[str, str], ...]
+    if isinstance(evidence_quality, Mapping):
+        raw_fields = evidence_quality.get("fields", {})
+        field_rows = tuple(
+            (
+                str(name).replace("_", " ").title(),
+                f"{item.get('grade', 'unresolved')}: {item.get('source', 'unknown')}",
+            )
+            for name, item in sorted(raw_fields.items())
+            if isinstance(item, Mapping)
+        ) if isinstance(raw_fields, Mapping) else ()
+        evidence_rows = (
+            ("Overall grade", str(evidence_quality.get("overall_grade", "unresolved"))),
+            *field_rows,
+        )
+    else:
+        evidence_rows = (("Overall grade", "Not recorded by this result schema."),)
     limitations = result.get("limitations", [])
     limitation_rows = (
         (
@@ -473,6 +491,7 @@ def _generic_technical_sections(
             ("Acceptance checks", check_rows),
             ("Statistical details", effect_rows),
             ("Environment and provenance", environment_rows),
+            ("Evidence quality", evidence_rows),
             ("Evidence integrity", integrity_rows),
             ("Limitations", limitation_rows),
         )
@@ -657,7 +676,12 @@ def _build_generic_view(result: Mapping[str, Any]) -> ReportView:
     _, latency = _metric_effect(effects, "workflow_latency_ms", "total_latency_ms")
     pair_count = latency.get("paired_count", cached.get("paired_count", "the recorded"))
     evaluated = sum(
-        int(variants[name].get("outcomes", {}).get("evaluated_count", 0) or 0)
+        int(
+            variants[name]
+            .get("outcomes", variants[name])
+            .get("evaluated_count", 0)
+            or 0
+        )
         for name in ("baseline", "candidate")
     )
     badges = tuple(

@@ -14,6 +14,7 @@ import json
 import math
 import re
 import statistics
+import subprocess
 from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
@@ -48,6 +49,13 @@ FROZEN_FILES = {
         "b3885985bfa88510d901600b28e3d6341427b2390b3dedb2c16ccd124e68e723",
     ),
 }
+
+# The public proof was executed with this exact comparison implementation.
+# Later product changes must not reinterpret the consumed workload.  Read the
+# historical Git blob instead of the mutable working-tree module when verifying
+# the frozen implementation hash.
+FROZEN_COMPARISON_REVISION = "4b04964352c4810a451df04487c7a688ea88702e"
+FROZEN_COMPARISON_PATH = "src/runeconomy/comparison.py"
 
 FORBIDDEN_KEYS = {
     "attempts",
@@ -247,7 +255,25 @@ def build(result_path: Path, metadata_path: Path, dataset_path: Path) -> dict[st
 
     frozen_hashes: dict[str, str] = {}
     for name, (path, expected) in FROZEN_FILES.items():
-        observed = _sha256(path)
+        if name == "comparison":
+            try:
+                source = subprocess.run(
+                    [
+                        "git",
+                        "show",
+                        f"{FROZEN_COMPARISON_REVISION}:{FROZEN_COMPARISON_PATH}",
+                    ],
+                    cwd=ROOT,
+                    check=True,
+                    capture_output=True,
+                ).stdout
+            except (OSError, subprocess.CalledProcessError) as exc:
+                raise ValueError(
+                    "cannot read the frozen comparison implementation from Git"
+                ) from exc
+            observed = hashlib.sha256(source).hexdigest()
+        else:
+            observed = _sha256(path)
         if observed != expected:
             raise ValueError(
                 f"frozen {name} hash changed: expected {expected}, observed {observed}"

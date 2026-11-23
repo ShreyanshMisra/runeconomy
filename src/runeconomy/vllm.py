@@ -17,6 +17,8 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from typing import Any, Callable, Iterator, Mapping
 
+from .startup import StartupRetry
+
 
 class VLLMError(RuntimeError):
     """An actionable error returned by, or while contacting, vLLM."""
@@ -178,6 +180,8 @@ class VLLMClient:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
+        if startup_retry_seconds < 0:
+            raise VLLMError("startup_retry_seconds must be non-negative")
         self.startup_retry_seconds = startup_retry_seconds
         if api_dialect not in {"responses", "chat_completions"}:
             raise ValueError("api_dialect must be 'responses' or 'chat_completions'")
@@ -198,15 +202,10 @@ class VLLMClient:
             headers=self._headers(),
             method="POST",
         )
-        retry_deadline = time.monotonic() + self.startup_retry_seconds
-        notified = False
-
-        def wait_for_startup() -> None:
-            nonlocal notified
-            if not notified and self._on_startup_retry is not None:
-                self._on_startup_retry(max(retry_deadline - time.monotonic(), 0.0))
-            notified = True
-            time.sleep(2)
+        startup = StartupRetry(
+            self.startup_retry_seconds,
+            on_retry=self._on_startup_retry,
+        )
 
         while True:
             try:
@@ -215,15 +214,15 @@ class VLLMClient:
                         request, timeout=self.timeout_seconds
                     )
             except urllib.error.HTTPError as exc:
-                if exc.code in {502, 503} and time.monotonic() < retry_deadline:
+                if exc.code in {502, 503} and startup.available():
                     exc.close()
-                    wait_for_startup()
+                    startup.wait()
                     continue
                 body = exc.read(2048).decode("utf-8", errors="replace")
                 raise VLLMHTTPError(path, exc.code, body) from exc
             except urllib.error.URLError as exc:
-                if time.monotonic() < retry_deadline:
-                    wait_for_startup()
+                if startup.available():
+                    startup.wait()
                     continue
                 raise VLLMError(
                     f"cannot reach vLLM at {self.base_url}: {exc.reason}"

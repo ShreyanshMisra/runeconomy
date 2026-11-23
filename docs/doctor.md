@@ -7,7 +7,8 @@ still unknown, then recommends the safest available experiment mode.
 ```bash
 runeconomy doctor \
   --base-url "$VLLM_BASE_URL" \
-  --api-key-env VLLM_API_KEY
+  --api-key-env VLLM_API_KEY \
+  --startup-timeout 600
 ```
 
 ## What doctor reads
@@ -113,7 +114,10 @@ and JSON output use the same failure categories and next actions.
 - Authentication: set the key in an environment variable and pass its name
   through `--api-key-env`.
 - Connection: verify the OpenAI-compatible server root and network access.
-- Timeout: increase `--timeout` only after confirming the server is healthy.
+- Cold start: set `--startup-timeout` to a bounded window. Doctor reuses the
+  same 502/503 and connection retry policy as capture and static experiment
+  execution, while 429 and other terminal responses fail immediately.
+- Request timeout: increase `--timeout` only after confirming the server is healthy.
 - Missing API dialect: expose `/v1/chat/completions` or `/v1/responses`.
 - Missing exact-token path: expose `/tokenize` or supported rendering.
 - Missing reset: use warm-cache or salt isolation. Do not expose a development

@@ -80,6 +80,24 @@ def _paired_feasibility(
     best_lower = best["one_sided_lower_bound"]
     max_baseline_only = None
     scenarios = []
+
+    def minimum_pairs(baseline_only: int) -> int | None:
+        for candidate_pairs in range(max(1, baseline_only), 5001):
+            outcomes = [(True, False)] * baseline_only + [
+                (True, True)
+            ] * (candidate_pairs - baseline_only)
+            candidate_statistics = _paired_success_statistics(
+                outcomes, confidence=confidence
+            )
+            candidate_lower = candidate_statistics["one_sided_lower_bound"]
+            if candidate_lower is not None and candidate_lower >= -margin:
+                return candidate_pairs
+        return None
+
+    minimum_pairs_by_baseline_only = {
+        str(baseline_only): minimum_pairs(baseline_only)
+        for baseline_only in (0, 1, 2)
+    }
     for baseline_only in range(pairs + 1):
         outcomes = [(True, False)] * baseline_only + [
             (True, True)
@@ -96,6 +114,9 @@ def _paired_feasibility(
                     "candidate_only": 0,
                     "one_sided_lower_bound": lower,
                     "passes": passes,
+                    "minimum_pairs_with_zero_candidate_only": (
+                        minimum_pairs_by_baseline_only.get(str(baseline_only))
+                    ),
                 }
             )
     return {
@@ -107,6 +128,9 @@ def _paired_feasibility(
             best_lower is not None and best_lower >= -margin
         ),
         "max_baseline_only_with_zero_candidate_only": max_baseline_only,
+        "minimum_pairs_by_baseline_only_with_zero_candidate_only": (
+            minimum_pairs_by_baseline_only
+        ),
         "scenario_table": scenarios,
         "discordance_explanation": (
             "Candidate-only outcomes improve the paired difference. Baseline-only "
@@ -343,6 +367,13 @@ def plan_experiment(path: Path) -> dict[str, Any]:
         assert isinstance(acceptance, Mapping)
         repetitions = int(execution.get("repetitions", 1))
         primary_metric = "workflow_latency_ms"
+        optimization_target = str(
+            acceptance.get("optimization_target", "successful_workflow_latency")
+        )
+        latency_semantics = str(acceptance.get("latency_semantics", "superiority"))
+        max_latency_regression_ms = float(
+            acceptance.get("max_latency_regression_ms", 0.0)
+        )
         min_success = float(acceptance.get("min_task_success_rate", 0.8))
         margin = float(acceptance.get("max_task_success_regression", 0.05))
         unit_name = "task attempt identified by (task_id, repetition)"
@@ -353,6 +384,9 @@ def plan_experiment(path: Path) -> dict[str, Any]:
         ids_unique = True
         repetitions = parsed.execution.repetitions
         primary_metric = parsed.acceptance.primary_metric
+        optimization_target = parsed.acceptance.optimization_target
+        latency_semantics = "superiority"
+        max_latency_regression_ms = 0.0
         min_success = parsed.acceptance.min_task_success_rate
         margin = parsed.acceptance.max_task_success_regression
         unit_name = "paired case repetition"
@@ -408,6 +442,19 @@ def plan_experiment(path: Path) -> dict[str, Any]:
                 "acceptance.max_task_success_regression",
                 "The planned pairs cannot clear the paired exact non-inferiority gate even with complete agreement.",
                 "Increase the frozen sample or predeclare a scientifically justified margin.",
+            )
+        )
+    elif paired["max_baseline_only_with_zero_candidate_only"] == 0:
+        required_for_one = paired[
+            "minimum_pairs_by_baseline_only_with_zero_candidate_only"
+        ]["1"]
+        issues.append(
+            _issue(
+                "runeconomy.plan.paired_gate_fragile",
+                "warning",
+                "acceptance.max_task_success_regression",
+                "The planned quality gate passes only with zero baseline-only outcomes; one candidate quality loss would be inconclusive under the exact paired bound.",
+                f"Plan at least {required_for_one} pairs to tolerate one baseline-only outcome with zero offsetting candidate-only outcomes, or freeze the current limitation explicitly.",
             )
         )
 
@@ -518,6 +565,18 @@ def plan_experiment(path: Path) -> dict[str, Any]:
                 "design.planning.identity_change",
                 "A model or backend identity change is not named as the intervention.",
                 "Declare the identity change as the intervention or keep identity fixed.",
+            )
+        )
+    if optimization_target == "engine_change_latency" and (
+        identity_change is not True or "backend_identity" not in variables
+    ):
+        issues.append(
+            _issue(
+                "runeconomy.plan.engine_change_not_declared",
+                "error",
+                "design.planning.intervention_variables",
+                "The engine-change latency target requires backend identity to be the declared intervention.",
+                "Set identity_change=true and declare exactly backend_identity before calibration.",
             )
         )
 
@@ -737,6 +796,10 @@ def plan_experiment(path: Path) -> dict[str, Any]:
         },
         "performance": {
             "primary_metric": primary_metric,
+            "optimization_target": optimization_target,
+            "latency_semantics": latency_semantics,
+            "max_latency_regression_ms": max_latency_regression_ms,
+            "latency_population": "task pairs where both variants succeeded",
             "metric_role": metric_role,
             "conditional_on_both_variants_succeeding": True,
             "task_failures_reduce_analyzable_pairs": True,

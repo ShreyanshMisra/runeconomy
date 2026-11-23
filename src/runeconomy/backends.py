@@ -9,7 +9,9 @@ import urllib.parse
 import urllib.request
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Callable
+
+from .startup import StartupRetry
 
 
 class BackendProbeError(RuntimeError):
@@ -268,6 +270,7 @@ def _json_get(
     *,
     api_key: str | None,
     timeout_seconds: float,
+    startup: StartupRetry | None = None,
 ) -> tuple[int, Any]:
     headers = {"Accept": "application/json"}
     if api_key:
@@ -275,48 +278,56 @@ def _json_get(
     request = urllib.request.Request(
         f"{base_url.rstrip('/')}{path}", headers=headers, method="GET"
     )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            return response.status, json.load(response)
-    except urllib.error.HTTPError as exc:
-        exc.read(2048)
-        if exc.code in {401, 403}:
+    retry = startup or StartupRetry(0)
+    while True:
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                return response.status, json.load(response)
+        except urllib.error.HTTPError as exc:
+            exc.read(2048)
+            if exc.code in {502, 503} and retry.available():
+                retry.wait()
+                continue
+            if exc.code in {401, 403}:
+                raise BackendProbeError(
+                    f"the server rejected the {path} metadata request with HTTP {exc.code}",
+                    category="authentication",
+                    next_action=(
+                        "Set the API key in an environment variable and rerun with "
+                        "`--api-key-env NAME`; verify that the key may access metadata endpoints."
+                    ),
+                ) from exc
+            return exc.code, None
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            ConnectionError,
+            http.client.HTTPException,
+        ) as exc:
+            if retry.available():
+                retry.wait()
+                continue
+            reason = getattr(exc, "reason", exc)
+            timed_out = isinstance(reason, TimeoutError)
             raise BackendProbeError(
-                f"the server rejected the {path} metadata request with HTTP {exc.code}",
-                category="authentication",
+                "the vLLM endpoint did not respond before the timeout"
+                if timed_out
+                else "the vLLM endpoint could not be reached",
+                category="timeout" if timed_out else "connection",
                 next_action=(
-                    "Set the API key in an environment variable and rerun with "
-                    "`--api-key-env NAME`; verify that the key may access metadata endpoints."
+                    "Increase `--timeout`, verify the server is running, and rerun `runeconomy doctor`."
+                    if timed_out
+                    else "Verify the base URL, network access, and server process, then rerun `runeconomy doctor`."
                 ),
             ) from exc
-        return exc.code, None
-    except (
-        urllib.error.URLError,
-        TimeoutError,
-        ConnectionError,
-        http.client.HTTPException,
-    ) as exc:
-        reason = getattr(exc, "reason", exc)
-        timed_out = isinstance(reason, TimeoutError)
-        raise BackendProbeError(
-            "the vLLM endpoint did not respond before the timeout"
-            if timed_out
-            else "the vLLM endpoint could not be reached",
-            category="timeout" if timed_out else "connection",
-            next_action=(
-                "Increase `--timeout`, verify the server is running, and rerun `runeconomy doctor`."
-                if timed_out
-                else "Verify the base URL, network access, and server process, then rerun `runeconomy doctor`."
-            ),
-        ) from exc
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise BackendProbeError(
-            f"the server returned malformed JSON for {path}",
-            category="malformed_response",
-            next_action=(
-                "Confirm the URL points to an OpenAI-compatible vLLM server rather than a proxy login or HTML error page."
-            ),
-        ) from exc
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise BackendProbeError(
+                f"the server returned malformed JSON for {path}",
+                category="malformed_response",
+                next_action=(
+                    "Confirm the URL points to an OpenAI-compatible vLLM server rather than a proxy login or HTML error page."
+                ),
+            ) from exc
 
 
 def _post_probe(
@@ -449,8 +460,17 @@ def discover_vllm_capabilities(
     *,
     api_key: str | None = None,
     timeout_seconds: float = 10.0,
+    startup_retry_seconds: float = 0.0,
+    on_startup_retry: Callable[[float], None] | None = None,
 ) -> BackendCapabilities:
     """Inspect public metadata endpoints; never generate text or clear caches."""
+
+    if startup_retry_seconds < 0:
+        raise BackendProbeError(
+            "startup retry seconds must be non-negative",
+            category="configuration",
+            next_action="Use a non-negative `--startup-timeout` value.",
+        )
 
     parsed = urllib.parse.urlsplit(base_url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
@@ -472,14 +492,28 @@ def discover_vllm_capabilities(
             next_action="Pass the server root or reverse-proxy path without query parameters or a fragment.",
         )
 
+    startup = StartupRetry(
+        startup_retry_seconds,
+        on_retry=on_startup_retry,
+    )
     openapi_status, openapi = _json_get(
-        base_url, "/openapi.json", api_key=api_key, timeout_seconds=timeout_seconds
+        base_url,
+        "/openapi.json",
+        api_key=api_key,
+        timeout_seconds=timeout_seconds,
+        startup=startup,
     )
     if openapi_status >= 500:
         raise BackendProbeError(
             f"the server returned HTTP {openapi_status} for OpenAPI metadata",
             category="server_error",
             next_action="Inspect the vLLM or reverse-proxy logs, correct the server error, and rerun `runeconomy doctor`.",
+        )
+    if openapi_status == 429:
+        raise BackendProbeError(
+            "the server rate-limited the OpenAPI metadata request with HTTP 429",
+            category="rate_limit",
+            next_action="Wait for the declared retry window or reduce probe frequency, then rerun `runeconomy doctor`.",
         )
     openapi_available = openapi_status == 200 and isinstance(openapi, Mapping)
     if openapi_status == 200 and not isinstance(openapi, Mapping):
@@ -494,7 +528,11 @@ def discover_vllm_capabilities(
     version: str | None = None
     try:
         status, payload = _json_get(
-            base_url, "/version", api_key=api_key, timeout_seconds=timeout_seconds
+            base_url,
+            "/version",
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
+            startup=startup,
         )
         if status == 200 and isinstance(payload, Mapping):
             value = payload.get("version")
@@ -505,7 +543,11 @@ def discover_vllm_capabilities(
     model_ids: list[str] = []
     try:
         status, payload = _json_get(
-            base_url, "/v1/models", api_key=api_key, timeout_seconds=timeout_seconds
+            base_url,
+            "/v1/models",
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
+            startup=startup,
         )
         if status == 200 and isinstance(payload, Mapping):
             data = payload.get("data")
