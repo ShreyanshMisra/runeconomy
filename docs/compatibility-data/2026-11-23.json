@@ -1,0 +1,156 @@
+{
+  "schema_version": "0.1",
+  "date": "2026-11-23",
+  "scope": "Live compatibility smoke evidence only, not a performance benchmark or universal support claim.",
+  "phase_cost_usd": {
+    "actual": 0.58168989,
+    "source": "Modal billing report for the 2026-11-23 06:00 and 07:00 UTC intervals",
+    "resources": {
+      "A10G": 0.25723077,
+      "L40S": 0.20682614,
+      "CPU": 0.03238737,
+      "Memory": 0.0108374,
+      "Network Egress": 0.07440821
+    }
+  },
+  "required_checks": [
+    "authenticated_endpoint",
+    "server_id_discovered",
+    "backend_version",
+    "model_identity",
+    "tokenize",
+    "chat_prompt_render",
+    "responses_prompt_render",
+    "prefix_cache_reset",
+    "chat_completions_nonstream",
+    "chat_completions_stream",
+    "responses_nonstream",
+    "responses_stream",
+    "cached_tokens_reported",
+    "cached_tokens_positive_on_repeat",
+    "server_ttft_reported",
+    "checkpoint_resume"
+  ],
+  "combinations": [
+    {
+      "id": "vllm-0.33.0-qwen2.5-1.5b-a10",
+      "status": "passed",
+      "runeconomy_deployment_commit": "1e6e50247902d252ec0ce2d0e6b749cda056e310",
+      "runeconomy_driver_commit": "632a7b4354c3281dae3630b1ddcebaaa036b3dee",
+      "vllm_version": "0.33.0",
+      "transformers_version": "5.16.1",
+      "huggingface_hub_version": "1.31.0",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "model_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+      "gpu": "A10G",
+      "cold_start_seconds": 52.385063000023365,
+      "api_surfaces": {
+        "chat_completions_nonstream": true,
+        "chat_completions_stream": true,
+        "responses_nonstream": true,
+        "responses_stream": true,
+        "tokenize": true,
+        "chat_prompt_render": true,
+        "responses_prompt_render": true,
+        "prefix_cache_reset": true
+      },
+      "evidence_fields": {
+        "cached_tokens": "directly_observed",
+        "server_ttft": "directly_observed",
+        "backend_version": "directly_observed",
+        "served_model": "directly_observed",
+        "model_revision": "reliably_derived_from_pinned_deployment",
+        "tokenizer_template": "reliably_derived_from_pinned_model",
+        "gpu": "directly_observed_from_modal_server"
+      },
+      "checkpoint_resume": "passed after a planned interruption",
+      "raw_evidence_sha256": "sha256:637e2288f4d39921b1eb68f7c05d6f889b74b1e99fb2b1f1f51b2c2c5933b682",
+      "checkpoint_sha256": "sha256:a583c98a90738a0fb00822405847f396deebbaf2795c0ce69e53fd84a8de8fb2",
+      "cold_start_evidence_sha256": "sha256:dc3128bec73bdc87bf1d66fadabc094cf469578c075a9ae1553b749eec87c9b2",
+      "limitations": [
+        "The final passing probe reused a warm container. Cold-start time comes from the immediately preceding identical pinned deployment attempt.",
+        "Client TTFT includes Modal's experimental authenticated curl path.",
+        "No throughput or performance-superiority claim was tested."
+      ]
+    },
+    {
+      "id": "vllm-0.34.0-qwen2.5-1.5b-a10",
+      "status": "passed",
+      "runeconomy_deployment_commit": "632a7b4354c3281dae3630b1ddcebaaa036b3dee",
+      "runeconomy_driver_commit": "632a7b4354c3281dae3630b1ddcebaaa036b3dee",
+      "vllm_version": "0.34.0",
+      "transformers_version": "5.18.0",
+      "huggingface_hub_version": "2.0.0",
+      "model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "model_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+      "gpu": "A10G",
+      "cold_start_seconds": 160.63459558301838,
+      "api_surfaces": {
+        "chat_completions_nonstream": true,
+        "chat_completions_stream": true,
+        "responses_nonstream": true,
+        "responses_stream": true,
+        "tokenize": true,
+        "chat_prompt_render": true,
+        "responses_prompt_render": true,
+        "prefix_cache_reset": true
+      },
+      "evidence_fields": {
+        "cached_tokens": "directly_observed",
+        "server_ttft": "directly_observed",
+        "backend_version": "directly_observed",
+        "served_model": "directly_observed",
+        "model_revision": "reliably_derived_from_pinned_deployment",
+        "tokenizer_template": "reliably_derived_from_pinned_model",
+        "gpu": "directly_observed_from_modal_server"
+      },
+      "checkpoint_resume": "passed after a planned interruption",
+      "raw_evidence_sha256": "sha256:fe9a4d993c4a33b9e1f6dc88b59ce8b3049b8417ade18769aee9175c183da114",
+      "checkpoint_sha256": "sha256:a7a06ede6f056bbfdded565d7ba928fe45e3d462818f6b8488cec5635d60216a",
+      "limitations": [
+        "Client TTFT includes Modal's experimental authenticated curl path.",
+        "No throughput or performance-superiority claim was tested."
+      ]
+    },
+    {
+      "id": "vllm-0.34.0-qwen2.5-14b-l40s",
+      "status": "passed",
+      "runeconomy_deployment_commit": "33b3fc394d3ce88c4384ec96c642aed02f59698f",
+      "runeconomy_driver_commit": "33b3fc394d3ce88c4384ec96c642aed02f59698f",
+      "vllm_version": "0.34.0",
+      "transformers_version": "5.18.0",
+      "huggingface_hub_version": "2.0.0",
+      "model": "Qwen/Qwen2.5-14B-Instruct",
+      "model_revision": "cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8",
+      "gpu": "L40S",
+      "cold_start_seconds": 309.2896566669806,
+      "api_surfaces": {
+        "chat_completions_nonstream": true,
+        "chat_completions_stream": true,
+        "responses_nonstream": true,
+        "responses_stream": true,
+        "tokenize": true,
+        "chat_prompt_render": true,
+        "responses_prompt_render": true,
+        "prefix_cache_reset": true
+      },
+      "evidence_fields": {
+        "cached_tokens": "directly_observed",
+        "server_ttft": "directly_observed",
+        "backend_version": "directly_observed",
+        "served_model": "directly_observed",
+        "model_revision": "reliably_derived_from_pinned_deployment",
+        "tokenizer_template": "reliably_derived_from_pinned_model",
+        "gpu": "directly_observed_from_modal_server"
+      },
+      "checkpoint_resume": "passed after a planned interruption",
+      "raw_evidence_sha256": "sha256:c2f5aea19de6f87ac7952aed33bc57cb54eac08a8e3e4b0b635023dc65e80bd4",
+      "checkpoint_sha256": "sha256:001b2f87b2a9c36a636d6fb2f3034c2904574ea30d19d5369654c99659bcb884",
+      "limitations": [
+        "Client TTFT includes Modal's experimental authenticated curl path.",
+        "The first-use FlashInfer sampling module extended cold start.",
+        "No throughput or performance-superiority claim was tested."
+      ]
+    }
+  ]
+}

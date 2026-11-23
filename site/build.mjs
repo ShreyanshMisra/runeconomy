@@ -102,6 +102,14 @@ const referencePages = [
     kind: "reference",
   },
   {
+    route: "compatibility",
+    source: "docs/compatibility.md",
+    title: "Live vLLM compatibility",
+    description: "A dated compatibility contract containing only combinations tested live.",
+    active: "start",
+    kind: "reference",
+  },
+  {
     route: "alpha",
     source: "docs/alpha-release.md",
     title: "Alpha boundaries",
@@ -158,6 +166,7 @@ routeBySource.set("trace-format.md", "/traces/");
 routeBySource.set("evidence-formats.md", "/evidence/");
 routeBySource.set("connectors.md", "/connectors/");
 routeBySource.set("privacy.md", "/privacy/");
+routeBySource.set("compatibility.md", "/compatibility/");
 routeBySource.set("agent-skill.md", "/agents/");
 routeBySource.set("getting-started.md", "/start/");
 routeBySource.set("how-it-works.md", "/articles/how-runeconomy-works/");
