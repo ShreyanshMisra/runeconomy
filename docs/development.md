@@ -53,6 +53,11 @@ failure, and interruption all restore that setting. See
 [Modal validation windows](modal-validation.md) for the workflow, verification,
 and manual emergency shutdown procedure.
 
+Only combinations actually exercised live belong on the dated
+[compatibility page](compatibility.md). Its checked-in Markdown is generated
+from the sanitized evidence record and deliberately excludes endpoints,
+Server IDs, credentials, and private response content.
+
 The opt-in `Real vLLM integration` GitHub workflow only contacts an
 already-running endpoint configured in the protected `vllm-integration`
 environment. It never provisions GPU resources and runs only when manually

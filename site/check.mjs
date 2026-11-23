@@ -39,7 +39,7 @@ const routes = new Set(files.map(routeFor));
 const requiredRoutes = [
   "/", "/start/", "/doctor/", "/agents/", "/proof/", "/experiments/",
   "/compare/", "/traces/", "/cli/", "/troubleshooting/", "/alpha/",
-  "/evidence/", "/connectors/", "/privacy/",
+  "/evidence/", "/connectors/", "/privacy/", "/compatibility/",
   "/articles/0-2-0a2/", "/articles/0-2-0a3/", "/articles/0-2-0/",
   "/articles/0-2-1/",
   "/articles/how-runeconomy-works/", "/getting-started/", "/skill/",

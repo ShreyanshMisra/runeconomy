@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -58,6 +61,43 @@ class ModalDeploymentTests(unittest.TestCase):
         assert server_decorator is not None
         self.assertRegex(server_decorator.group(1), r"\bmin_containers\s*=\s*0\b")
         self.assertNotIn("reject requests at zero replicas", source)
+
+    def test_compatibility_deployments_accept_explicit_pinned_overrides(self) -> None:
+        source = Path(__file__).parents[1] / "deploy" / "modal_vllm.py"
+        environment = {
+            **os.environ,
+            "RUNECONOMY_MODAL_APP_NAME": "compat-test",
+            "RUNECONOMY_MODEL_NAME": "example/model",
+            "RUNECONOMY_MODEL_REVISION": "revision",
+            "RUNECONOMY_VLLM_VERSION": "9.9.9",
+            "RUNECONOMY_GPU": "L40S",
+            "RUNECONOMY_MAX_MODEL_LEN": "4096",
+        }
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import importlib.util,json;"
+                    f"s=importlib.util.spec_from_file_location('deployment',{str(source)!r});"
+                    "m=importlib.util.module_from_spec(s);s.loader.exec_module(m);"
+                    "print(json.dumps([m.APP_NAME,m.MODEL_NAME,m.MODEL_REVISION,"
+                    "m.VLLM_VERSION,m.GPU,m.MAX_MODEL_LEN]))"
+                ),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        self.assertEqual(
+            completed.stdout.strip(),
+            '["compat-test", "example/model", "revision", "9.9.9", "L40S", 4096]',
+        )
+
+        source_text = source.read_text(encoding="utf-8")
+        self.assertIn('"RUNECONOMY_MODEL_NAME": MODEL_NAME', source_text)
+        self.assertEqual(source_text.count("**RUNTIME_CONFIG_ENV"), 2)
 
 
 if __name__ == "__main__":

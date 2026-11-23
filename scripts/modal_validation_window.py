@@ -61,7 +61,20 @@ def resolve_server(
         raise RuntimeError("Modal App discovery did not return a Server ID")
     summary = entry.get("summary")
     url = summary.get("web_url") if isinstance(summary, dict) else None
-    return entry["id"], url if isinstance(url, str) and url else None
+    if not isinstance(url, str) or not url:
+        server = _required_json(
+            runner,
+            ["uv", "run", "modal", "server", "info", entry["id"], "--json"],
+            action="Modal Server discovery",
+        )
+        if server.get("object_id") != entry["id"]:
+            raise RuntimeError("Modal Server discovery returned a different Server ID")
+        if server.get("unauthenticated") is not False:
+            raise RuntimeError("the selected Modal Server must require proxy authentication")
+        url = server.get("server_url")
+    if not isinstance(url, str) or not url.startswith("https://"):
+        raise RuntimeError("Modal Server discovery did not return an HTTPS endpoint")
+    return entry["id"], url
 
 
 def autoscaler_minimum(server_id: str, runner: Runner = _run) -> int:
@@ -81,6 +94,8 @@ def autoscaler_minimum(server_id: str, runner: Runner = _run) -> int:
     )
     settings = payload.get("current_settings")
     minimum = settings.get("min_containers") if isinstance(settings, dict) else None
+    if minimum is None:
+        return 0
     if not isinstance(minimum, int) or isinstance(minimum, bool):
         raise RuntimeError("Modal autoscaler inspection omitted min_containers")
     return minimum
