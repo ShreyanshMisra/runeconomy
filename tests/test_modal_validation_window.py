@@ -27,6 +27,13 @@ class _Runner:
                 },
             }
             return subprocess.CompletedProcess(command, 0, json.dumps(output), "")
+        if command[3:5] == ["server", "info"]:
+            output = {
+                "object_id": "fu-private",
+                "server_url": "https://private.invalid",
+                "unauthenticated": False,
+            }
+            return subprocess.CompletedProcess(command, 0, json.dumps(output), "")
         if "autoscaler" in command and "update" in command:
             self.minimum = int(command[-1])
             return subprocess.CompletedProcess(command, 0, "", "")
@@ -104,6 +111,24 @@ class ModalValidationWindowTests(unittest.TestCase):
                 runner=interrupted,
             )
         self.assertEqual(runner.minimum, 0)
+
+    def test_modal_default_null_minimum_is_interpreted_as_zero(self) -> None:
+        runner = _Runner()
+
+        def default_settings(command):
+            result = runner(command)
+            if "autoscaler" in command and "settings" in command:
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    json.dumps({"current_settings": {"min_containers": None}}),
+                    "",
+                )
+            return result
+
+        from scripts.modal_validation_window import autoscaler_minimum
+
+        self.assertEqual(autoscaler_minimum("fu-private", default_settings), 0)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ The server uses Modal's proxy authentication (enabled by default). Never set
 
 from __future__ import annotations
 
+import os
 import subprocess
 import time
 import urllib.request
@@ -14,18 +15,28 @@ import modal
 
 from runeconomy.backends import DEFAULT_BENCHMARK_FLAGS, missing_vllm_flags
 
-APP_NAME = "runeconomy-vllm"
-MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
-MODEL_REVISION = "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
-VLLM_VERSION = "0.33.0"
-TRANSFORMERS_VERSION = "5.16.1"
-HUGGINGFACE_HUB_VERSION = "1.31.0"
+APP_NAME = os.environ.get("RUNECONOMY_MODAL_APP_NAME", "runeconomy-vllm")
+MODEL_NAME = os.environ.get(
+    "RUNECONOMY_MODEL_NAME", "Qwen/Qwen2.5-1.5B-Instruct"
+)
+MODEL_REVISION = os.environ.get(
+    "RUNECONOMY_MODEL_REVISION", "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
+)
+VLLM_VERSION = os.environ.get("RUNECONOMY_VLLM_VERSION", "0.33.0")
+TRANSFORMERS_VERSION = os.environ.get(
+    "RUNECONOMY_TRANSFORMERS_VERSION", "5.16.1"
+)
+HUGGINGFACE_HUB_VERSION = os.environ.get(
+    "RUNECONOMY_HUGGINGFACE_HUB_VERSION", "1.31.0"
+)
 
-GPU = "A10"
+GPU = os.environ.get("RUNECONOMY_GPU", "A10")
 PORT = 8000
 BLOCK_SIZE = 16
-MAX_MODEL_LEN = 8192
-GPU_MEMORY_UTILIZATION = 0.85
+MAX_MODEL_LEN = int(os.environ.get("RUNECONOMY_MAX_MODEL_LEN", "8192"))
+GPU_MEMORY_UTILIZATION = float(
+    os.environ.get("RUNECONOMY_GPU_MEMORY_UTILIZATION", "0.85")
+)
 
 HF_CACHE_PATH = "/root/.cache/huggingface"
 VLLM_CACHE_PATH = "/root/.cache/vllm"
@@ -38,13 +49,26 @@ app = modal.App(APP_NAME)
 # retained so the brand change does not discard downloaded model and compilation
 # caches.
 hf_cache = modal.Volume.from_name(
-    "agent-inference-doctor-hf-cache", create_if_missing=True, version=2
+    os.environ.get(
+        "RUNECONOMY_HF_CACHE_VOLUME", "agent-inference-doctor-hf-cache"
+    ),
+    create_if_missing=True,
+    version=2,
 )
 vllm_cache = modal.Volume.from_name(
-    "agent-inference-doctor-vllm-cache", create_if_missing=True, version=2
+    os.environ.get(
+        "RUNECONOMY_VLLM_CACHE_VOLUME", "agent-inference-doctor-vllm-cache"
+    ),
+    create_if_missing=True,
+    version=2,
 )
 flashinfer_cache = modal.Volume.from_name(
-    "agent-inference-doctor-flashinfer-cache", create_if_missing=True, version=2
+    os.environ.get(
+        "RUNECONOMY_FLASHINFER_CACHE_VOLUME",
+        "agent-inference-doctor-flashinfer-cache",
+    ),
+    create_if_missing=True,
+    version=2,
 )
 
 download_image = (
