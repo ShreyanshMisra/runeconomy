@@ -1,0 +1,178 @@
+{
+  "artifact_type": "runeconomy.proof_2_aggregate_outcome",
+  "schema_version": "0.1",
+  "recorded_date": "2026-11-23",
+  "publication_status": "aggregate_record_only",
+  "freeze": {
+    "commit": "3159f74023b666ace384896196c08422b5da62a5",
+    "record_path": "docs/proof-2-freeze-record.json",
+    "record_sha256": "sha256:61cd37d718d4a54c40857b9a6335ea7f8fa4e6ae5b96a9e1e69aae763aa014ec",
+    "contract_sha256": "sha256:b349073a6f93a9391d628f9abe38d49120cbd0f4b5cc4202f190f924da6a9816",
+    "dataset_sha256": "sha256:c945014bc7aed8cd6164b9c12da060a05880bea35a2ed29850e27612aa9924b2",
+    "evaluator_sha256": "sha256:8de9593491d146f7d81126f911165d85ae9353b13f7fa9f9065a05325d089810",
+    "planner_sha256": "sha256:62955ec3b0e211df3e2e6b05acc77215cf8422fb2bfe27cdd091070a65da4685",
+    "runner_sha256": "sha256:927983955eb874393946f63fc991141dee55668ffa197f1b46a58389399b9db0",
+    "agent_sha256": "sha256:e49f0208db4271b258be95446eff86cce114d82d1ce60aef6d33f976c8414254",
+    "crossover_allocator_sha256": "sha256:4e568d127d03ef97e5010b519d724ac3ddde477cdf2ad44fe9ca484459113b39"
+  },
+  "verdict": {
+    "status": "invalid",
+    "final": true,
+    "decisive_gate": "completion",
+    "reason": "Both variants completed 179 of 180 attempts, below the frozen 100% completion threshold.",
+    "performance_claim_eligible": false,
+    "rerun_permitted": false,
+    "post_hoc_reclassification_permitted": false,
+    "new_performance_claim_permitted": false
+  },
+  "execution": {
+    "invocation_count": 1,
+    "one_shot_ledger_state": "completed",
+    "pair_count": 180,
+    "block_pair_counts": {
+      "block_a": 90,
+      "block_b": 90
+    },
+    "task_family_counts_per_block": {
+      "call_expression": 45,
+      "string_literal": 45
+    },
+    "seed": 20261123,
+    "device_assignment_crossed_between_blocks": true,
+    "warmup_requests_per_profile_per_block": 2,
+    "cache_resets_per_profile_per_block": 1,
+    "remote_elapsed_seconds": 542.405476153,
+    "private_raw_archive_sha256": "sha256:4252332482a369e686288b9b05033849a0d4c5f42974420f840add27040a3c13"
+  },
+  "gates": [
+    {
+      "name": "intentional_backend_identity_difference",
+      "required": true,
+      "passed": true
+    },
+    {
+      "name": "trace_and_environment_identity",
+      "required": true,
+      "passed": true
+    },
+    {
+      "name": "baseline_minimum_task_success",
+      "required": true,
+      "passed": true,
+      "threshold": 0.9,
+      "observed_rate": 0.9944444444444445
+    },
+    {
+      "name": "candidate_minimum_task_success",
+      "required": true,
+      "passed": true,
+      "threshold": 0.9,
+      "observed_rate": 0.9944444444444445
+    },
+    {
+      "name": "task_success_noninferiority",
+      "required": true,
+      "passed": true,
+      "threshold": -0.05,
+      "one_sided_lower_bound": -0.020285204570113013
+    },
+    {
+      "name": "baseline_completion",
+      "required": true,
+      "passed": false,
+      "threshold": 1.0,
+      "completed_count": 179,
+      "attempt_count": 180,
+      "observed_rate": 0.9944444444444445
+    },
+    {
+      "name": "candidate_completion",
+      "required": true,
+      "passed": false,
+      "threshold": 1.0,
+      "completed_count": 179,
+      "attempt_count": 180,
+      "observed_rate": 0.9944444444444445
+    },
+    {
+      "name": "successful_task_workflow_latency_improvement",
+      "required": true,
+      "passed": true,
+      "paired_count": 179,
+      "candidate_minus_baseline_mean_ms": -391.07981516201113,
+      "confidence_interval_95_ms": [
+        -398.6060397800937,
+        -383.5535905439286
+      ]
+    }
+  ],
+  "aggregate_outcomes": {
+    "baseline": {
+      "attempt_count": 180,
+      "completed_count": 179,
+      "task_success_count": 179,
+      "application_failure_count": 1
+    },
+    "candidate": {
+      "attempt_count": 180,
+      "completed_count": 179,
+      "task_success_count": 179,
+      "application_failure_count": 1
+    },
+    "paired_task_outcomes": {
+      "both_success": 179,
+      "both_failure": 1,
+      "baseline_only": 0,
+      "candidate_only": 0
+    },
+    "successful_pair_latency": {
+      "role": "descriptive_only_because_verdict_is_invalid",
+      "paired_count": 179,
+      "candidate_minus_baseline_mean_ms": -391.07981516201113,
+      "confidence_interval_95_ms": [
+        -398.6060397800937,
+        -383.5535905439286
+      ]
+    }
+  },
+  "descriptive_sensitivity": {
+    "role": "descriptive_only; cannot overturn or rescue the frozen verdict",
+    "family_effects_ms": {
+      "call_expression": {
+        "paired_count": 89,
+        "mean": -401.6579241235955
+      },
+      "string_literal": {
+        "paired_count": 90,
+        "mean": -380.6192407444444
+      }
+    },
+    "block_effects_ms": {
+      "block_a": {
+        "paired_count": 89,
+        "mean": -392.45648098876404
+      },
+      "block_b": {
+        "paired_count": 90,
+        "mean": -389.71844562222225
+      }
+    }
+  },
+  "cost": {
+    "held_out_actual_usd": 0.69699111,
+    "held_out_ceiling_usd": 8.0,
+    "phase_4_cumulative_usd": 3.00542935,
+    "phase_4_ceiling_usd": 40.0
+  },
+  "privacy": {
+    "contains_task_text": false,
+    "contains_answer_map": false,
+    "contains_model_outputs": false,
+    "contains_traces": false,
+    "contains_physical_gpu_identifiers": false,
+    "raw_artifact_committed": false
+  },
+  "integrity": {
+    "locked_projection_sha256": "sha256:ff9202d3d35a862742038b20901abd8caac91e1a7bd14aedc5e1e9f4904eeba0"
+  }
+}
