@@ -42,6 +42,17 @@ HF_CACHE_PATH = "/root/.cache/huggingface"
 VLLM_CACHE_PATH = "/root/.cache/vllm"
 FLASHINFER_CACHE_PATH = "/root/.cache/flashinfer"
 
+RUNTIME_CONFIG_ENV = {
+    "RUNECONOMY_MODEL_NAME": MODEL_NAME,
+    "RUNECONOMY_MODEL_REVISION": MODEL_REVISION,
+    "RUNECONOMY_VLLM_VERSION": VLLM_VERSION,
+    "RUNECONOMY_TRANSFORMERS_VERSION": TRANSFORMERS_VERSION,
+    "RUNECONOMY_HUGGINGFACE_HUB_VERSION": HUGGINGFACE_HUB_VERSION,
+    "RUNECONOMY_GPU": GPU,
+    "RUNECONOMY_MAX_MODEL_LEN": str(MAX_MODEL_LEN),
+    "RUNECONOMY_GPU_MEMORY_UTILIZATION": str(GPU_MEMORY_UTILIZATION),
+}
+
 app = modal.App(APP_NAME)
 
 # Version 2 is selected explicitly because Modal still defaults to v1 when the
@@ -74,7 +85,7 @@ flashinfer_cache = modal.Volume.from_name(
 download_image = (
     modal.Image.debian_slim(python_version="3.12")
     .uv_pip_install(f"huggingface_hub[hf_xet]=={HUGGINGFACE_HUB_VERSION}")
-    .env({"HF_XET_HIGH_PERFORMANCE": "1"})
+    .env({"HF_XET_HIGH_PERFORMANCE": "1", **RUNTIME_CONFIG_ENV})
     .add_local_python_source("runeconomy")
 )
 
@@ -95,6 +106,7 @@ vllm_image = (
             "VLLM_CACHE_ROOT": VLLM_CACHE_PATH,
             "VLLM_SERVER_DEV_MODE": "1",
             "TOKENIZERS_PARALLELISM": "false",
+            **RUNTIME_CONFIG_ENV,
         }
     )
     .add_local_python_source("runeconomy")

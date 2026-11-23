@@ -95,6 +95,10 @@ class ModalDeploymentTests(unittest.TestCase):
             '["compat-test", "example/model", "revision", "9.9.9", "L40S", 4096]',
         )
 
+        source_text = source.read_text(encoding="utf-8")
+        self.assertIn('"RUNECONOMY_MODEL_NAME": MODEL_NAME', source_text)
+        self.assertEqual(source_text.count("**RUNTIME_CONFIG_ENV"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
