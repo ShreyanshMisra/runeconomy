@@ -72,7 +72,7 @@ export const articles = [
     description: "Engine-change verification, resumable experiments and conservative decision semantics.",
     type: "Release notes",
     status: "Prepared release",
-    releaseVersion: "0.2.2rc1",
+    releaseVersion: "0.2.2",
     thumbnail: "/assets/thumbnails/release.png",
     thumbnailAlt: "Separate evidence, execution, task outcome and performance eligibility records",
     rail: true,

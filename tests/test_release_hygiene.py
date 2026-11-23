@@ -100,7 +100,7 @@ class ReleaseHygieneTests(unittest.TestCase):
         with (ROOT / "pyproject.toml").open("rb") as handle:
             project = tomllib.load(handle)["project"]
         self.assertEqual(project["name"], "runeconomy")
-        self.assertEqual(project["version"], "0.2.2rc1")
+        self.assertEqual(project["version"], "0.2.2")
         self.assertIn(
             "Development Status :: 3 - Alpha",
             project["classifiers"],
