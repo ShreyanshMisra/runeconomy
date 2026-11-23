@@ -7,6 +7,7 @@ import textwrap
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from runeconomy.comparison import (
     _decision,
@@ -47,7 +48,13 @@ def attr(key, value):
     return {"key": key, "value": {"stringValue": value}}
 
 trace_id = "trace-" + os.environ["RUNECONOMY_TASK_ID"] + "-" + variant
-model_name = "fixture/drifted" if behavior == "identity_drift" else "fixture/model"
+if task.get("distinct_backend"):
+    model_name = "fixture/candidate" if variant == "candidate" else "fixture/baseline"
+else:
+    model_name = "fixture/drifted" if behavior == "identity_drift" else "fixture/model"
+task_identity = (
+    "wrong-task" if behavior == "mismatched_task_id" else os.environ["RUNECONOMY_TASK_ID"]
+)
 spans = [
     {
         "traceId": trace_id,
@@ -63,6 +70,7 @@ spans = [
             attr("runeconomy.tokenizer", "fixture/tokenizer"),
             attr("runeconomy.tokenizer_revision", "tokenizer-revision"),
             attr("runeconomy.chat_template_digest", "sha256:template"),
+            attr("runeconomy.task_id", task_identity),
             attr("runeconomy.depends_on", "[]"),
             {"key": "llm.token_count.prompt", "value": {"intValue": 10}},
         ],
@@ -81,6 +89,7 @@ spans = [
             attr("runeconomy.tokenizer", "fixture/tokenizer"),
             attr("runeconomy.tokenizer_revision", "tokenizer-revision"),
             attr("runeconomy.chat_template_digest", "sha256:template"),
+            attr("runeconomy.task_id", task_identity),
             attr("runeconomy.depends_on", '["step-1"]'),
             {"key": "llm.token_count.prompt", "value": {"intValue": 20}},
         ],
@@ -429,6 +438,191 @@ class ComparisonTests(unittest.TestCase):
             self.assertFalse(
                 candidate["trace_evidence"]["environment_identity_stable"]
             )
+
+    def test_engine_change_target_accepts_distinct_stable_variant_backends(self) -> None:
+        with TemporaryDirectory() as raw_directory:
+            directory = Path(raw_directory)
+            agent, evaluator, dataset = self._files(
+                directory,
+                [
+                    {"task_id": f"task-{index}", "expected": "ok", "distinct_backend": True}
+                    for index in range(4)
+                ],
+            )
+            result = run_comparison(
+                baseline_command=f"{sys.executable} {agent}",
+                candidate_command=f"{sys.executable} {agent}",
+                dataset_path=dataset,
+                evaluator_path=evaluator,
+                output_path=directory / "result.json",
+                artifacts_dir=directory / "artifacts",
+                workdir=directory,
+                order="alternating",
+                min_task_success_rate=0.0,
+                max_task_success_regression=1.0,
+                optimization_target="engine_change_latency",
+            )
+
+        identity = next(
+            check
+            for check in result["decision"]["checks"]
+            if check["name"] == "intentional_backend_identity_difference"
+        )
+        self.assertTrue(identity["required"])
+        self.assertTrue(identity["passed"])
+        self.assertNotEqual(
+            result["summary"]["variants"]["baseline"]["trace_evidence"]
+            ["environment_identity_signatures"],
+            result["summary"]["variants"]["candidate"]["trace_evidence"]
+            ["environment_identity_signatures"],
+        )
+
+    def test_engine_change_target_rejects_same_backend_identity(self) -> None:
+        trace_evidence = {
+            "complete_dag_rate": 1.0,
+            "environment_identity_complete": True,
+            "environment_identity_stable": True,
+            "environment_identity_signatures": ["same"],
+        }
+        variant = {
+            "task_success_95_ci": [0.9, 1.0],
+            "task_success_rate": 1.0,
+            "completed_rate": 1.0,
+            "evaluated_count": 100,
+            "status_counts": {"completed": 100},
+            "trace_evidence": trace_evidence,
+        }
+        summary = {
+            "variants": {"baseline": variant, "candidate": variant},
+            "effects": {
+                "task_success": {"one_sided_lower_bound": -0.01},
+                "workflow_latency_ms": {"confidence_interval": [-20.0, -10.0]},
+            },
+        }
+
+        decision = _decision(
+            summary,
+            max_task_success_regression=0.1,
+            min_task_success_rate=0.8,
+            min_completed_rate=1.0,
+            optimization_target="engine_change_latency",
+        )
+
+        self.assertEqual(decision["status"], "invalid")
+        self.assertIn("intentional difference", decision["reason"])
+
+    def test_latency_noninferiority_uses_declared_margin(self) -> None:
+        trace_evidence = {
+            "complete_dag_rate": 1.0,
+            "environment_identity_complete": True,
+            "environment_identity_stable": True,
+            "environment_identity_signatures": ["stable"],
+        }
+        variant = {
+            "task_success_95_ci": [0.9, 1.0],
+            "task_success_rate": 1.0,
+            "completed_rate": 1.0,
+            "evaluated_count": 100,
+            "status_counts": {"completed": 100},
+            "trace_evidence": trace_evidence,
+        }
+        summary = {
+            "variants": {"baseline": variant, "candidate": variant},
+            "effects": {
+                "task_success": {"one_sided_lower_bound": -0.01},
+                "workflow_latency_ms": {"confidence_interval": [-2.0, 4.0]},
+            },
+        }
+        decision = _decision(
+            summary,
+            max_task_success_regression=0.1,
+            min_task_success_rate=0.8,
+            min_completed_rate=1.0,
+            latency_semantics="noninferiority",
+            max_latency_regression_ms=5.0,
+        )
+        self.assertEqual(decision["status"], "verified")
+
+    def test_trace_task_id_mismatch_is_invalid_evidence(self) -> None:
+        with TemporaryDirectory() as raw_directory:
+            directory = Path(raw_directory)
+            agent, evaluator, dataset = self._files(
+                directory,
+                [
+                    {
+                        "task_id": "expected-task",
+                        "expected": "ok",
+                        "candidate_behavior": "mismatched_task_id",
+                    }
+                ],
+            )
+            result = run_comparison(
+                baseline_command=f"{sys.executable} {agent}",
+                candidate_command=f"{sys.executable} {agent}",
+                dataset_path=dataset,
+                evaluator_path=evaluator,
+                output_path=directory / "result.json",
+                artifacts_dir=directory / "artifacts",
+                workdir=directory,
+                min_task_success_rate=0.0,
+            )
+        candidate = next(
+            attempt for attempt in result["attempts"] if attempt["variant"] == "candidate"
+        )
+        self.assertEqual(candidate["status"], "invalid_trace")
+        self.assertEqual(result["decision"]["status"], "invalid")
+
+    def test_agent_checkpoint_resume_validates_and_continues_schedule(self) -> None:
+        with TemporaryDirectory() as raw_directory:
+            directory = Path(raw_directory)
+            agent, evaluator, dataset = self._files(
+                directory,
+                [
+                    {"task_id": "one", "expected": "ok"},
+                    {"task_id": "two", "expected": "ok"},
+                ],
+            )
+            artifacts = directory / "artifacts"
+            from runeconomy import comparison
+
+            real_attempt = comparison._run_attempt
+            calls = 0
+
+            def interrupted(**kwargs):
+                nonlocal calls
+                calls += 1
+                if calls == 3:
+                    raise KeyboardInterrupt("simulated operator interruption")
+                return real_attempt(**kwargs)
+
+            with patch("runeconomy.comparison._run_attempt", side_effect=interrupted):
+                with self.assertRaises(KeyboardInterrupt):
+                    run_comparison(
+                        baseline_command=f"{sys.executable} {agent}",
+                        candidate_command=f"{sys.executable} {agent}",
+                        dataset_path=dataset,
+                        evaluator_path=evaluator,
+                        output_path=directory / "result.json",
+                        artifacts_dir=artifacts,
+                        workdir=directory,
+                        order="alternating",
+                        min_task_success_rate=0.0,
+                    )
+            self.assertEqual(len((artifacts / "attempts.jsonl").read_text().splitlines()), 2)
+
+            resumed = run_comparison(
+                baseline_command=f"{sys.executable} {agent}",
+                candidate_command=f"{sys.executable} {agent}",
+                dataset_path=dataset,
+                evaluator_path=evaluator,
+                output_path=directory / "result.json",
+                artifacts_dir=artifacts,
+                workdir=directory,
+                order="alternating",
+                min_task_success_rate=0.0,
+                resume=True,
+            )
+        self.assertEqual(len(resumed["attempts"]), 4)
 
     def test_workdir_identity_hashes_changed_content_not_only_filenames(self) -> None:
         with TemporaryDirectory() as raw_directory:

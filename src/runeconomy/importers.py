@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .evidence_quality import build_evidence_quality, evidence_field
 from .models import Trace, TraceValidationError
 
 
@@ -295,9 +296,72 @@ def import_vllm_jsonl(
         "trace_id": trace_id,
         "workload": workload,
         "success": success,
+        "dependency_evidence": "derived_sequential_capture_order",
         "spans": spans,
         "requests": requests,
     }
+    identity_complete = all(
+        all(
+            request.get(field) not in {None, "", "unknown"}
+            for field in (
+                "model",
+                "model_revision",
+                "backend",
+                "backend_version",
+                "tokenizer",
+                "tokenizer_revision",
+                "chat_template_digest",
+            )
+        )
+        for request in requests
+    )
+    payload["evidence_quality"] = build_evidence_quality(
+        "vllm_capture_jsonl",
+        {
+            "prompt_tokens": evidence_field(
+                "directly_observed", "vLLM render or tokenize response"
+            ),
+            "cached_input_tokens": evidence_field(
+                "directly_observed"
+                if all(
+                    request["metrics"].get("cached_input_tokens") is not None
+                    for request in requests
+                )
+                else "unresolved",
+                "vLLM completed-response usage details"
+                if all(
+                    request["metrics"].get("cached_input_tokens") is not None
+                    for request in requests
+                )
+                else "cached-token field absent from one or more responses",
+            ),
+            "server_ttft": evidence_field(
+                "directly_observed"
+                if all(request["metrics"].get("ttft_ms") is not None for request in requests)
+                else "unresolved",
+                "vLLM per-request metrics"
+                if all(request["metrics"].get("ttft_ms") is not None for request in requests)
+                else "server TTFT absent from one or more responses",
+            ),
+            "workflow_dependencies": evidence_field(
+                "reliably_derived",
+                "sequential capture order",
+                detail="capture order is not an explicitly observed workflow DAG",
+            ),
+            "backend_identity": evidence_field(
+                "weakly_inferred" if identity_complete else "unresolved",
+                "operator-supplied import arguments and request model"
+                if identity_complete
+                else "complete pinned identity was not supplied",
+            ),
+            "task_identity": evidence_field(
+                "unresolved", "vLLM capture records do not establish task pairing"
+            ),
+            "request_latency": evidence_field(
+                "directly_observed", "capture client monotonic timer"
+            ),
+        },
+    )
     Trace.from_dict(payload)
     return payload
 
@@ -378,6 +442,26 @@ def _first(attributes: dict[str, Any], *keys: str) -> Any:
         if key in attributes and attributes[key] is not None:
             return attributes[key]
     return None
+
+
+def _consistent_first(
+    attributes: dict[str, Any], *keys: str, field: str
+) -> tuple[Any, str | None]:
+    """Return the first alias only when all present aliases agree."""
+
+    present = [(key, attributes[key]) for key in keys if attributes.get(key) is not None]
+    if not present:
+        return None, None
+    canonical = {
+        json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+        for _, value in present
+    }
+    if len(canonical) > 1:
+        names = ", ".join(key for key, _ in present)
+        raise TraceValidationError(
+            f"conflicting {field} evidence across attributes: {names}"
+        )
+    return present[0][1], present[0][0]
 
 
 def _integer(value: Any) -> int | None:
@@ -559,6 +643,8 @@ def import_openinference(
     task_outcomes: set[bool] = set()
     task_ids: set[str] = set()
     attempt_ids: set[str] = set()
+    cached_token_grades: list[str] = []
+    server_ttft_grades: list[str] = []
     for span in selected:
         attributes = _span_attributes(span)
         explicit_success = attributes.get("runeconomy.task_success")
@@ -588,13 +674,13 @@ def import_openinference(
         if is_llm:
             request_id = span_id
             exact_ids = _exact_token_ids(attributes)
-            prompt_count = _integer(
-                _first(
-                    attributes,
-                    "llm.token_count.prompt",
-                    "gen_ai.usage.input_tokens",
-                )
+            prompt_value, _ = _consistent_first(
+                attributes,
+                "llm.token_count.prompt",
+                "gen_ai.usage.input_tokens",
+                field="prompt-token count",
             )
+            prompt_count = _integer(prompt_value)
             if exact_ids is not None:
                 prompt_count = len(exact_ids)
                 token_quality = "exact"
@@ -613,27 +699,55 @@ def import_openinference(
                 if _TOOL_CALL.match(key) and isinstance(value, str)
             ]
             available = list(dict.fromkeys([*available, *invoked]))
+            model_value, _ = _consistent_first(
+                attributes,
+                "llm.model_name",
+                "llm.request.model_name",
+                "gen_ai.request.model",
+                field="model identity",
+            )
+            backend_value, _ = _consistent_first(
+                attributes,
+                "llm.provider",
+                "llm.system",
+                "gen_ai.provider.name",
+                field="backend identity",
+            )
+            output_value, _ = _consistent_first(
+                attributes,
+                "llm.token_count.completion",
+                "gen_ai.usage.output_tokens",
+                field="output-token count",
+            )
+            cached_value, cached_source = _consistent_first(
+                attributes,
+                "runeconomy.cached_input_tokens",
+                "llm.token_count.prompt_details.cache_read",
+                "gen_ai.usage.cache_read.input_tokens",
+                field="cached-token count",
+            )
+            server_ttft_value, server_ttft_source = _consistent_first(
+                attributes,
+                "runeconomy.server_ttft_ms",
+                "llm.time_to_first_token_ms",
+                "gen_ai.ttft_ms",
+                field="server TTFT",
+            )
+            cached_token_grades.append(
+                "directly_observed" if cached_source is not None else "unresolved"
+            )
+            server_ttft_grades.append(
+                "directly_observed"
+                if server_ttft_source == "runeconomy.server_ttft_ms"
+                else "weakly_inferred"
+                if server_ttft_source is not None
+                else "unresolved"
+            )
             request_payload: dict[str, Any] = {
                 "request_id": request_id,
                 "sequence": len(requests),
-                "model": str(
-                    _first(
-                        attributes,
-                        "llm.model_name",
-                        "llm.request.model_name",
-                        "gen_ai.request.model",
-                    )
-                    or "unknown"
-                ),
-                "backend": str(
-                    _first(
-                        attributes,
-                        "llm.provider",
-                        "llm.system",
-                        "gen_ai.provider.name",
-                    )
-                    or backend
-                ).lower(),
+                "model": str(model_value or "unknown"),
+                "backend": str(backend_value or backend).lower(),
                 "prompt_token_ids": exact_ids,
                 "prompt_token_count": prompt_count,
                 "token_evidence_quality": token_quality,
@@ -643,23 +757,9 @@ def import_openinference(
                 "cache": {"enabled": True, "block_size": block_size},
                 "metrics": {
                     "input_tokens": prompt_count,
-                    "output_tokens": _integer(
-                        _first(
-                            attributes,
-                            "llm.token_count.completion",
-                            "gen_ai.usage.output_tokens",
-                        )
-                    ),
-                    "cached_input_tokens": _integer(
-                        _first(
-                            attributes,
-                            "llm.token_count.prompt_details.cache_read",
-                            "gen_ai.usage.cache_read.input_tokens",
-                        )
-                    ),
-                    "ttft_ms": _float(
-                        _first(attributes, "llm.time_to_first_token_ms", "gen_ai.ttft_ms")
-                    ),
+                    "output_tokens": _integer(output_value),
+                    "cached_input_tokens": _integer(cached_value),
+                    "ttft_ms": _float(server_ttft_value),
                     "client_ttft_ms": _float(
                         attributes.get("runeconomy.client_ttft_ms")
                     ),
@@ -684,13 +784,21 @@ def import_openinference(
                     "total_latency_ms": (end_ns - start_ns) / 1_000_000,
                 },
             }
+            model_revision, _ = _consistent_first(
+                attributes,
+                "llm.model_revision",
+                "runeconomy.model_revision",
+                field="model revision",
+            )
+            backend_version, _ = _consistent_first(
+                attributes,
+                "llm.backend_version",
+                "runeconomy.backend_version",
+                field="backend version",
+            )
             identity_fields = {
-                "model_revision": _first(
-                    attributes, "llm.model_revision", "runeconomy.model_revision"
-                ),
-                "backend_version": _first(
-                    attributes, "llm.backend_version", "runeconomy.backend_version"
-                ),
+                "model_revision": model_revision,
+                "backend_version": backend_version,
                 "tokenizer": attributes.get("runeconomy.tokenizer"),
                 "tokenizer_revision": attributes.get(
                     "runeconomy.tokenizer_revision"
@@ -722,6 +830,32 @@ def import_openinference(
         raise TraceValidationError("selected trace contains no OpenInference LLM spans")
     if len(task_outcomes) > 1:
         raise TraceValidationError("conflicting runeconomy.task_success values in one trace")
+    if len(task_ids) > 1:
+        raise TraceValidationError("conflicting runeconomy.task_id values in one trace")
+    if len(attempt_ids) > 1:
+        raise TraceValidationError("conflicting runeconomy.attempt_id values in one trace")
+    dependency_evidence = (
+        "complete_explicit"
+        if dependency_declarations == len(normalized_spans)
+        else "partial_explicit"
+        if dependency_declarations
+        else "absent"
+    )
+    identity_complete = all(
+        all(
+            request.get(field) not in {None, "", "unknown"}
+            for field in (
+                "model",
+                "model_revision",
+                "backend",
+                "backend_version",
+                "tokenizer",
+                "tokenizer_revision",
+                "chat_template_digest",
+            )
+        )
+        for request in requests
+    )
     normalized = {
         "schema_version": "0.2",
         "trace_id": trace_id,
@@ -729,16 +863,82 @@ def import_openinference(
         "success": False if any_error else next(iter(task_outcomes)) if task_outcomes else None,
         "task_id": next(iter(task_ids)) if len(task_ids) == 1 else None,
         "attempt_id": next(iter(attempt_ids)) if len(attempt_ids) == 1 else None,
-        "dependency_evidence": (
-            "complete_explicit"
-            if dependency_declarations == len(normalized_spans)
-            else "partial_explicit"
-            if dependency_declarations
-            else "absent"
-        ),
+        "dependency_evidence": dependency_evidence,
         "spans": normalized_spans,
         "requests": requests,
     }
+    normalized["evidence_quality"] = build_evidence_quality(
+        "openinference_otlp",
+        {
+            "prompt_tokens": evidence_field(
+                "directly_observed"
+                if all(request["token_evidence_quality"] == "exact" for request in requests)
+                else "reliably_derived"
+                if all(request["prompt_token_count"] is not None for request in requests)
+                else "unresolved",
+                "explicit prompt token IDs"
+                if all(request["token_evidence_quality"] == "exact" for request in requests)
+                else "telemetry token-count attributes"
+                if all(request["prompt_token_count"] is not None for request in requests)
+                else "prompt token evidence absent",
+            ),
+            "cached_input_tokens": evidence_field(
+                max(
+                    cached_token_grades,
+                    key={
+                        "directly_observed": 0,
+                        "reliably_derived": 1,
+                        "weakly_inferred": 2,
+                        "unresolved": 3,
+                    }.__getitem__,
+                ),
+                "OpenInference or GenAI cache-read attributes"
+                if all(grade == "directly_observed" for grade in cached_token_grades)
+                else "cache-read attribute absent from one or more LLM spans",
+            ),
+            "server_ttft": evidence_field(
+                max(
+                    server_ttft_grades,
+                    key={
+                        "directly_observed": 0,
+                        "reliably_derived": 1,
+                        "weakly_inferred": 2,
+                        "unresolved": 3,
+                    }.__getitem__,
+                ),
+                "explicit RunEconomy server TTFT extension"
+                if all(grade == "directly_observed" for grade in server_ttft_grades)
+                else "generic framework TTFT attribute with ambiguous clock boundary"
+                if all(grade != "unresolved" for grade in server_ttft_grades)
+                else "server TTFT absent from one or more LLM spans",
+            ),
+            "workflow_dependencies": evidence_field(
+                "directly_observed"
+                if dependency_evidence == "complete_explicit"
+                else "weakly_inferred"
+                if dependency_evidence == "partial_explicit"
+                else "unresolved",
+                "explicit runeconomy.depends_on declarations"
+                if dependency_evidence != "absent"
+                else "no explicit workflow dependencies",
+            ),
+            "backend_identity": evidence_field(
+                "directly_observed" if identity_complete else "unresolved",
+                "trace identity attributes"
+                if identity_complete
+                else "one or more pinned identity fields are absent",
+            ),
+            "task_identity": evidence_field(
+                "directly_observed" if len(task_ids) == 1 else "unresolved",
+                "runeconomy.task_id trace attribute"
+                if len(task_ids) == 1
+                else "task identity was not recorded in the trace",
+            ),
+            "workflow_latency": evidence_field(
+                "reliably_derived", "monotonic span timestamps"
+            ),
+        },
+    )
     Trace.from_dict(normalized)
     return normalized
 
@@ -867,6 +1067,53 @@ def import_phoenix_json(
         "spans": spans,
         "requests": requests,
     }
+    normalized["evidence_quality"] = build_evidence_quality(
+        "phoenix_cli_json",
+        {
+            "prompt_tokens": evidence_field(
+                "reliably_derived"
+                if requests
+                and all(request["prompt_token_count"] is not None for request in requests)
+                else "unresolved",
+                "Phoenix-exported token-count attributes"
+                if requests
+                and all(request["prompt_token_count"] is not None for request in requests)
+                else "prompt token count absent",
+            ),
+            "cached_input_tokens": evidence_field(
+                "directly_observed"
+                if requests
+                and all(
+                    request["metrics"].get("cached_input_tokens") is not None
+                    for request in requests
+                )
+                else "unresolved",
+                "Phoenix-exported cache-read attributes"
+                if requests
+                and all(
+                    request["metrics"].get("cached_input_tokens") is not None
+                    for request in requests
+                )
+                else "cache-read attribute absent",
+            ),
+            "server_ttft": evidence_field(
+                "unresolved", "Phoenix adapter does not assign server TTFT semantics"
+            ),
+            "workflow_dependencies": evidence_field(
+                "unresolved",
+                "Phoenix parentage is structural and is not an execution DAG",
+            ),
+            "backend_identity": evidence_field(
+                "unresolved", "complete pinned backend identity is unavailable"
+            ),
+            "task_identity": evidence_field(
+                "unresolved", "Phoenix trace does not establish RunEconomy task pairing"
+            ),
+            "workflow_latency": evidence_field(
+                "reliably_derived", "Phoenix span timestamps"
+            ),
+        },
+    )
     Trace.from_dict(normalized)
     return normalized
 

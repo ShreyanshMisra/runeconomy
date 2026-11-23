@@ -27,6 +27,7 @@ from .evaluators import (
     evaluate_output,
     validate_evaluator_spec,
 )
+from .evidence_quality import aggregate_evidence_quality
 from .experiments import (
     ExperimentValidationError,
     _clopper_pearson_interval,
@@ -36,7 +37,7 @@ from .importers import import_openinference
 from .models import Trace, TraceValidationError
 
 
-COMPARE_RESULT_VERSION = "0.1"
+COMPARE_RESULT_VERSION = "0.2"
 _T_CRITICAL_95 = {
     1: 12.706,
     2: 4.303,
@@ -226,6 +227,26 @@ def _execute_agent(
     try:
         stdout, stderr = process.communicate(timeout=timeout_seconds)
         return process.returncode, stdout, stderr, False
+    except KeyboardInterrupt:
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGTERM)
+            else:
+                process.terminate()
+        except ProcessLookupError:
+            pass
+        try:
+            process.communicate(timeout=1.0)
+        except subprocess.TimeoutExpired:
+            try:
+                if os.name == "posix":
+                    os.killpg(process.pid, signal.SIGKILL)
+                else:
+                    process.kill()
+            except ProcessLookupError:
+                pass
+            process.communicate()
+        raise
     except subprocess.TimeoutExpired:
         try:
             if os.name == "posix":
@@ -415,6 +436,7 @@ def _trace_metrics(payload: Mapping[str, Any], trace: Trace) -> dict[str, Any]:
         "span_count": len(trace.spans),
         "environment_identity": identities,
         "environment_identity_complete": identity_complete,
+        "evidence_quality": payload.get("evidence_quality"),
     }
 
 
@@ -435,6 +457,50 @@ def _schedule(
                 variants.reverse()
             result.extend((repetition, task, variant) for variant in variants)
     return result
+
+
+def _load_attempt_checkpoint(
+    path: Path, schedule: list[tuple[int, dict[str, Any], str]]
+) -> list[dict[str, Any]]:
+    """Load and validate a durable prefix of the deterministic agent schedule."""
+
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise ExperimentValidationError(
+            "cannot read agent-process attempt checkpoint"
+        ) from exc
+    attempts: list[dict[str, Any]] = []
+    for index, line in enumerate(lines):
+        try:
+            attempt = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ExperimentValidationError(
+                f"attempt checkpoint record {index + 1} is invalid JSON"
+            ) from exc
+        if not isinstance(attempt, dict):
+            raise ExperimentValidationError(
+                f"attempt checkpoint record {index + 1} is not an object"
+            )
+        if index >= len(schedule):
+            raise ExperimentValidationError(
+                "attempt checkpoint contains more records than the frozen schedule"
+            )
+        repetition, task, variant = schedule[index]
+        expected = {
+            "sequence": index + 1,
+            "task_id": _digest_bytes(str(task["task_id"]).encode()),
+            "variant": variant,
+            "repetition": repetition,
+        }
+        if any(attempt.get(key) != value for key, value in expected.items()):
+            raise ExperimentValidationError(
+                f"attempt checkpoint record {index + 1} does not match the frozen schedule"
+            )
+        attempts.append(attempt)
+    return attempts
 
 
 def _run_attempt(
@@ -552,6 +618,14 @@ def _run_attempt(
                 trace_path,
                 workload=str(task["task_id"]),
             )
+            recorded_task_id = normalized.get("task_id")
+            if (
+                recorded_task_id is not None
+                and recorded_task_id != str(task["task_id"])
+            ):
+                raise TraceValidationError(
+                    "trace runeconomy.task_id does not match the scheduled task"
+                )
             trace = Trace.from_dict(normalized)
             _write_json(normalized_trace_path, normalized)
             trace_metrics = _trace_metrics(normalized, trace)
@@ -765,6 +839,11 @@ def _summarize(attempts: list[dict[str, Any]]) -> dict[str, Any]:
             for signatures in identity_signatures_by_task.values()
             for signature in signatures
         }
+        quality_records = [
+            item["metrics"]["evidence_quality"]
+            for item in traced
+            if isinstance(item["metrics"].get("evidence_quality"), Mapping)
+        ]
         variants[variant] = {
             "attempt_count": len(subset),
             "status_counts": dict(sorted(statuses.items())),
@@ -812,6 +891,10 @@ def _summarize(attempts: list[dict[str, Any]]) -> dict[str, Any]:
                         identity_signatures_by_task.items()
                     )
                 },
+                "evidence_quality": aggregate_evidence_quality(
+                    quality_records,
+                    source_type=f"{variant}_agent_trace",
+                ),
             },
             "successful_task_metrics": {
                 "workflow_latency_ms": _metric_summary(
@@ -900,9 +983,18 @@ def _summarize(attempts: list[dict[str, Any]]) -> dict[str, Any]:
         for name, values in metric_differences.items()
     }
     effects["task_success"] = _paired_success_statistics(task_pairs)
+    quality_records = [
+        item["metrics"]["evidence_quality"]
+        for item in attempts
+        if isinstance(item.get("metrics"), Mapping)
+        and isinstance(item["metrics"].get("evidence_quality"), Mapping)
+    ]
     return {
         "variants": variants,
         "effects": effects,
+        "evidence_quality": aggregate_evidence_quality(
+            quality_records, source_type="agent_process_experiment"
+        ),
         "latency_population": (
             "task-level pairs where both baseline and candidate succeeded"
         ),
@@ -915,6 +1007,9 @@ def _decision(
     max_task_success_regression: float,
     min_task_success_rate: float,
     min_completed_rate: float,
+    optimization_target: str = "successful_workflow_latency",
+    latency_semantics: str = "superiority",
+    max_latency_regression_ms: float = 0.0,
 ) -> dict[str, Any]:
     baseline = summary["variants"]["baseline"]
     candidate = summary["variants"]["candidate"]
@@ -935,8 +1030,9 @@ def _decision(
         and candidate["completed_rate"] >= min_completed_rate
     )
     latency_ci = latency["confidence_interval"]
-    faster = bool(latency_ci and latency_ci[1] < 0)
-    slower = bool(latency_ci and latency_ci[0] > 0)
+    latency_limit = 0.0 if latency_semantics == "superiority" else max_latency_regression_ms
+    latency_gate_passed = bool(latency_ci and latency_ci[1] < latency_limit)
+    latency_regression = bool(latency_ci and latency_ci[0] > latency_limit)
     baseline_trace_evidence = baseline["trace_evidence"]
     candidate_trace_evidence = candidate["trace_evidence"]
     trace_evidence_valid = all(
@@ -945,7 +1041,32 @@ def _decision(
         and evidence["environment_identity_stable"]
         for evidence in (baseline_trace_evidence, candidate_trace_evidence)
     )
+    baseline_signatures = baseline_trace_evidence.get(
+        "environment_identity_signatures", []
+    )
+    candidate_signatures = candidate_trace_evidence.get(
+        "environment_identity_signatures", []
+    )
+    backend_identities_distinct = bool(
+        len(baseline_signatures) == 1
+        and len(candidate_signatures) == 1
+        and baseline_signatures[0] != candidate_signatures[0]
+    )
+    distinct_identity_required = optimization_target == "engine_change_latency"
     checks = [
+        {
+            "name": "intentional_backend_identity_difference",
+            "passed": backend_identities_distinct,
+            "required": distinct_identity_required,
+            "observed": {
+                "baseline_identity_count": len(baseline_signatures),
+                "candidate_identity_count": len(candidate_signatures),
+                "distinct": backend_identities_distinct,
+            },
+            "threshold": (
+                "one complete stable identity per variant, and baseline differs from candidate"
+            ),
+        },
         {
             "name": "trace_and_environment_identity",
             "passed": trace_evidence_valid,
@@ -989,16 +1110,26 @@ def _decision(
             "threshold": min_completed_rate,
         },
         {
-            "name": "successful_task_workflow_latency_improvement",
-            "passed": faster,
+            "name": (
+                "successful_task_workflow_latency_improvement"
+                if latency_semantics == "superiority"
+                else "successful_task_workflow_latency_noninferiority"
+            ),
+            "passed": latency_gate_passed,
             "observed": latency,
-            "threshold": "upper bound of paired 95% Student-t interval < 0",
+            "threshold": (
+                "upper bound of paired 95% Student-t interval < 0 ms"
+                if latency_semantics == "superiority"
+                else "upper bound of paired 95% Student-t interval < "
+                f"{max_latency_regression_ms:g} ms"
+            ),
         },
         {
             "name": "successful_task_workflow_latency_non_regression",
-            "passed": not slower,
+            "passed": not latency_regression,
+            "required": False,
             "observed": latency,
-            "threshold": "lower bound of paired 95% Student-t interval <= 0",
+            "threshold": f"lower bound of paired 95% Student-t interval <= {latency_limit:g} ms",
         },
     ]
     baseline_eval = baseline["evaluated_count"] > 0
@@ -1024,6 +1155,12 @@ def _decision(
     elif not trace_evidence_valid:
         status = "invalid"
         reason = "trace DAG or environment identity evidence was incomplete or unstable"
+    elif distinct_identity_required and not backend_identities_distinct:
+        status = "invalid"
+        reason = (
+            "the engine-change target requires one stable backend identity per "
+            "variant and an intentional difference between variants"
+        )
     elif baseline_execution_failure:
         status = "invalid"
         reason = "baseline infrastructure or timeout failures invalidated the comparison"
@@ -1045,12 +1182,20 @@ def _decision(
     elif not noninferior:
         status = "inconclusive"
         reason = "the paired success bound did not establish non-inferiority"
-    elif faster:
+    elif latency_gate_passed:
         status = "verified"
-        reason = "task success was non-inferior and successful tasks were faster"
-    elif slower:
+        reason = (
+            "task success was non-inferior and successful-task latency superiority was established"
+            if latency_semantics == "superiority"
+            else "task success and successful-task latency non-inferiority were established"
+        )
+    elif latency_regression:
         status = "regression"
-        reason = "task success passed but successful tasks were slower"
+        reason = (
+            "task success passed but successful tasks were slower"
+            if latency_semantics == "superiority"
+            else "task success passed but successful-task latency exceeded the declared margin"
+        )
     else:
         status = "inconclusive"
         reason = "quality passed but successful-task latency improvement was not established"
@@ -1074,6 +1219,10 @@ def run_comparison(
     max_task_success_regression: float = 0.05,
     min_task_success_rate: float = 0.8,
     min_completed_rate: float = 1.0,
+    optimization_target: str = "successful_workflow_latency",
+    latency_semantics: str = "superiority",
+    max_latency_regression_ms: float = 0.0,
+    resume: bool = False,
 ) -> dict[str, Any]:
     """Execute and compare two real agent commands on paired tasks."""
 
@@ -1083,6 +1232,25 @@ def run_comparison(
         raise ExperimentValidationError("order must be randomized or alternating")
     if timeout_seconds <= 0 or evaluator_timeout_seconds <= 0:
         raise ExperimentValidationError("timeouts must be positive")
+    if optimization_target not in {
+        "successful_workflow_latency",
+        "engine_change_latency",
+    }:
+        raise ExperimentValidationError(
+            "optimization_target must be successful_workflow_latency or engine_change_latency"
+        )
+    if latency_semantics not in {"superiority", "noninferiority"}:
+        raise ExperimentValidationError(
+            "latency_semantics must be superiority or noninferiority"
+        )
+    if (
+        isinstance(max_latency_regression_ms, bool)
+        or not isinstance(max_latency_regression_ms, (int, float))
+        or max_latency_regression_ms < 0
+    ):
+        raise ExperimentValidationError(
+            "max_latency_regression_ms must be non-negative"
+        )
     for name, value in (
         ("max_task_success_regression", max_task_success_regression),
         ("min_task_success_rate", min_task_success_rate),
@@ -1094,11 +1262,6 @@ def run_comparison(
     if not workdir.is_dir():
         raise ExperimentValidationError(f"workdir is not a directory: {workdir}")
     workdir_identity = _workdir_identity(workdir)
-    if artifacts_dir.exists():
-        raise ExperimentValidationError(
-            f"artifacts directory already exists: {artifacts_dir}"
-        )
-    artifacts_dir.mkdir(parents=True)
     tasks = _load_dataset(dataset_path)
     evaluator = _load_evaluator(evaluator_path)
     commands = {
@@ -1123,6 +1286,9 @@ def run_comparison(
         "workdir_identity": workdir_identity,
         "acceptance": {
             "primary_metric": "workflow_latency_ms on paired successful tasks",
+            "optimization_target": optimization_target,
+            "latency_semantics": latency_semantics,
+            "max_latency_regression_ms": float(max_latency_regression_ms),
             "max_task_success_regression": max_task_success_regression,
             "min_task_success_rate": min_task_success_rate,
             "min_completed_rate": min_completed_rate,
@@ -1131,10 +1297,43 @@ def run_comparison(
     design["fingerprint"] = _digest_bytes(
         json.dumps(design, sort_keys=True, separators=(",", ":")).encode()
     )
-    _write_json(artifacts_dir / "design.json", design)
-    attempts: list[dict[str, Any]] = []
     schedule = _schedule(tasks, repetitions, order, seed)
+    if artifacts_dir.exists():
+        if not resume:
+            raise ExperimentValidationError(
+                f"artifacts directory already exists: {artifacts_dir}"
+            )
+        design_path = artifacts_dir / "design.json"
+        try:
+            stored_design = json.loads(design_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ExperimentValidationError(
+                "resume requires a readable design.json checkpoint"
+            ) from exc
+        comparable_stored = dict(stored_design)
+        comparable_current = dict(design)
+        for value in (comparable_stored, comparable_current):
+            value.pop("fingerprint", None)
+            value.pop("workdir_identity", None)
+        if comparable_stored != comparable_current:
+            raise ExperimentValidationError(
+                "resume design does not match commands, data, evaluator, schedule, or gates"
+            )
+        design = stored_design
+        attempts = _load_attempt_checkpoint(
+            artifacts_dir / "attempts.jsonl", schedule
+        )
+    else:
+        if resume:
+            raise ExperimentValidationError(
+                f"resume artifacts directory does not exist: {artifacts_dir}"
+            )
+        artifacts_dir.mkdir(parents=True)
+        _write_json(artifacts_dir / "design.json", design)
+        attempts = []
     for sequence, (repetition, task, variant) in enumerate(schedule, 1):
+        if sequence <= len(attempts):
+            continue
         attempt = _run_attempt(
             argv=commands[variant],
             task=task,
@@ -1159,12 +1358,16 @@ def run_comparison(
         max_task_success_regression=max_task_success_regression,
         min_task_success_rate=min_task_success_rate,
         min_completed_rate=min_completed_rate,
+        optimization_target=optimization_target,
+        latency_semantics=latency_semantics,
+        max_latency_regression_ms=float(max_latency_regression_ms),
     )
     result = {
         "result_type": "runeconomy.closed_loop_comparison",
         "result_version": COMPARE_RESULT_VERSION,
         "design": design,
         "summary": summary,
+        "evidence_quality": summary["evidence_quality"],
         "decision": decision,
         "attempts": attempts,
         "provenance": {

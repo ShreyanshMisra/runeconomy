@@ -134,13 +134,11 @@ VLLM_SERVER_DEV_MODE=1 vllm serve MODEL \
 Do not expose this server publicly. vLLM's development mode enables endpoints
 that are unsafe for an untrusted production network.
 
-The included Modal deployment keeps exactly one authenticated replica during
-an active validation window because Modal Servers do not cold-start from a
-request at zero replicas. Stop the deployed app as soon as the run finishes:
-
-```bash
-uv run modal app stop runeconomy-vllm
-```
+The included Modal deployment normally keeps zero warm containers. An
+authenticated request can trigger a cold start. During a bounded validation
+window, the operator temporarily pins one container and restores zero in a
+`finally` block. Follow the [Modal validation-window runbook](modal-validation.md),
+do not permanently stop the App as the normal closing operation.
 
 The checked-in manifests use `https://vllm.example.invalid` deliberately so
 they cannot contact a private deployment. Copy a manifest and replace

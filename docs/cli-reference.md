@@ -27,6 +27,13 @@ the exact task-success methods. It never produces an experiment verdict.
 Planning exits `0` for calibration or freeze readiness, `1` when design input
 is missing, and `2` when the design is blocked.
 
+For agent-process engine changes, initialize with
+`--optimization-target engine-change-latency`. The default latency semantics
+are superiority. `--latency-semantics noninferiority` additionally requires a
+predeclared non-negative `--max-latency-regression-ms`. Both modes retain exact
+task-quality and completion gates. `experiment run --resume` validates and
+continues either static or agent-process checkpoints.
+
 `support-bundle` never contacts a backend or uploads anything. Optional
 `--doctor-report` and `--validation-report` inputs must already exist. Run with
 `--json` for a machine-readable creation summary. The command refuses to
@@ -48,6 +55,10 @@ overwrite an existing archive and never follows workspace symlinks.
 New integrations should prefer the unified `import` and `experiment` workflow.
 The compatibility commands continue to read existing artifacts without
 silently upgrading their evidence quality.
+
+`doctor --startup-timeout SECONDS`, `capture-vllm --startup-timeout SECONDS`,
+and static `experiment run --startup-timeout SECONDS` share one bounded cold
+start retry policy for connection failures and HTTP 502/503 responses.
 
 ## First use
 

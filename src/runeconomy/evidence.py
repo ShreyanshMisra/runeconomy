@@ -188,6 +188,7 @@ def assess_trace_evidence(
     }
     return {
         "assessment_version": "0.1",
+        "evidence_quality": deepcopy(trace_payload.get("evidence_quality")),
         "capabilities": capabilities,
         "runnable_experiment": static_runnable or agent_runnable,
         "recommended_mode": (

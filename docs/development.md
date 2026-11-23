@@ -46,13 +46,12 @@ before GPU allocation, uses one A10 replica, and persists Hugging Face, vLLM,
 and FlashInfer caches in separate v2 volumes.
 
 Modal commands require the locked development dependencies. Credentials belong
-only in the ignored `.env.local` file. Paid resources require explicit approval.
-A validation window must end by explicitly stopping the app:
-
-```bash
-uv run modal app stop -y runeconomy-vllm
-uv run modal container list --json
-```
+only in the ignored `.env.local` file. Paid resources require explicit approval
+and a pre-run cost estimate in the compute ledger. The Server normally keeps
+zero warm containers. Use the discovered-ID validation-window helper so success,
+failure, and interruption all restore that setting. See
+[Modal validation windows](modal-validation.md) for the workflow, verification,
+and manual emergency shutdown procedure.
 
 The opt-in `Real vLLM integration` GitHub workflow only contacts an
 already-running endpoint configured in the protected `vllm-integration`

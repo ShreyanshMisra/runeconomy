@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import unittest
 from pathlib import Path
 
@@ -47,6 +48,16 @@ class ModalDeploymentTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertEqual(source.count('.add_local_python_source("runeconomy")'), 2)
+
+    def test_benchmark_server_defaults_to_zero_warm_containers(self) -> None:
+        source = (Path(__file__).parents[1] / "deploy" / "modal_vllm.py").read_text(
+            encoding="utf-8"
+        )
+        server_decorator = re.search(r"@app\.server\((.*?)\)\nclass VLLMServer", source, re.S)
+        self.assertIsNotNone(server_decorator)
+        assert server_decorator is not None
+        self.assertRegex(server_decorator.group(1), r"\bmin_containers\s*=\s*0\b")
+        self.assertNotIn("reject requests at zero replicas", source)
 
 
 if __name__ == "__main__":

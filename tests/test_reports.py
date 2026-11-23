@@ -138,6 +138,24 @@ class ReportTests(unittest.TestCase):
         self.assertIn("not_established", html_report)
         self.assertIn("Predeclared hypothesis", markdown_report)
 
+    def test_evidence_quality_is_visible_in_human_renderings(self) -> None:
+        result = load_demo_result("historical")
+        result["evidence_quality"] = {
+            "schema_version": "0.1",
+            "overall_grade": "weakly_inferred",
+            "fields": {
+                "server_ttft": {
+                    "grade": "weakly_inferred",
+                    "source": "generic framework TTFT attribute",
+                }
+            },
+        }
+        html_report = render_experiment_html(result)
+        markdown_report = render_experiment_markdown(result)
+        self.assertIn("Evidence quality", html_report)
+        self.assertIn("weakly_inferred", html_report)
+        self.assertIn("Evidence quality", markdown_report)
+
     def test_demo_command_writes_unified_report(self) -> None:
         with TemporaryDirectory() as directory:
             output = Path(directory) / "demo.html"

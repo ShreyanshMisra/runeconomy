@@ -30,6 +30,11 @@ runeconomy experiment report results/result.json --output report.html --open
 `runeconomy compare` remains a compatibility wrapper for existing automation.
 It emits a migration notice. New integrations should use the workspace workflow.
 
+Agent-process manifest schema `0.2` adds the explicit optimization target,
+latency semantics, and latency margin. Schema `0.1` remains readable and maps
+to successful-workflow latency superiority with a zero-millisecond margin. No
+legacy artifact is silently reinterpreted as an engine-change experiment.
+
 This command executes local code. Review the agent and evaluator commands
 before running them. RunEconomy does not invoke a shell: command strings are
 split into argument arrays, so pipes, redirects, substitutions, and shell
@@ -51,6 +56,40 @@ successful-pair latency were favorable conditional observations, but the
 baseline absolute-success lower bound and paired task-success non-inferiority
 bound failed their predeclared gates. It is not a verified improvement and
 must not be presented as one.
+
+## Engine-change latency target
+
+Use the explicit engine target for quantization, speculative decoding, vLLM
+upgrades, scheduler or kernel changes, parallelism, and other serving changes:
+
+```bash
+runeconomy experiment init --mode agent-process \
+  --baseline "python agent.py --backend baseline" \
+  --candidate "python agent.py --backend candidate" \
+  --dataset tasks.json \
+  --evaluator evaluator.py \
+  --optimization-target engine-change-latency \
+  --latency-semantics superiority \
+  --output experiment/
+```
+
+This target is latency-focused, not quality-blind. The eligible latency
+population is task pairs where both variants succeeded. Failed, timed-out,
+missing, or unevaluable attempts never enter the favorable latency population.
+they remain visible in completion and quality gates. Baseline and candidate
+must each have one complete stable backend identity, and those identities must
+differ. An identity mutation within either variant invalidates the result.
+
+`superiority` verifies only when the upper bound of the paired 95% Student-t
+interval for candidate-minus-baseline wall time is below zero. For a
+predeclared non-inferiority question, use `--latency-semantics noninferiority`
+and a scientifically justified `--max-latency-regression-ms`. The same upper
+bound must be below that margin. A missing interval is inconclusive, not a
+pass.
+
+The experiment verifies only the declared workload, evaluator, identities,
+hardware, execution order, and gates. It does not establish universal model
+quality, production-concurrency behavior, or superiority on failed tasks.
 
 ## Dataset
 
@@ -231,6 +270,13 @@ metric, maximum both-successful latency pairs, missing calibration assumptions,
 and operator-declared held-out status. Repetitions add task-attempt units but
 are not described as additional independent tasks.
 
+The paired-quality section also reports the minimum sample needed to tolerate
+zero, one, or two baseline-only outcomes when there are no offsetting
+candidate-only outcomes. A 40-pair design with a 10-point margin is explicitly
+flagged as fragile because one baseline-only outcome cannot clear the
+conservative exact bound. This is the failure mode observed in the frozen
+40-task proof. A best-case feasibility check alone is not a sizing argument.
+
 Order is seeded and either randomized or alternating. Pairing uses
 `(task_id, repetition)`. Task success uses absolute Clopper-Pearson intervals
 and the existing conservative paired exact non-inferiority bound. The default
@@ -258,6 +304,11 @@ Statuses remain separate per attempt: `completed`, `task_failure`,
 `model_output_failure`, `application_failure`, `timeout`,
 `infrastructure_failure`, `invalid_status`, `invalid_trace`, and
 `evaluator_infrastructure_error`.
+
+Agent-process runs use `attempts.jsonl` as a durable checkpoint. Re-run
+`experiment run` with `--resume` after an operator interruption. RunEconomy
+revalidates commands, dataset, evaluator, schedule, gates, and every completed
+record before continuing. A mismatched or reordered checkpoint is rejected.
 
 ## Evidence and sensitive data
 

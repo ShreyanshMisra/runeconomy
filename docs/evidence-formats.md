@@ -25,6 +25,24 @@ Each capability is supported, unsupported, or unknown. A missing metric remains
 unknown. Unsupported replay does not prevent diagnosis, but it prevents a
 runnable replay workspace.
 
+## Field evidence grades
+
+Every normalized trace now carries evidence-quality schema `0.1`. Human import
+output and machine-readable bundles show the same field grades:
+
+| Grade | Meaning |
+| --- | --- |
+| `directly_observed` | The source recorded the field with unambiguous semantics. |
+| `reliably_derived` | RunEconomy deterministically derived the field from directly recorded values. |
+| `weakly_inferred` | The source field is usable only with an explicit semantic caveat. |
+| `unresolved` | The evidence does not justify a value or claim. |
+
+The overall grade is the weakest recorded field. A stronger field cannot mask
+an unresolved one. Generic `gen_ai.ttft_ms` is weakly inferred because the
+clock boundary may be framework- or provider-specific. Only the explicit
+`runeconomy.server_ttft_ms` extension is treated as directly observed server
+TTFT. Conflicting aliases are rejected instead of selected silently.
+
 ## Tutorial evidence
 
 The installed tutorial uses a RunEconomy-enriched OpenInference fixture. It
@@ -51,6 +69,11 @@ Rendered token IDs and exact semantic segments are RunEconomy extensions. Exact
 segment boundaries are accepted only when their token arrays reproduce the
 complete prompt token sequence. Otherwise attribution stays structural or
 unknown.
+
+Deterministic compatibility fixtures cover RunEconomy-enriched OpenInference,
+a synthetic LangChain/LangSmith-style OpenTelemetry GenAI export, and the
+documented Phoenix CLI shape. They test import semantics and do not represent
+live framework or workload evidence.
 
 A directory may contain several JSON traces. The imported bundle lists each run
 and requires deliberate selection before runnable initialization.

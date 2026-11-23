@@ -14,7 +14,8 @@ from .experiments import ExperimentManifest, ExperimentValidationError
 
 
 WORKSPACE_VERSION = "0.1"
-AGENT_MANIFEST_VERSION = "0.1"
+AGENT_MANIFEST_VERSION = "0.2"
+SUPPORTED_AGENT_MANIFEST_VERSIONS = {"0.1", "0.2"}
 
 
 def _digest_path(path: Path) -> str:
@@ -193,6 +194,9 @@ def create_agent_workspace(
     max_task_success_regression: float = 0.05,
     min_task_success_rate: float = 0.8,
     min_completed_rate: float = 1.0,
+    optimization_target: str = "successful_workflow_latency",
+    latency_semantics: str = "superiority",
+    max_latency_regression_ms: float = 0.0,
     cost_ceiling_usd: float | None = None,
 ) -> dict[str, Any]:
     for path, label in ((dataset_path, "dataset"), (evaluator_path, "evaluator")):
@@ -220,6 +224,9 @@ def create_agent_workspace(
             "evaluator_timeout_seconds": evaluator_timeout_seconds,
         },
         "acceptance": {
+            "optimization_target": optimization_target,
+            "latency_semantics": latency_semantics,
+            "max_latency_regression_ms": max_latency_regression_ms,
             "max_task_success_regression": max_task_success_regression,
             "min_task_success_rate": min_task_success_rate,
             "min_completed_rate": min_completed_rate,
@@ -235,8 +242,16 @@ def create_agent_workspace(
         "source_evidence": None,
         "selected_finding": None,
         "intervention": {
-            "template_id": "agent.process_change",
-            "summary": "Compare complete baseline and candidate agent processes.",
+            "template_id": (
+                "engine.change_latency"
+                if optimization_target == "engine_change_latency"
+                else "agent.process_change"
+            ),
+            "summary": (
+                "Compare successful-workflow latency across distinct serving backends."
+                if optimization_target == "engine_change_latency"
+                else "Compare complete baseline and candidate agent processes."
+            ),
             "control": "Both variants receive the same task-level dataset and evaluator.",
         },
         "files": {
@@ -289,7 +304,7 @@ def _resolve_reference(workspace: Path, value: str) -> Path:
 def validate_agent_manifest(manifest: Mapping[str, Any], workspace: Path) -> None:
     if manifest.get("artifact_type") != "runeconomy.agent_process_experiment":
         raise ExperimentValidationError("agent manifest artifact_type is invalid")
-    if manifest.get("schema_version") != AGENT_MANIFEST_VERSION:
+    if manifest.get("schema_version") not in SUPPORTED_AGENT_MANIFEST_VERSIONS:
         raise ExperimentValidationError("unsupported agent-process manifest version")
     for variant in ("baseline", "candidate"):
         value = manifest.get(variant)
@@ -312,6 +327,30 @@ def validate_agent_manifest(manifest: Mapping[str, Any], workspace: Path) -> Non
         raise ExperimentValidationError("execution.order must be randomized or alternating")
     if not isinstance(acceptance, Mapping):
         raise ExperimentValidationError("acceptance must be an object")
+    optimization_target = acceptance.get(
+        "optimization_target", "successful_workflow_latency"
+    )
+    if optimization_target not in {
+        "successful_workflow_latency",
+        "engine_change_latency",
+    }:
+        raise ExperimentValidationError(
+            "acceptance.optimization_target must be successful_workflow_latency or engine_change_latency"
+        )
+    latency_semantics = acceptance.get("latency_semantics", "superiority")
+    if latency_semantics not in {"superiority", "noninferiority"}:
+        raise ExperimentValidationError(
+            "acceptance.latency_semantics must be superiority or noninferiority"
+        )
+    latency_margin = acceptance.get("max_latency_regression_ms", 0.0)
+    if (
+        isinstance(latency_margin, bool)
+        or not isinstance(latency_margin, (int, float))
+        or latency_margin < 0
+    ):
+        raise ExperimentValidationError(
+            "acceptance.max_latency_regression_ms must be non-negative"
+        )
     repetitions = execution.get("repetitions", 1)
     if (
         not isinstance(repetitions, int)
@@ -587,4 +626,13 @@ def agent_run_arguments(manifest: Mapping[str, Any], workspace: Path) -> dict[st
         "max_task_success_regression": float(acceptance.get("max_task_success_regression", 0.05)),
         "min_task_success_rate": float(acceptance.get("min_task_success_rate", 0.8)),
         "min_completed_rate": float(acceptance.get("min_completed_rate", 1.0)),
+        "optimization_target": str(
+            acceptance.get("optimization_target", "successful_workflow_latency")
+        ),
+        "latency_semantics": str(
+            acceptance.get("latency_semantics", "superiority")
+        ),
+        "max_latency_regression_ms": float(
+            acceptance.get("max_latency_regression_ms", 0.0)
+        ),
     }

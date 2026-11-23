@@ -143,6 +143,53 @@ class BackendCapabilityTests(unittest.TestCase):
         self.assertEqual(caught.exception.category, "server_error")
         self.assertIn("server error", caught.exception.next_action)
 
+    def test_rate_limit_is_terminal_and_actionable(self) -> None:
+        error = urllib.error.HTTPError(
+            "https://private.example/openapi.json",
+            429,
+            "rate limited",
+            {},
+            io.BytesIO(b"busy"),
+        )
+        with patch("urllib.request.urlopen", side_effect=error):
+            with self.assertRaises(BackendProbeError) as caught:
+                discover_vllm_capabilities(
+                    "https://private.example", startup_retry_seconds=30
+                )
+        self.assertEqual(caught.exception.category, "rate_limit")
+
+    def test_doctor_retries_503_during_explicit_startup_window(self) -> None:
+        class Response(io.BytesIO):
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                self.close()
+
+        starting = urllib.error.HTTPError(
+            "https://private.example/openapi.json",
+            503,
+            "starting",
+            {},
+            io.BytesIO(b"starting"),
+        )
+        responses = [
+            starting,
+            Response(b'{"paths":{}}'),
+            Response(b'{"version":"0.33.0"}'),
+            Response(b'{"data":[]}'),
+        ]
+        with (
+            patch("urllib.request.urlopen", side_effect=responses),
+            patch("runeconomy.startup.StartupRetry.wait", autospec=True),
+        ):
+            result = discover_vllm_capabilities(
+                "https://private.example", startup_retry_seconds=30
+            )
+        self.assertEqual(result.backend_version, "0.33.0")
+
     def test_connection_and_timeout_failures_are_distinct(self) -> None:
         cases = (
             (urllib.error.URLError("refused"), "connection"),

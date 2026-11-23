@@ -17,6 +17,20 @@ from runeconomy.models import Trace, TraceValidationError
 
 
 class ImporterTests(unittest.TestCase):
+    def test_synthetic_langchain_otel_shape_preserves_evidence_boundaries(self) -> None:
+        fixture = (
+            Path(__file__).parent
+            / "fixtures"
+            / "framework-traces"
+            / "langchain-otel-synthetic.json"
+        )
+        payload = import_openinference(fixture)
+        quality = payload["evidence_quality"]["fields"]
+        self.assertEqual(quality["prompt_tokens"]["grade"], "reliably_derived")
+        self.assertEqual(quality["cached_input_tokens"]["grade"], "directly_observed")
+        self.assertEqual(quality["server_ttft"]["grade"], "weakly_inferred")
+        self.assertEqual(quality["workflow_dependencies"]["grade"], "unresolved")
+
     def test_vllm_jsonl_envelopes_produce_analyzable_trace(self) -> None:
         tool_catalog = [
             {"type": "function", "name": name, "parameters": {"type": "object"}}
@@ -95,14 +109,15 @@ class ImporterTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "captures.jsonl"
             path.write_text(json.dumps(record) + "\n", encoding="utf-8")
-            trace = Trace.from_dict(
-                import_vllm_jsonl(
-                    path, trace_id="client-only", workload="test", model="example/model"
-                )
+            normalized = import_vllm_jsonl(
+                path, trace_id="client-only", workload="test", model="example/model"
             )
+            trace = Trace.from_dict(normalized)
 
         self.assertIsNone(trace.requests[0].metrics.ttft_ms)
         self.assertEqual(trace.requests[0].metrics.client_ttft_ms, 18.5)
+        quality = normalized["evidence_quality"]
+        self.assertEqual(quality["fields"]["server_ttft"]["grade"], "unresolved")
 
     def test_verified_rendered_segments_produce_exact_boundaries(self) -> None:
         record = {
@@ -187,9 +202,8 @@ class ImporterTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "otel.json"
             path.write_text(json.dumps(payload), encoding="utf-8")
-            trace = Trace.from_dict(
-                import_openinference(path, workload="agent-run")
-            )
+            normalized = import_openinference(path, workload="agent-run")
+            trace = Trace.from_dict(normalized)
         request = trace.requests[0]
         self.assertIsNone(request.prompt_token_ids)
         self.assertEqual(request.prompt_token_count, 123)
@@ -200,6 +214,12 @@ class ImporterTests(unittest.TestCase):
         self.assertEqual(request.invoked_tools, ("search",))
         self.assertEqual(request.segments[0].attribution_quality, "structural")
         self.assertEqual(trace.spans[0].duration_ms, 250.0)
+        quality = normalized["evidence_quality"]
+        self.assertEqual(
+            quality["fields"]["cached_input_tokens"]["grade"],
+            "directly_observed",
+        )
+        self.assertEqual(quality["fields"]["server_ttft"]["grade"], "unresolved")
         report = analyze_trace(trace)
         self.assertEqual(report["summary"]["count_only_request_count"], 1)
         self.assertFalse(report["requests"][0]["prefix_analysis_supported"])
@@ -293,6 +313,91 @@ class ImporterTests(unittest.TestCase):
         self.assertEqual(payload["spans"][0]["parent_span_id"], "agent-1")
         self.assertEqual(payload["dependency_evidence"], "absent")
         self.assertEqual(payload["span_parentage_evidence"], "structural_only")
+        self.assertEqual(
+            payload["evidence_quality"]["fields"]["workflow_dependencies"]["grade"],
+            "unresolved",
+        )
+
+    def test_generic_ttft_is_visible_as_weakly_inferred(self) -> None:
+        payload = {
+            "spans": [
+                {
+                    "trace_id": "ambiguous-ttft",
+                    "span_id": "llm-1",
+                    "start_time_unix_nano": 0,
+                    "end_time_unix_nano": 1_000_000,
+                    "attributes": {
+                        "openinference.span.kind": "LLM",
+                        "gen_ai.ttft_ms": 12.0,
+                    },
+                }
+            ]
+        }
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "trace.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            imported = import_openinference(path)
+        self.assertEqual(imported["requests"][0]["metrics"]["ttft_ms"], 12.0)
+        self.assertEqual(
+            imported["evidence_quality"]["fields"]["server_ttft"]["grade"],
+            "weakly_inferred",
+        )
+
+    def test_conflicting_identity_and_cached_token_aliases_are_rejected(self) -> None:
+        cases = (
+            {
+                "llm.model_name": "model-a",
+                "gen_ai.request.model": "model-b",
+            },
+            {
+                "runeconomy.cached_input_tokens": 10,
+                "gen_ai.usage.cache_read.input_tokens": 11,
+            },
+        )
+        for attributes in cases:
+            with self.subTest(attributes=attributes):
+                payload = {
+                    "spans": [
+                        {
+                            "trace_id": "conflict",
+                            "span_id": "llm-1",
+                            "start_time_unix_nano": 0,
+                            "end_time_unix_nano": 1_000_000,
+                            "attributes": {
+                                "openinference.span.kind": "LLM",
+                                **attributes,
+                            },
+                        }
+                    ]
+                }
+                with TemporaryDirectory() as directory:
+                    path = Path(directory) / "trace.json"
+                    path.write_text(json.dumps(payload), encoding="utf-8")
+                    with self.assertRaisesRegex(
+                        TraceValidationError, "conflicting"
+                    ):
+                        import_openinference(path)
+
+    def test_conflicting_task_ids_are_rejected(self) -> None:
+        spans = []
+        for index, task_id in enumerate(("task-a", "task-b")):
+            spans.append(
+                {
+                    "trace_id": "task-conflict",
+                    "span_id": f"llm-{index}",
+                    "start_time_unix_nano": index * 2_000_000,
+                    "end_time_unix_nano": index * 2_000_000 + 1_000_000,
+                    "attributes": {
+                        "openinference.span.kind": "LLM",
+                        "runeconomy.task_id": task_id,
+                    },
+                }
+            )
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "trace.json"
+            path.write_text(json.dumps({"spans": spans}), encoding="utf-8")
+            with self.assertRaisesRegex(TraceValidationError, "conflicting runeconomy.task_id"):
+                import_openinference(path)
 
 
 if __name__ == "__main__":

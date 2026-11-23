@@ -16,10 +16,12 @@ is running, and the machine running RunEconomy can reach it. Increase
 
 ## A cold server is still starting
 
-`capture-vllm` and `experiment run` fail immediately when the server does not
+`doctor`, `capture-vllm`, and static `experiment run` fail immediately when the server does not
 accept the connection. For a deployment that needs time to load a model, pass
 `--startup-timeout SECONDS`. RunEconomy then retries until the server responds
-or the time runs out, and prints one notice while it waits.
+or the time runs out, and prints one notice while it waits. Only connection
+failures and startup 502/503 responses are retried. 429 and other terminal
+responses remain immediate failures.
 
 ## Authentication failed
 
@@ -69,6 +71,9 @@ Preserve the checkpoint and partial result. Run `doctor` against the same
 backend, inspect the reported cause, and resume only if the manifest schedule,
 backend identity, and evidence remain valid. A changed model, tokenizer,
 template, backend version, or relevant engine setting invalidates comparison.
+Use `runeconomy experiment run WORKSPACE --output RESULTS --resume` for either
+static or agent-process workspaces. The runner rejects checkpoint records that
+do not match the frozen schedule.
 
 ## An agent-process experiment reports invalid evidence
 

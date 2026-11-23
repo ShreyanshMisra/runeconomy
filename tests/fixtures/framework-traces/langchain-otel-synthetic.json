@@ -1,0 +1,21 @@
+{
+  "_fixture_notice": "Synthetic deterministic OpenTelemetry GenAI export shaped like a LangChain/LangSmith OTEL trace. This is not live workload evidence.",
+  "spans": [
+    {
+      "trace_id": "synthetic-langchain-trace",
+      "span_id": "llm-1",
+      "start_time_unix_nano": 1000000000,
+      "end_time_unix_nano": 1050000000,
+      "attributes": {
+        "gen_ai.operation.name": "chat",
+        "gen_ai.provider.name": "vllm",
+        "gen_ai.request.model": "fixture/model",
+        "gen_ai.usage.input_tokens": 42,
+        "gen_ai.usage.output_tokens": 4,
+        "gen_ai.usage.cache_read.input_tokens": 16,
+        "gen_ai.ttft_ms": 8.5,
+        "runeconomy.task_id": "synthetic-task"
+      }
+    }
+  ]
+}

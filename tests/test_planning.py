@@ -233,6 +233,32 @@ class ExperimentPlanningTests(unittest.TestCase):
         self.assertIn("runeconomy.plan.absolute_gate_infeasible", codes)
         self.assertIn("runeconomy.plan.paired_gate_infeasible", codes)
 
+    def test_forty_pair_failure_mode_is_reported_with_larger_sizing_scenario(self) -> None:
+        historical_pairs = (
+            [(True, True)] * 36
+            + [(True, False)]
+            + [(False, True)] * 2
+            + [(False, False)]
+        )
+        observed = _paired_success_statistics(historical_pairs)
+        self.assertLess(observed["one_sided_lower_bound"], -0.10)
+
+        with TemporaryDirectory() as raw_directory:
+            report = plan_experiment(
+                _agent_workspace(
+                    Path(raw_directory), planning=_complete_planning()
+                )
+            )
+        paired = report["task_success"]["paired_noninferiority"]
+        required_for_one = paired[
+            "minimum_pairs_by_baseline_only_with_zero_candidate_only"
+        ]["1"]
+        self.assertGreater(required_for_one, 40)
+        self.assertIn(
+            "runeconomy.plan.paired_gate_fragile",
+            {issue["code"] for issue in report["issues"]},
+        )
+
     def test_duplicate_task_ids_block_pairing_without_echoing_them(self) -> None:
         with TemporaryDirectory() as raw_directory:
             root = Path(raw_directory)
@@ -321,6 +347,32 @@ class ExperimentPlanningTests(unittest.TestCase):
         self.assertEqual(report["state"], "blocked")
         self.assertIn("runeconomy.plan.identity_change_undeclared", codes)
         self.assertIn("runeconomy.plan.heldout_consumed", codes)
+
+    def test_engine_change_target_requires_declared_backend_identity_intervention(self) -> None:
+        planning = _complete_planning()
+        with TemporaryDirectory() as raw_directory:
+            workspace = _agent_workspace(Path(raw_directory), planning=planning)
+            manifest_path = workspace / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["acceptance"]["optimization_target"] = "engine_change_latency"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            blocked = plan_experiment(workspace)
+
+            manifest["design"]["planning"]["identity_change"] = True
+            manifest["design"]["planning"]["intervention_variables"] = [
+                "backend_identity"
+            ]
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            declared = plan_experiment(workspace)
+
+        self.assertIn(
+            "runeconomy.plan.engine_change_not_declared",
+            {issue["code"] for issue in blocked["issues"]},
+        )
+        self.assertNotIn(
+            "runeconomy.plan.engine_change_not_declared",
+            {issue["code"] for issue in declared["issues"]},
+        )
 
     def test_operator_heldout_declaration_is_not_independent_verification(self) -> None:
         planning = _complete_planning()
