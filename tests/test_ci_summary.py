@@ -3,6 +3,9 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
+import subprocess
+import textwrap
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -134,6 +137,23 @@ class CommentTests(unittest.TestCase):
 
 
 class ActionDefinitionTests(unittest.TestCase):
+    def test_run_step_handles_compatibility_and_rejects_stale_results(self) -> None:
+        action = (ROOT / "action.yml").read_text(encoding="utf-8")
+        step = action.split("id: run\n", 1)[1].split("run: |\n", 1)[1].split("\n    - name:", 1)[0]
+        script = textwrap.dedent(step)
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "results").mkdir()
+            (root / "results/result.json").write_text("{}", encoding="utf-8")
+            output = root / "outputs"
+            env = {**os.environ, "WORKSPACE": "experiment", "OUTPUT": "results", "MODE": "compatibility",
+                   "ALLOW_EXEC": "false", "GITHUB_OUTPUT": str(output)}
+            for status in (1, 0):
+                command = f"runeconomy() {{ return {status}; }}\n" + script
+                run = subprocess.run(["bash", "-c", command], cwd=root, env=env, capture_output=True)
+                self.assertEqual(run.returncode, status, run.stderr)
+                self.assertEqual(output.exists(), status == 0)
+
     def test_action_runs_frozen_experiment_and_posts_summary(self) -> None:
         text = (ROOT / "action.yml").read_text(encoding="utf-8")
         for required in (

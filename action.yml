@@ -80,14 +80,14 @@ runs:
         ALLOW_EXEC: ${{ inputs.allow-exec-evaluators }}
       run: |
         set -euo pipefail
-        flags=()
+        flags=(--json)
         case "$MODE" in
           frozen) flags+=(--require-frozen) ;;
           compatibility) ;;
           *) echo "::error title=RunEconomy::mode must be frozen or compatibility"; exit 1 ;;
         esac
         if [ "$ALLOW_EXEC" = "true" ]; then flags+=(--allow-exec-evaluators); fi
-        runeconomy experiment run "$WORKSPACE" --output "$OUTPUT" "${flags[@]}" --json > runeconomy-run.json
+        runeconomy experiment run "$WORKSPACE" --output "$OUTPUT" "${flags[@]}" > runeconomy-run.json
         test -f "$OUTPUT/result.json"
         echo "result=$OUTPUT/result.json" >> "$GITHUB_OUTPUT"
 
