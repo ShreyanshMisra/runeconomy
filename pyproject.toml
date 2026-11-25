@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "runeconomy"
-version = "0.2.2"
+version = "0.3.0"
 description = "Find inference waste in agent workflows and verify performance improvements"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -60,6 +60,7 @@ include = [
 ]
 exclude = [
     "/docs/internal",
+    "/docs/drafts",
     "/examples/experiments/repository-agent-tool-pruning-heldout.json",
     "/examples/fixtures/recorded-cli-build-parser.txt",
 ]
