@@ -1,21 +1,19 @@
-# Phase 7 proofs and studies
+# Proofs 3 and 4, and studies
 
-Status: executed, **not yet published**. Publication needs the owner's
-approval (`human.md`). Every number here is recomputed from result files by
-`scripts/build_phase7_artifacts.py`. The records are in
-`artifacts/phase-7-publication/`, with `SHA256SUMS`.
+Every number here is recomputed from result files by
+`scripts/build_phase7_artifacts.py`. The decision records and reports are in
+[`docs/proof-records/`](proof-records/).
 
 | Item | Design | Verdict | Record |
 | --- | --- | --- | --- |
-| Proof 3 | BF16 vs online FP8, 200 frozen held-out pairs, 16 agents per variant | **verified** (target: verified) | `proof-3-decision.json`, [internal record](internal/proof-3-decision.md) |
-| Proof 4 | Search tool removed, 100 frozen held-out pairs | **regression** (target: regression) | `proof-4-decision.json`, [internal record](internal/proof-4-decision.md) |
-| Study 1 | FP8 vs BF16 at 1, 8 and 32 agents | descriptive | `study-1.json` |
-| Study 2 | Dynamic value before vs after a stable prompt prefix | descriptive | `study-2.json` |
-| Study 3 | Hosted frontier API vs self-hosted open weights | not run: needs a hosted API key | `human.md` |
+| Proof 3 | BF16 vs online FP8, 200 frozen held-out pairs, 16 agents per variant | **verified** (target: verified) | [`proof-3-decision.json`](proof-records/proof-3-decision.json) |
+| Proof 4 | Search tool removed, 100 frozen held-out pairs | **regression** (target: regression) | [`proof-4-decision.json`](proof-records/proof-4-decision.json) |
+| Study 1 | FP8 vs BF16 at 1, 8 and 32 agents | descriptive | [`study-1.json`](proof-records/study-1.json) |
+| Study 2 | Dynamic value before vs after a stable prompt prefix | descriptive | [`study-2.json`](proof-records/study-2.json) |
+| Study 3 | Hosted frontier API vs self-hosted open weights | not run: needs a hosted API key | none |
 
-Proofs 1 and 2 are unchanged. They are the history that led to the Phase 1
-methods: the completion policy, the exact paired method, and the power
-planner.
+Proofs 1 and 2 are unchanged. They are the history that led to the
+completion policy, the exact paired method, and the power planner.
 
 ## How the proofs were run
 
@@ -109,7 +107,7 @@ Both were fixed before the rerun:
 
 The superseded result's digest is in `study-2.json`.
 
-## Defects found and fixed during Phase 7
+## Defects found and fixed during these runs
 
 - **Server gauges recorded as unknown.** The vLLM/SGLang scraper mapping let
   SGLang's metric names replace vLLM's, so running, waiting and KV-usage
@@ -119,13 +117,14 @@ The superseded result's digest is in `study-2.json`.
   counters but unknown gauges.
 - **Workspaces embedded absolute paths.** `experiment init` wrote absolute
   paths for inputs outside the workspace, including the local home directory.
-  New workspaces reference such inputs relatively. The frozen Phase 7
+  New workspaces reference such inputs relatively. The frozen proof
   workspaces predate the fix and keep their paths, because changing them would
   break their freeze digests.
 
 ## Reproducing
 
-`phase-7-reproducibility.tar.gz` contains:
+The reproducibility bundle (`phase-7-reproducibility.tar.gz`, built by
+`scripts/build_phase7_artifacts.py`; not attached to this repository) contains:
 
 - the frozen and calibration workspaces (manifests, preregistration records,
   provenance chains)

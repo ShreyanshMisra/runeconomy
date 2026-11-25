@@ -1,8 +1,7 @@
-"""Build the Phase 7 decision records, reports, and reproducibility bundle.
+"""Build the Proof 3/4 decision records, reports, and reproducibility bundle.
 
-Every number is recomputed from the ``result.json`` files inside the private
-window archives; nothing is copied from prose. The outputs are private and
-unpublished until the owner approves publication (see ``human.md``):
+Every number is recomputed from the ``result.json`` files inside the
+window archives; nothing is copied from prose. Outputs:
 
 - ``proof-3-decision.json`` and ``proof-4-decision.json``: aggregate decision
   records with the frozen digests, every gate, and the claim boundary
