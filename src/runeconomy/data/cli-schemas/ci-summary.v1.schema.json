@@ -1,7 +1,7 @@
 {
   "$id": "runeconomy.cli.ci-summary.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Markdown verdict table for CI. verified is true only for a frozen-mode verified verdict.",
+  "description": "Markdown verdict table for CI. verified is true only for a frozen-mode verified verdict with intact preregistration.",
   "properties": {
     "comment": {
       "properties": {

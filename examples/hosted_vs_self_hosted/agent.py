@@ -145,14 +145,14 @@ class HostedChatClient:
             "stream_options": {"include_usage": True},
         }
         headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
         request = urllib.request.Request(
             f"{self.base_url}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
             headers=headers,
             method="POST",
         )
+        if self.api_key:
+            request.add_unredirected_header("Authorization", f"Bearer {self.api_key}")
         started = time.perf_counter()
         first_output: float | None = None
         pieces: list[str] = []

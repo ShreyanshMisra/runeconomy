@@ -21,7 +21,7 @@ configuration whose changes should be verified.
 | `require-verified` | `false` | Fail the job unless a frozen run is `verified` |
 | `comment` | `true` | Create or update the marked verdict comment on the pull request |
 | `allow-exec-evaluators` | `false` | Allow python and command evaluators |
-| `runeconomy-version` | `runeconomy` | Package specifier; `.` installs the checked-out repository |
+| `runeconomy-version` | `runeconomy==0.3.0` | Package specifier; `.` installs the checked-out repository |
 
 The Action has three outputs:
 
@@ -33,6 +33,9 @@ The verdict table is also written to the job summary.
 
 ## Safety
 
+- Run credentialed experiments only on trusted branches and reviewed agent code.
+  Agent processes run local commands. A freeze checks for drift since registration.
+  The example skips fork pull requests.
 - A frozen workspace is immutable. A pull request that edits the frozen
   manifest, dataset, evaluator or a `--lock` file fails with
   `runeconomy.freeze.drift` before anything runs. To change a design, add a

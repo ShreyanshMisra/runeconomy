@@ -3,8 +3,9 @@
 RunEconomy `0.3.0` makes capture zero-code, runs experiments under concurrent
 load, gates on cost and tail latency, and adds SGLang and hosted
 OpenAI-compatible backends. Coding agents and CI can now drive the whole
-workflow. The privacy boundary is unchanged: raw tasks, traces, model output,
-evaluator answers, credentials and endpoints stay local.
+workflow. RunEconomy stores capture and experiment artifacts locally. Live runs
+send requests to the configured serving backend. An LLM judge also sends its
+evaluation input to the configured judge endpoint.
 
 ## Zero-code capture
 

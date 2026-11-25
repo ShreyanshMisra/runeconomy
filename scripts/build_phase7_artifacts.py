@@ -21,7 +21,6 @@ window archives; nothing is copied from prose. Outputs:
 from __future__ import annotations
 
 import argparse
-import contextlib
 import hashlib
 import io
 import json
@@ -29,7 +28,6 @@ import math
 import statistics
 import sys
 import tarfile
-import tempfile
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -38,7 +36,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from analyze_phase7 import summarize_result  # noqa: E402
 
-from runeconomy.cli import main as cli  # noqa: E402
+from runeconomy.reports import render_experiment_html  # noqa: E402
 
 RECORD_VERSION = "0.1"
 SOURCE_FILES = (
@@ -371,14 +369,9 @@ def study2_record(
     }
 
 
-def _report(result_bytes: bytes, output: Path) -> None:
-    with tempfile.TemporaryDirectory() as directory:
-        source = Path(directory) / "result.json"
-        source.write_bytes(result_bytes)
-        with contextlib.redirect_stdout(io.StringIO()):
-            code = cli(["experiment", "report", str(source), "--output", str(output), "--json"])
-    if code != 0:
-        raise SystemExit(f"report failed for {output.name}")
+def _report(result_bytes: bytes, output: Path, *, descriptive_study: bool = False) -> None:
+    report = render_experiment_html(json.loads(result_bytes), descriptive_study=descriptive_study)
+    output.write_text(report, encoding="utf-8")
 
 
 def _add_tree(archive: tarfile.TarFile, source: Path, arcname: str) -> None:
@@ -417,7 +410,7 @@ def main() -> int:
     study1_bytes = heldout["results/study-1/result.json"]
     outputs["study-1.json"] = (json.dumps(
         study1_record(json.loads(study1_bytes), study1_bytes, args.heldout), indent=2, sort_keys=True) + "\n").encode()
-    _report(study1_bytes, args.output / "study-1-report.html")
+    _report(study1_bytes, args.output / "study-1-report.html", descriptive_study=True)
 
     first_study2 = heldout["results/study-2/result.json"]
     superseded = {
@@ -435,7 +428,7 @@ def main() -> int:
     outputs["study-2.json"] = (json.dumps(
         study2_record(json.loads(study2_bytes), study2_bytes, args.study2, superseded), indent=2, sort_keys=True,
     ) + "\n").encode()
-    _report(study2_bytes, args.output / "study-2-report.html")
+    _report(study2_bytes, args.output / "study-2-report.html", descriptive_study=True)
 
     for name, content in outputs.items():
         (args.output / name).write_bytes(content)

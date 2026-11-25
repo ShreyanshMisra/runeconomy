@@ -39,7 +39,7 @@ inputs:
       Package specifier to install, for example "runeconomy==0.3.0". Use "."
       to install the checked-out repository.
     required: false
-    default: runeconomy
+    default: runeconomy==0.3.0
   python-version:
     description: Python version for the RunEconomy runner.
     required: false
@@ -79,17 +79,17 @@ runs:
         MODE: ${{ inputs.mode }}
         ALLOW_EXEC: ${{ inputs.allow-exec-evaluators }}
       run: |
-        set -uo pipefail
+        set -euo pipefail
         flags=()
-        if [ "$MODE" = "frozen" ]; then flags+=(--require-frozen); fi
+        case "$MODE" in
+          frozen) flags+=(--require-frozen) ;;
+          compatibility) ;;
+          *) echo "::error title=RunEconomy::mode must be frozen or compatibility"; exit 1 ;;
+        esac
         if [ "$ALLOW_EXEC" = "true" ]; then flags+=(--allow-exec-evaluators); fi
         runeconomy experiment run "$WORKSPACE" --output "$OUTPUT" "${flags[@]}" --json > runeconomy-run.json
-        status=$?
+        test -f "$OUTPUT/result.json"
         echo "result=$OUTPUT/result.json" >> "$GITHUB_OUTPUT"
-        if [ ! -f "$OUTPUT/result.json" ]; then
-          echo "::error title=RunEconomy::the experiment did not produce a result (exit $status)"
-          exit "$status"
-        fi
 
     - name: Summarize verdict
       id: summary

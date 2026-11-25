@@ -1,5 +1,7 @@
 # RunEconomy
 
+<!-- mcp-name: io.github.ShreyanshMisra/runeconomy -->
+
 RunEconomy identifies inference waste on the critical path of an agent workflow
 and tests whether a change improves successful-task performance. It is an alpha
 CLI for engineers running multi-step agents on self-hosted vLLM or SGLang, or

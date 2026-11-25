@@ -41,9 +41,9 @@ zero and not an estimate.
 The hosted arm never calls `/tokenize`, render or metrics endpoints, and never
 sends vLLM-only parameters such as `cache_salt`. The test suite checks this.
 
-Cost is deliberately absent. Hosted per-token prices and self-hosted GPU-hour
-costs are not comparable until a versioned cost model exists, and RunEconomy
-doesn't estimate them.
+This example leaves cost unknown. Its hosted and self-hosted arms need
+different pricing models. A RunEconomy manifest declares one cost model
+for the experiment.
 
 ## Identity on each arm
 
@@ -203,7 +203,7 @@ execution and gates. In particular:
   Hosted latency includes network distance to the provider, and the
   self-hosted arm runs on an otherwise idle server. Neither reflects production
   concurrency.
-- **It doesn't cover cost.** There's no cost or goodput gate yet.
+- **Cost and goodput are outside this example's gates.**
 - **Hosted identity is provider-declared.** The verdict is limited to the
   observed service window, as recorded in `identity_assurance`.
 - **The hosted internals are opaque.** Exact prompt tokens, server timing and

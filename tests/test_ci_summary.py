@@ -48,7 +48,7 @@ class _GitHub(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         type(self).seen.append(("POST", self.path, None))
-        comment = {"id": len(type(self).comments) + 1, "body": body["body"]}
+        comment = {"id": len(type(self).comments) + 1, "body": body["body"], "user": {"login": "github-actions[bot]"}}
         type(self).comments.append(comment)
         self._send(comment, 201)
 
@@ -80,7 +80,10 @@ class SummaryTests(unittest.TestCase):
     def test_unfrozen_and_compatibility_runs_are_labelled(self) -> None:
         verified = {"decision": {"status": "verified", "checks": []}}
         self.assertIn("Not run under an intact preregistration record", render_summary(verified)["markdown"])
-        compatibility = render_summary(verified, mode="compatibility")
+        self.assertFalse(render_summary(verified)["verified"])
+        frozen = {**verified, "preregistration": RESULT["preregistration"]}
+        self.assertTrue(render_summary(frozen)["verified"])
+        compatibility = render_summary(frozen, mode="compatibility")
         self.assertFalse(compatibility["verified"])
         self.assertIn("makes no verdict claim", compatibility["markdown"])
         with self.assertRaises(CIError):
@@ -89,7 +92,7 @@ class SummaryTests(unittest.TestCase):
 
 class CommentTests(unittest.TestCase):
     def test_comment_is_created_once_then_updated_in_place(self) -> None:
-        _GitHub.comments = [{"id": 99, "body": "unrelated review comment"}]
+        _GitHub.comments = [{"id": 99, "body": COMMENT_MARKER + "\nunrelated comment", "user": {"login": "contributor"}}]
         _GitHub.seen = []
         server = ThreadingHTTPServer(("127.0.0.1", 0), _GitHub)
         threading.Thread(target=server.serve_forever, daemon=True).start()

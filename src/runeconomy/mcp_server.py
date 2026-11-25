@@ -27,7 +27,6 @@ process.
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
 import os
 import secrets
@@ -396,8 +395,7 @@ class RunEconomyMCPServer:
         self.command = command or [sys.executable, "-m", "runeconomy"]
         self.clock = clock
         self.environment = dict(os.environ if environment is None else environment)
-        self._secret = secrets.token_bytes(32)
-        self._approvals: dict[str, float] = {}
+        self._approvals: dict[str, tuple[float, bytes]] = {}
         self.initialized = False
 
     # -- tool execution -------------------------------------------------
@@ -429,13 +427,13 @@ class RunEconomyMCPServer:
 
         return completed.returncode, parse(completed.stdout), parse(completed.stderr)
 
-    def _approval_token(self, arguments: Mapping[str, Any]) -> str:
+    def _approval_digest(self, arguments: Mapping[str, Any]) -> bytes:
         bound = {key: value for key, value in arguments.items() if key != "approval_token"}
         message = json.dumps(
             {"arguments": bound, "state": _manifest_state(Path(arguments["manifest"]))},
             sort_keys=True,
         ).encode("utf-8")
-        return "approve-" + hmac.new(self._secret, message, hashlib.sha256).hexdigest()[:32]
+        return hashlib.sha256(message).digest()
 
     def _estimate(self, arguments: Mapping[str, Any]) -> dict[str, Any]:
         manifest = Path(arguments["manifest"])
@@ -462,8 +460,10 @@ class RunEconomyMCPServer:
 
                 state = verify_freeze(manifest)
                 freeze = {"status": state["status"], "record_sha256": state["record_sha256"]}
-        token = self._approval_token(arguments)
-        self._approvals[token] = self.clock() + APPROVAL_TTL_SECONDS
+        now = self.clock()
+        self._approvals = {key: entry for key, entry in self._approvals.items() if entry[0] > now}
+        token = "approve-" + secrets.token_urlsafe(32)
+        self._approvals[token] = (now + APPROVAL_TTL_SECONDS, self._approval_digest(arguments))
         return {
             "status": "approval_required",
             "executed": False,
@@ -553,10 +553,8 @@ class RunEconomyMCPServer:
             token = arguments.get("approval_token")
             if not token:
                 return self._result(self._estimate(arguments), is_error=False)
-            expires = self._approvals.pop(token, None)
-            if expires is None or self.clock() > expires or not hmac.compare_digest(
-                token, self._approval_token(arguments)
-            ):
+            approval = self._approvals.pop(token, None)
+            if approval is None or self.clock() >= approval[0] or self._approval_digest(arguments) != approval[1]:
                 raise ToolError(
                     "approval_token is unknown, expired, already used, or no longer matches the arguments "
                     "and workspace files; request a new estimate"

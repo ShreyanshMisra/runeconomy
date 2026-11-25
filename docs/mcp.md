@@ -54,7 +54,7 @@ can spend money. Its first call never executes anything. It returns:
 - a single-use `approval_token`
 
 The agent must show this to the human and call again with the token only
-after explicit approval. The token is an HMAC over:
+after explicit approval. Each estimate issues a fresh random token. The server binds it to:
 
 - the exact tool arguments
 - the current digests of `manifest.json`, `workspace.json`,

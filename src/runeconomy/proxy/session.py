@@ -1890,4 +1890,3 @@ def session_traces(
             if "contains no completed inference exchanges" not in str(exc):
                 raise
     return traces
-

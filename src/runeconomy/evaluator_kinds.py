@@ -403,12 +403,11 @@ def judge_once(
     base = environment.get(judge["base_url_env"])
     if not base:
         raise _infrastructure(f"judge endpoint variable {judge['base_url_env']!r} is not set")
-    headers = {"Content-Type": "application/json"}
+    key = None
     if judge.get("api_key_env"):
         key = environment.get(judge["api_key_env"])
         if not key:
             raise _infrastructure(f"judge API key variable {judge['api_key_env']!r} is not set")
-        headers["Authorization"] = f"Bearer {key}"
     body = {
         "model": judge["model"],
         "messages": _judge_messages(spec, output_text, context),
@@ -418,8 +417,13 @@ def judge_once(
     if "seed" in judge:
         body["seed"] = judge["seed"]
     request = urllib.request.Request(
-        base.rstrip("/") + "/chat/completions", data=json.dumps(body).encode(), headers=headers, method="POST"
+        base.rstrip("/") + "/chat/completions",
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
     )
+    if key:
+        request.add_unredirected_header("Authorization", f"Bearer {key}")
     try:
         with opener(request, timeout=float(spec.get("timeout_seconds", 60))) as response:
             payload = json.loads(response.read())

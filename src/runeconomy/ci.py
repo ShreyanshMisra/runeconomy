@@ -102,7 +102,7 @@ def render_summary(result: Mapping[str, Any], *, mode: str = "frozen", title: st
     return {
         "mode": mode,
         "verdict": verdict,
-        "verified": verdict == "verified" and mode == "frozen",
+        "verified": verdict == "verified" and mode == "frozen" and frozen,
         "frozen": frozen,
         "failed_required_checks": failed,
         "markdown": "\n".join(lines) + "\n",
@@ -133,13 +133,13 @@ def _request(method: str, url: str, token: str, body: Mapping[str, Any] | None =
         data=data,
         method=method,
         headers={
-            "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
             "User-Agent": "runeconomy-ci",
             **({"Content-Type": "application/json"} if data is not None else {}),
         },
     )
+    request.add_unredirected_header("Authorization", f"Bearer {token}")
     try:
         with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
             payload = response.read()
@@ -166,7 +166,12 @@ def post_pull_request_comment(markdown: str, environment: Mapping[str, str] | No
     while existing is None:
         comments = _request("GET", f"{base}/{number}/comments?per_page=100&page={page}", token) or []
         existing = next(
-            (item for item in comments if COMMENT_MARKER in str(item.get("body", ""))), None
+            (
+                item for item in comments
+                if (item.get("user") or {}).get("login") == "github-actions[bot]"
+                and str(item.get("body", "")).startswith(COMMENT_MARKER)
+            ),
+            None,
         )
         if len(comments) < 100:
             break

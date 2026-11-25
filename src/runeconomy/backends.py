@@ -273,11 +273,11 @@ def _json_get(
     startup: StartupRetry | None = None,
 ) -> tuple[int, Any]:
     headers = {"Accept": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
     request = urllib.request.Request(
         f"{base_url.rstrip('/')}{path}", headers=headers, method="GET"
     )
+    if api_key:
+        request.add_unredirected_header("Authorization", f"Bearer {api_key}")
     retry = startup or StartupRetry(0)
     while True:
         try:
@@ -339,14 +339,14 @@ def _post_probe(
     timeout_seconds: float,
 ) -> tuple[int, Any]:
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
     request = urllib.request.Request(
         f"{base_url.rstrip('/')}{path}",
         data=json.dumps(payload).encode("utf-8"),
         headers=headers,
         method="POST",
     )
+    if api_key:
+        request.add_unredirected_header("Authorization", f"Bearer {api_key}")
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             try:

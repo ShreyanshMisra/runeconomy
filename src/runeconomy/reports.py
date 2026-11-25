@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib.resources import files
 from typing import Any
 
@@ -1144,11 +1144,20 @@ summary:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; }
 """
 
 
-def render_experiment_html(result: Mapping[str, Any]) -> str:
+def render_experiment_html(result: Mapping[str, Any], *, descriptive_study: bool = False) -> str:
     """Render a self-contained experiment report from recorded evidence."""
 
     view = _build_report_view_model(result)
-    return f"""<!doctype html>
+    if descriptive_study:
+        view = replace(
+            view,
+            badges=("Descriptive study", *view.badges),
+            primary_message="Descriptive study",
+            status_label=f"{view.status_label} (recorded gates only)",
+            verdict_explanation="These observations come from a study without preregistration.",
+            recommendation="Use these observations to design a preregistered comparison.",
+        )
+    document = f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1167,6 +1176,7 @@ def render_experiment_html(result: Mapping[str, Any]) -> str:
 </main>
 </body>
 </html>"""
+    return "\n".join(line if line.strip() else "" for line in document.split("\n"))
 
 
 def _render_markdown(view: ReportView) -> str:

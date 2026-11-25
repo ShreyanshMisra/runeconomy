@@ -152,7 +152,9 @@ class MCPGoldenPathTests(unittest.TestCase):
                 )
                 self.assertTrue(changed["isError"], "a token is bound to its exact arguments")
 
+                previous_token = estimate["approval_token"]
                 estimate = client.tool("run_experiment", **run_args)["structuredContent"]
+                self.assertNotEqual(previous_token, estimate["approval_token"])
                 ran = client.tool("run_experiment", **run_args, approval_token=estimate["approval_token"])
                 self.assertFalse(ran["isError"], ran)
                 self.assertEqual(ran["structuredContent"]["output_schema"], "runeconomy.cli.experiment-run.v1")

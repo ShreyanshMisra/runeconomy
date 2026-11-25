@@ -26,6 +26,7 @@ from runeconomy.adapters import (
     create_adapter,
     profile_for,
 )
+from runeconomy.adapters import http
 from runeconomy.adapters.prometheus import SGLANG_METRICS, VLLM_METRICS, select_metrics
 from runeconomy.cli import main
 from runeconomy.experiments import ExperimentManifest, ExperimentValidationError
@@ -216,6 +217,18 @@ class _ServerCase(unittest.TestCase):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_adapter_credentials_are_limited_to_the_original_request(self) -> None:
+        with patch("urllib.request.urlopen") as open_request:
+            response = open_request.return_value.__enter__.return_value
+            response.read.return_value = b"{}"
+            response.status = 200
+            http.get("https://example.invalid", "/models", api_key="test", timeout_seconds=1, label="test")
+            http.post("https://example.invalid", "/probe", {}, api_key="test", timeout_seconds=1)
+        for call in open_request.call_args_list:
+            request = call.args[0]
+            self.assertEqual(request.get_header("Authorization"), "Bearer test")
+            self.assertNotIn("Authorization", request.headers)  # Headers copied to redirects.
+
     def test_every_kind_implements_the_protocol(self) -> None:
         self.assertEqual(BACKEND_KINDS, ("vllm", "sglang", "openai_compat"))
         for kind in BACKEND_KINDS:

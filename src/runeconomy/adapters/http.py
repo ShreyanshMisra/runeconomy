@@ -35,13 +35,6 @@ def validate_base_url(base_url: str, *, label: str) -> None:
         )
 
 
-def _headers(api_key: str | None, accept: str) -> dict[str, str]:
-    headers = {"Accept": accept}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    return headers
-
-
 def get(
     base_url: str,
     path: str,
@@ -60,9 +53,11 @@ def get(
 
     request = urllib.request.Request(
         f"{base_url.rstrip('/')}{path}",
-        headers=_headers(api_key, "application/json" if parse_json else "text/plain"),
+        headers={"Accept": "application/json" if parse_json else "text/plain"},
         method="GET",
     )
+    if api_key:
+        request.add_unredirected_header("Authorization", f"Bearer {api_key}")
     retry = startup or StartupRetry(0)
     while True:
         try:
@@ -131,14 +126,14 @@ def post(
 ) -> tuple[int, str]:
     """POST one request and return (status, body text). Never raises on HTTP errors."""
 
-    headers = _headers(api_key, "application/json")
-    headers["Content-Type"] = "application/json"
     request = urllib.request.Request(
         f"{base_url.rstrip('/')}{path}",
         data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
         method="POST",
     )
+    if api_key:
+        request.add_unredirected_header("Authorization", f"Bearer {api_key}")
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             return response.status, response.read().decode("utf-8", errors="replace")

@@ -63,7 +63,9 @@ runeconomy doctor --backend openai_compat \
 
 For `openai_compat`, pass the API base exactly as the provider documents it
 for the OpenAI SDK. It usually ends in `/v1`. Doctor reads only
-`{base}/models`. SGLang and vLLM take the server root.
+`{base}/models`. SGLang and vLLM take the server root. Use the final URL
+for authenticated endpoints. Bearer credentials are sent on the initial
+request only.
 
 vLLM keeps doctor report schema `0.2`. SGLang and `openai_compat` reports use
 schema `0.3`. It keeps every `0.2` capability key, so `experiment validate
@@ -211,5 +213,7 @@ always meant. Traces without these attributes import exactly as before.
 - `openai_compat` covers Chat Completions only. Responses-only providers and
   reasoning models that reject `max_tokens` need request fields set
   accordingly in the manifest.
-- There's no cost gate. A hosted per-token price and a self-hosted GPU-hour
-  are not yet comparable inside RunEconomy.
+- A manifest can declare one cost model for both variants and gate on cost
+  per 1,000 successful workflows. The hosted-versus-self-hosted example needs
+  different pricing models for its two arms and leaves cost unknown. See
+  [cost models and server telemetry](load-pairing-and-tail-gates.md#cost-models-and-server-telemetry).

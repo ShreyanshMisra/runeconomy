@@ -114,6 +114,7 @@ class ReportTests(unittest.TestCase):
         first = render_demo_html(result)
         second = render_demo_html(result)
         self.assertEqual(first, second)
+        self.assertEqual(first.splitlines(), [line.rstrip() for line in first.splitlines()])
         self.assertIn("@media (max-width: 700px)", first)
         self.assertIn('name="viewport"', first)
         self.assertIn('aria-label="Decision path"', first)
