@@ -151,15 +151,23 @@ RunEconomy sets these variables for each isolated attempt:
 - `RUNECONOMY_STATUS_PATH`: where a status-aware agent atomically writes the
   versioned attempt-status record described below.
 
-Use the supported runtime helper at the application's existing entry point:
+For a shared entry point, keep the usual CLI path when the runner environment
+is absent. Adapt the two application functions to your CLI. Here the runner
+function flushes the existing trace and returns the final answer as text.
 
 ```python
-from runeconomy.agent import Attempt
+import os
 
-with Attempt.from_environment() as attempt:
-    result = run_agent(attempt.task_path)
-    attempt.output_path.write_text(result, encoding="utf-8")
-    attempt.completed()
+def main():
+    if not os.environ.get("RUNECONOMY_STATUS_PATH"):
+        return run_agent_normal_cli()
+
+    from runeconomy.agent import Attempt
+
+    with Attempt.from_environment() as attempt:
+        result = run_agent(attempt.task_path)
+        attempt.output_path.write_text(result, encoding="utf-8")
+        attempt.completed()
 ```
 
 `Attempt` validates the runner environment and exposes typed task, output,
@@ -188,7 +196,8 @@ writing have succeeded.
 
 Critical-path analysis needs explicit `depends_on` edges. The
 `runeconomy.track_workflow` and `runeconomy.step` helpers write that trace to
-`RUNECONOMY_TRACE_PATH` with no OpenTelemetry setup:
+`RUNECONOMY_TRACE_PATH` with no OpenTelemetry setup. This example runs inside
+a dedicated runner-only wrapper:
 
 ```python
 import runeconomy
@@ -210,6 +219,10 @@ with Attempt.from_environment() as attempt:
     attempt.output_path.write_text(solve())
     attempt.completed()
 ```
+
+A worker thread without a workflow context can use the single active tracker.
+If several workflows are active, propagate the correct context into the worker
+or `step()` raises `WorkflowTraceError`.
 
 A step without `depends_on` is a root. An edge may name only a step that has
 already started, so nothing is inferred from timing. Token counts are recorded

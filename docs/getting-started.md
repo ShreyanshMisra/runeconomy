@@ -22,10 +22,11 @@ runeconomy tutorial serve
 
 The first command creates a sanitized, versioned directory. The second starts a
 deterministic server on `127.0.0.1:8765`. It is not vLLM and does not run a
-model. It validates RunEconomy's product plumbing without network access,
-credentials, a GPU, or paid compute.
+model. It exercises the CLI using only localhost, without credentials, a GPU,
+or paid compute.
 
-Follow `runeconomy-tutorial/README.md` in another terminal. It gives the complete
+Leave the server running. Open a second terminal in the directory containing
+`runeconomy-tutorial/` and follow `runeconomy-tutorial/README.md`. It gives the complete
 `import`, `experiment init`, `validate`, `run`, and `report` sequence. The final
 report is generated from newly executed controlled mock trials. It is not a
 relabelled historical trace or a real performance benchmark.
@@ -33,7 +34,8 @@ relabelled historical trace or a real performance benchmark.
 The tutorial uses a RunEconomy-enriched OpenInference fixture with explicit
 prompt tokens, prompt segments, workflow dependencies, and experiment context.
 Ordinary OpenTelemetry or OpenInference evidence may support diagnosis while
-still producing an unresolved workspace.
+still producing an unresolved workspace. This means import succeeded, but
+execution needs a missing input such as a model revision or a task evaluator.
 
 To inspect the bundled frozen proof with an `invalid` verdict, run:
 
@@ -47,7 +49,8 @@ conditional measurements.
 
 ## 3. Check a real vLLM deployment safely
 
-Keep authentication in an environment variable:
+Start in a new private directory outside version control. Set `VLLM_BASE_URL`
+to the server root and keep its credential in `VLLM_API_KEY` if required.
 
 ```bash
 runeconomy doctor \
@@ -60,67 +63,87 @@ runeconomy doctor \
 supported, unsupported, and unknown capabilities, plus the safe experiment
 modes and exact next action.
 
-## 4. Import your evidence
+For SGLang, add `--backend sglang` and use its server root. For a hosted
+OpenAI-compatible endpoint, use `--backend openai_compat`, its API base URL
+and the name of its credential variable. [Serving backends](backends.md).
 
-The unified importer detects supported evidence formats and records what each
-artifact can support:
+## 4. Choose your experiment mode
+
+- **Static replay** runs captured requests against baseline and candidate
+  serving configurations. Choose it for questions such as how prompt layout
+  affects prefix caching. Follow the static replay path below.
+- **Agent-process** runs each agent command from start to finish. Choose it
+  when changing tools, retry logic or the model can change what the agent
+  does next. Go directly to the agent-process path below.
+
+### Static replay from captured or exported requests
+
+If you have OpenInference/OTLP JSON, a Phoenix export, vLLM capture JSONL or a
+Prefixwise ledger, run `runeconomy import SOURCE --output evidence.json`.
+Read the capability assessment to see whether the artifact supports replay.
+To capture new requests from an OpenAI-compatible client:
 
 ```bash
-runeconomy import otlp.json --output evidence.json
+runeconomy proxy --upstream "$VLLM_BASE_URL" --record session.jsonl
 ```
 
-To collect new evidence from an OpenAI-compatible agent, use the local
-[capture proxy](proxy.md) and import its JSONL session.
-
-Use `--type` only when detection is ambiguous. Supported inputs include
-OpenInference or OpenTelemetry OTLP JSON, Phoenix JSON traces, exact-token vLLM
-capture JSONL, and Prefixwise ledger JSONL. The importer does not invent prompt
-tokens, dependencies, task outcomes, or replay requests.
-
-## 5. Initialize and validate a workspace
+In another terminal, run the agent with its base URL set to the loopback URL
+the proxy prints. Stop the proxy with Ctrl-C after the last request and check
+the session summary for gaps. Full capture stores prompts and responses
+locally. Prepare a private `replay-context.json` with your evaluator,
+pinned serving identity and replay design. [Capture guide and example context](proxy.md).
 
 ```bash
-runeconomy experiment init \
-  --from-evidence evidence.json \
-  --output experiment/
+runeconomy import session.jsonl --type proxy --replay-context replay-context.json --output evidence.json
+```
 
-runeconomy experiment validate experiment/ \
-  --doctor-report doctor.json
+Initialize from the imported bundle. If it contains several findings, pass
+the `--finding-id` reported for the one you want to test.
+
+```bash
+runeconomy experiment init --from-evidence evidence.json --output experiment/
+```
+
+### Agent-process with your existing entry points
+
+Integrate `runeconomy.agent.Attempt` in a runner-only wrapper or guard it
+with `RUNECONOMY_STATUS_PATH` in a shared entry point. Test both paths with a
+local stub. Keep your existing tracing, or record steps and their explicit
+dependencies with `runeconomy.track_workflow` and `runeconomy.step`.
+Use your own commands, dataset and evaluator in this example.
+[Agent contract](closed-loop-comparison.md) · [Coding-agent integration guide](agent-skill.md).
+
+```bash
+runeconomy experiment init --mode agent-process \
+  --baseline "python agent_v1.py" --candidate "python agent_v2.py" \
+  --dataset tasks.json --evaluator evaluator.py --output experiment/
+```
+
+## 5. Validate the inputs and review the plan
+
+```bash
+runeconomy experiment validate experiment/ --doctor-report doctor.json
 runeconomy experiment plan experiment/
 ```
 
-The workspace records the source digest, selected finding, intervention,
-experiment mode, gates, metrics, identity, and unresolved fields. If several
-findings are viable, select one with `--finding-id`. If evidence is incomplete,
-validation explains the exact field and safe correction. An unresolved
-workspace is not runnable.
+Validation identifies missing inputs. Static replay also checks the saved
+doctor report for the required API dialect. For agent-process mode, use
+`runeconomy experiment validate experiment/` without the report. If a
+static workspace is unresolved, use the reported fields to complete the source
+evidence or replay context, re-import and initialize a new directory. On a
+runnable workspace, use `experiment patch` to record design changes.
+Planning estimates sample size and cost before execution. Review the commands,
+evaluator, gates, private output locations and any design issues it reports.
 
-## 6. Run and report
-
-Review the generated commands, evaluator, quality gates, cost ceiling, and
-private artifact locations before execution.
+## 6. Run and open the report
 
 ```bash
 runeconomy experiment run experiment/ --output results/
-runeconomy experiment report results/result.json \
-  --output report.html \
-  --open
+runeconomy experiment report results/result.json --output report.html --open
 ```
 
-For a new real-agent experiment, initialize the same workspace family directly:
-
-```bash
-runeconomy experiment init \
-  --mode agent-process \
-  --baseline "python agent_v1.py" \
-  --candidate "python agent_v2.py" \
-  --dataset tasks.json \
-  --evaluator evaluator.py \
-  --output experiment/
-```
-
-The older `compare` command remains a compatibility wrapper. New integrations
-should use `experiment init`, `validate`, `run`, and `report` for both modes.
+For a held-out test, freeze the reviewed design before running and add
+`--require-frozen` to the run command. [Patch and freeze guide](json-contracts-patch-freeze.md).
 
 ## 7. Read the verdict
 
@@ -132,13 +155,6 @@ should use `experiment init`, `validate`, `run`, and `report` for both modes.
 
 Cache reuse, token reductions, TTFT, and latency remain conditional observations
 unless the declared quality and performance gates make the claim eligible.
-
-For a real agent, have Codex or Claude Code install the official skill and add
-the minimal `runeconomy.agent.Attempt` integration at the existing entry point.
-The coding agent should preserve existing tracing, add focused tests, and run a
-free compatibility trial first. `experiment plan` then explains whether the
-design needs input, is ready for calibration, is ready to freeze, or is
-blocked. It does not execute the agent or consume held-out data.
 
 ## 8. Prepare a privacy-minimized support artifact
 

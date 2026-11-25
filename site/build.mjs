@@ -19,7 +19,7 @@ const skillInstallCommand = "npx skills add ShreyanshMisra/runeconomy --skill ru
 const skillBootstrapPrompt = `Install the official RunEconomy skill for this project by running:
 ${skillInstallCommand}
 
-Review the installed files, read the RunEconomy SKILL.md completely, and follow it for this task. Begin read-only. Inspect the repository and available inference evidence. Locate the real agent entry point and existing tracing, then explain the smallest integration before editing. Use from runeconomy.agent import Attempt instead of implementing attempt-status JSON manually. Preserve normal execution, exit behavior, and tracing. Map only failure classes the repository can establish truthfully, add focused local tests, and run a free compatibility trial before any benchmark. Initialize an agent-process workspace, run experiment validate, then run the read-only experiment plan check. Do not start paid compute, change a backend, consume held-out data, publish, or deploy without my explicit approval. Report what still requires my approval.`;
+Review the installed files, read the RunEconomy SKILL.md completely, and follow it for this task. Begin read-only. Inspect the repository and available inference evidence. Locate the real agent entry point and existing tracing, then explain the smallest integration before editing. Use from runeconomy.agent import Attempt in a runner-only wrapper or guard it with RUNECONOMY_STATUS_PATH in a shared entry point. Preserve normal execution, exit behavior, and tracing. Map only failure classes the repository can establish truthfully, and run a free compatibility trial with a local stub covering both entry-point paths before any benchmark. Initialize an agent-process workspace, run experiment validate, then run the read-only experiment plan check. Do not start paid compute, change a backend, consume held-out data, publish, or deploy without my explicit approval. Report what still requires my approval.`;
 
 const primaryNavigation = [
   { route: "", label: "Home", key: "home" },
@@ -29,6 +29,14 @@ const primaryNavigation = [
 ];
 
 const referencePages = [
+  {
+    route: "proofs",
+    source: "docs/proofs-and-studies.md",
+    title: "Workflow latency and task success in Proofs 3 and 4",
+    description: "Frozen experiments comparing online FP8 with BF16 and testing the effect of removing a search tool.",
+    active: "",
+    kind: "reference",
+  },
   {
     route: "start",
     source: "docs/getting-started.md",

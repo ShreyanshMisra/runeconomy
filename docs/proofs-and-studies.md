@@ -39,6 +39,8 @@ completion policy, the exact paired method, and the power planner.
    `/metrics` during every load block. Each result embeds its intact freeze
    record digest.
 
+<a id="proof-3"></a>
+
 ## Proof 3: verified
 
 FP8 lowered mean successful-workflow latency by 499 ms (95% CI −515 to
@@ -47,6 +49,8 @@ successful workflows fell from $0.065 to $0.048. Task success was 200/200 in
 both arms, and the non-inferiority lower bound was −1.49 points against a
 5-point margin. Boundaries: one model, one GPU type, one synthetic agent,
 closed-loop load, and list GPU prices.
+
+<a id="proof-4"></a>
 
 ## Proof 4: regression
 
@@ -123,8 +127,8 @@ The superseded result's digest is in `study-2.json`.
 
 ## Reproducing
 
-The reproducibility bundle (`phase-7-reproducibility.tar.gz`, built by
-`scripts/build_phase7_artifacts.py`; not attached to this repository) contains:
+Build `phase-7-reproducibility.tar.gz` with `scripts/build_phase7_artifacts.py`
+from the original result files. The archive is omitted from this repository. It contains:
 
 - the frozen and calibration workspaces (manifests, preregistration records,
   provenance chains)

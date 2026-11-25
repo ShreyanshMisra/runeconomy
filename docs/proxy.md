@@ -2,7 +2,9 @@
 
 `runeconomy proxy` captures requests from an OpenAI-compatible client by
 changing its base URL. The proxy requires RunEconomy 0.3.0 or newer.
-For an existing local vLLM server, run:
+Use a private directory outside version control. Full capture records request
+and response bodies, including prompts and model output. For an existing local
+vLLM server, run:
 
 ```bash
 runeconomy proxy --upstream http://127.0.0.1:8000 --record session.jsonl
@@ -28,8 +30,11 @@ prompt tokens. For streams, the client must already request usage for servers
 that require it. The proxy forwards the client's request options unchanged.
 
 After the agent finishes, stop the proxy with Ctrl-C and wait for the capture
-summary. SIGTERM also drains the session. Inspect reported gaps before relying
-on the capture. Each session starts with a new file.
+summary. SIGTERM also drains the session. In the final `session_close` record,
+`observations_dropped` and `record_errors` indicate missing exchanges.
+`token_resolution_incomplete_at_close` can leave prompt tokens unknown.
+Check import capabilities and recapture if the missing data affects the
+comparison. Each session starts with a new file.
 
 ## Import and validate a replay
 

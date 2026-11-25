@@ -61,7 +61,10 @@ after explicit approval. Each estimate issues a fresh random token. The server b
   `preregistration.json`, the dataset and the evaluator
 
 Changing any of them invalidates the token, as does reuse or the 15-minute
-expiry. Tokens live only in the server process and are never written to disk.
+expiry. Tokens live only in the server process. If the operator requests a
+change, apply the patch, obtain a fresh estimate and ask them to approve the
+revised run. Repeat that handshake after a server restart. Keep execution
+through the connected MCP tool so shell access cannot bypass approval.
 
 ## Zero-JSON-edit path
 

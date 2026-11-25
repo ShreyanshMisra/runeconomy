@@ -7,6 +7,24 @@ replayable private workloads private by default.
 Inspect reports before sharing them. Prefer deterministic aggregate artifacts
 with provenance hashes and claim boundaries.
 
+## Proxy recordings
+
+Record in a private directory outside the repository, or a directory already
+ignored by Git. The default session can contain raw prompts, tool inputs and
+outputs, completions and exact token IDs. Keep captures out of commits,
+stdout, chat and issue attachments. Use the client’s normal credential
+environment variable. The proxy forwards authorization upstream and excludes
+credential headers from the recording. For `doctor`, pass only the variable
+name with `--api-key-env`.
+
+For body scrubbing, supply a trusted local hook with
+`--redact package.module:function`. A redacted body can still have recoverable
+prompt token IDs. When both bodies and token arrays must be omitted, use
+`--payload-capture digest_only --token-resolution off`. Review retained
+metadata privately.
+
+## Support bundles
+
 When diagnostic context is required, create a privacy-minimized archive
 locally:
 

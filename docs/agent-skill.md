@@ -34,15 +34,15 @@ npx skills add ShreyanshMisra/runeconomy --skill runeconomy --all
 
 Review the installed files, read the RunEconomy SKILL.md completely, and follow it for this task. Begin read-only. Inspect the repository and available inference evidence, identify what is missing for a valid experiment, and propose the exact import, initialization, validation, run, and report commands. Do not start paid compute, reset caches, expose private traces, or modify production infrastructure without my explicit approval.
 
-Locate the repository's real agent entry point and existing tracing. Explain the smallest integration before editing. Use `from runeconomy.agent import Attempt` instead of implementing the attempt-status JSON manually. Preserve normal application execution, exit behavior, and existing tracing. Map only failure classes the repository can establish truthfully, add focused local tests, and run a free compatibility trial before any benchmark. Initialize the agent-process workspace, run `experiment validate`, then run the read-only `experiment plan` check. Stop before paid compute, backend changes, held-out execution, publication, or deployment, and report exactly what still requires my approval.
+Locate the repository's real agent entry point and existing tracing. Explain the smallest integration before editing. Use `from runeconomy.agent import Attempt` in a runner-only wrapper or guard it with RUNECONOMY_STATUS_PATH in the shared entry point. Preserve normal application execution, exit behavior, and existing tracing. Map only failure classes the repository can establish truthfully, and run a free compatibility trial with a local stub covering both entry-point paths before any benchmark. Initialize the agent-process workspace, run `experiment validate`, then run the read-only `experiment plan` check. Stop before paid compute, backend changes, held-out execution, publication, or deployment, and report exactly what still requires my approval.
 ```
 
 ## Version contract
 
-The skill does not hardcode a package version. It tells the agent to inspect
-`runeconomy --version`, use documentation from the matching release or tag, and
-ask before upgrading. Versioned and latest skill copies on the documentation
-site are generated from this repository source. Their SHA-256 checksum is shown
+Use documentation from the release or tag that matches `runeconomy --version`.
+The skill asks the agent to confirm the release for an unpinned installation
+and to ask before changing an installed version. The site generates its
+versioned and latest skill copies from this repository source. Their SHA-256 checksum is shown
 on this page after the site build.
 
 ## What the skill teaches
@@ -68,7 +68,7 @@ also states that bundle creation never authorizes upload or public disclosure.
 1. Paste the bootstrap prompt above into Codex or Claude Code.
 2. The coding agent installs and reads the complete skill and focused references.
 3. It begins read-only, finds the real agent entry point and preserves existing tracing.
-4. It proposes and adds the minimal `Attempt.from_environment()` integration.
+4. It proposes and adds the runner-only `Attempt.from_environment()` integration and tests normal invocation separately.
 5. It initializes an `agent-process` workspace and runs `experiment validate`.
 6. It runs `experiment plan` without executing the agent or contacting a backend.
 7. It explains whether the design is blocked, needs input, is ready for calibration, or is ready to freeze.
