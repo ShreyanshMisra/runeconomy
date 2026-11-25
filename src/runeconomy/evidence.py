@@ -383,7 +383,12 @@ def import_evidence(
             loaded = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             loaded = None
-        if isinstance(loaded, dict):
+        # A one-row JSONL ledger or capture also parses as a JSON object;
+        # leave it to the row-based detection below.
+        single_row = source_type == "auto" and isinstance(loaded, dict) and (
+            "cause" in loaded or "capture" in loaded or "prompt_token_ids" in loaded
+        )
+        if isinstance(loaded, dict) and not single_row:
             raw_json = loaded
             if source_type == "auto":
                 detected = (

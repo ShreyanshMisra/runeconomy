@@ -70,6 +70,13 @@ Proof 3 (BF16 vs online FP8 at 16 agents per variant) returned `verified`, and
 Proof 4 (removing a search tool) returned `regression`. Both were frozen
 before running and ran once. See [proofs and studies](proofs-and-studies.md).
 
+## Fixes
+
+- vLLM running, waiting and KV-usage gauges are now recorded. Earlier
+  releases left them unknown.
+- `runeconomy import` auto-detects a one-row Prefixwise ledger or vLLM capture.
+- MCP tools return a tool error that names any wrongly typed argument.
+
 ## Compatibility
 
 Every existing manifest, workspace, result and decision artifact keeps its

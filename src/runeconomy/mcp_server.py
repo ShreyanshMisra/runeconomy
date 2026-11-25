@@ -519,6 +519,22 @@ class RunEconomyMCPServer:
         properties = spec["inputSchema"]["properties"]
         unknown = sorted(set(arguments) - set(properties))
         missing = [key for key in spec["inputSchema"]["required"] if key not in arguments]
+        expected = {"object": Mapping, "array": list, "string": str, "boolean": bool, "integer": int, "number": (int, float)}
+        wrong = sorted(
+            key
+            for key, value in arguments.items()
+            if key in properties
+            and properties[key].get("type") in expected
+            and (
+                not isinstance(value, expected[properties[key]["type"]])
+                or (isinstance(value, bool) and properties[key]["type"] in {"integer", "number"})
+            )
+        )
+        if wrong:
+            raise ToolError(
+                "invalid arguments: "
+                + "; ".join(f"{key} must be of type {properties[key]['type']}" for key in wrong)
+            )
         if unknown or missing:
             raise ToolError(
                 "invalid arguments: "

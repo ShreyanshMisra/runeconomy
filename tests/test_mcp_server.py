@@ -72,6 +72,23 @@ class MCPProtocolTests(unittest.TestCase):
         )
         self.assertTrue(bad["result"]["isError"])
 
+    def test_wrongly_typed_arguments_are_tool_errors(self) -> None:
+        server = RunEconomyMCPServer()
+        response = server.handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "tools/call",
+                "params": {
+                    "name": "patch_experiment",
+                    "arguments": {"workspace": "experiment", "set": ["acceptance.min_task_success_rate=0.9"]},
+                },
+            }
+        )
+        self.assertNotIn("error", response)
+        self.assertTrue(response["result"]["isError"])
+        self.assertIn("set must be of type object", response["result"]["structuredContent"]["error"])
+
 
 class MCPGoldenPathTests(unittest.TestCase):
     def test_agent_drives_frozen_experiment_through_mcp_with_approval(self) -> None:

@@ -66,6 +66,13 @@ class EvidenceWorkflowTests(unittest.TestCase):
         self.assertEqual(report["status"], "runnable")
         self.assertEqual(report["mode"], "static_request")
 
+    def test_single_row_prefixwise_ledger_is_auto_detected(self) -> None:
+        ledger = Path(__file__).resolve().parents[1] / "examples" / "connectors" / "prefixwise-ledger.jsonl"
+        self.assertEqual(len(ledger.read_text(encoding="utf-8").strip().splitlines()), 1)
+        bundle = import_evidence(ledger)
+        self.assertEqual(bundle["source"]["kind"], "prefixwise")
+        self.assertFalse(bundle["capability_assessment"]["runnable_experiment"])
+
     def test_imported_count_only_trace_does_not_claim_exact_analysis(self) -> None:
         payload = {
             "spans": [
