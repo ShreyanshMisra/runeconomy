@@ -10,6 +10,12 @@ const root = resolve(siteDir, "..");
 const output = join(siteDir, "dist");
 const failures = [];
 const retiredTerm = new RegExp("negative" + "[ _-]?split|negative" + "split", "i");
+const unmeasuredClaims = [
+  /95% filtered out/i,
+  /40% hit-rate loss/i,
+  /35% savings/i,
+  /60(?:-|–)80% bill cut/i,
+];
 
 async function htmlFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -38,11 +44,12 @@ const files = await htmlFiles(output);
 const routes = new Set(files.map(routeFor));
 const requiredRoutes = [
   "/", "/start/", "/doctor/", "/agents/", "/proof/", "/experiments/",
-  "/compare/", "/traces/", "/cli/", "/troubleshooting/", "/alpha/",
+  "/compare/", "/traces/", "/cli/", "/proxy/", "/troubleshooting/", "/alpha/",
   "/evidence/", "/connectors/", "/privacy/", "/compatibility/",
   "/articles/0-2-0a2/", "/articles/0-2-0a3/", "/articles/0-2-0/",
   "/articles/0-2-1/",
   "/articles/0-2-2/",
+  "/articles/proof-2-fp8-near-miss/", "/demo/",
   "/articles/how-runeconomy-works/", "/getting-started/", "/skill/",
   "/how-it-works/", "/404.html",
 ];
@@ -63,6 +70,9 @@ for (const file of files) {
     if (!/\salt="[^"]*"/.test(match[0])) failures.push(`${route}: image without alt text`);
   }
   if (retiredTerm.test(html)) failures.push(`${route}: retired terminology`);
+  for (const claim of unmeasuredClaims) {
+    if (claim.test(prose)) failures.push(`${route}: unmeasured numeric claim ${claim}`);
+  }
   if (prose.includes("—")) failures.push(`${route}: em dash in visible prose`);
   if (prose.includes(";")) failures.push(`${route}: semicolon in visible prose`);
   if (/\b(INVALID|VERIFIED|REGRESSION|INCONCLUSIVE)\b/.test(prose)) failures.push(`${route}: all-caps verdict`);
@@ -81,7 +91,7 @@ for (const file of files) {
   }
   if (/@import\s+url|googletagmanager|analytics/i.test(html)) failures.push(`${route}: remote font or tracker`);
   const primary = html.match(/<nav class="primary-nav"[\s\S]*?<\/nav>/)?.[0];
-  if (!route.includes("getting-started") && !route.includes("skill/") && !route.includes("how-it-works")) {
+  if (route !== "/demo/" && !route.includes("getting-started") && !route.includes("skill/") && !route.includes("how-it-works")) {
     const labels = [...(primary || "").matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map((match) => match[1]);
     if (labels.join("|") !== "Home|Start|Doctor|Agents") failures.push(`${route}: primary navigation differs`);
   }
@@ -115,14 +125,14 @@ for (const marker of ["data-menu-button", "data-copy", "article-rail", "Maintain
   if (!home.includes(marker)) failures.push(`home: missing interaction marker ${marker}`);
 }
 for (const marker of [
-  "Try the complete workflow locally",
-  "runeconomy tutorial init ./runeconomy-tutorial",
-  "runeconomy tutorial serve",
-  "does not run a model or measure real inference performance",
-  "RunEconomy-enriched OpenInference",
-  "newly executed controlled trials",
+  "Verify that a serving change or model migration makes your agent cheaper or",
+  "Proof 1", "Proof 2 near-miss", "Open the real bundled report",
+  "BF16", "FP8", "AWQ", "NVFP4", "hosted API", "self-hosted open weights",
+  "vllm bench serve", "GuideLLM", "AIPerf", "Braintrust", "Promptfoo",
+  "Inspect AI", "Langfuse", "Phoenix", "LangSmith", "Prefixwise",
+  "Not designed for", "runeconomy==",
 ]) {
-  if (!home.includes(marker)) failures.push(`home: missing tutorial boundary ${marker}`);
+  if (!home.includes(marker)) failures.push(`home: missing positioning marker ${marker}`);
 }
 const start = await readFile(join(output, "start", "index.html"), "utf8");
 const startProse = visibleProse(start);
@@ -138,6 +148,14 @@ for (const marker of [
 const proof = await readFile(join(output, "proof", "index.html"), "utf8");
 for (const marker of ["79.61%", "0.8308031360405823", "negative 12.55 percentage points", "+105", "9 ms lower", "62 ms lower", "Result not verified", "Verdict: Invalid", "consumed"]) {
   if (!proof.includes(marker)) failures.push(`proof: missing frozen marker ${marker}`);
+}
+const proof2 = await readFile(join(output, "articles", "proof-2-fp8-near-miss", "index.html"), "utf8");
+for (const marker of ["179 completed attempts out of 180", "-391.080 ms", "[-398.606, -383.554] ms", "invalid", "shared application failure", "zero failures"]) {
+  if (!proof2.includes(marker)) failures.push(`proof 2: missing frozen marker ${marker}`);
+}
+const demo = await readFile(join(output, "demo", "index.html"), "utf8");
+for (const marker of ["RunEconomy Experiment Report", "Verdict: Invalid", "79.61%", "+105", "9 ms lower", "62 ms lower"]) {
+  if (!demo.includes(marker)) failures.push(`demo: missing bundled report marker ${marker}`);
 }
 
 const builtSkill = await readFile(join(output, "assets", "runeconomy-skill.md"));
@@ -193,7 +211,7 @@ if (release?.date !== "2026-11-14" || release?.dateLabel !== "November 14, 2026"
   failures.push("0.2.0a2 release date differs from the GitHub release");
 }
 const currentRelease = articles.find((article) => article.slug === "release-0-2-0");
-const preparedRelease = articles.find((article) => article.slug === "release-0-2-2");
+const preparedRelease = articles.find((article) => article.slug === "release-0-3-0");
 if (preparedRelease?.releaseVersion !== siteConfig.currentVersion || preparedRelease?.status !== "Prepared release") {
   failures.push("current release article is not the prepared package release");
 }

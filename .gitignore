@@ -27,3 +27,8 @@ site/node_modules/
 .vscode/
 .ipynb_checkpoints/
 docs/internal/
+
+# Owner-only planning and unpublished drafts
+/human.md
+/plan.md
+docs/drafts/

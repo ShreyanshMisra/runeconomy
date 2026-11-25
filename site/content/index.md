@@ -1,28 +1,66 @@
-# Verify your inference optimizations.
+# Your serving benchmark got faster. Did your agent?
 
-Agents make several model calls to complete one task. A serving change can
-improve cache reuse, time to first token or another inference metric without
-making the completed workflow faster.
+**Verify that a serving change or model migration makes your agent cheaper or
+faster without breaking it.**
 
-RunEconomy connects those measurements to complete workflow latency and task
-success. It can verify a change, identify a regression or decline to verify an
-attractive result when the quality evidence is not strong enough.
+<section class="verdict-preview" aria-labelledby="proof-verdicts">
+  <p class="eyebrow">Recorded verdicts</p>
+  <h2 id="proof-verdicts">The attractive number does not outrank the contract.</h2>
+  <div class="verdict-grid">
+    <article>
+      <p class="proof-label">Proof 1</p>
+      <p class="verdict-value">invalid</p>
+      <p>The candidate measured 62 ms faster on 36 both-successful pairs, but two frozen task-quality gates failed.</p>
+      <a href="/proof/">Read Proof 1</a>
+    </article>
+    <article>
+      <p class="proof-label">Proof 2 near-miss</p>
+      <p class="verdict-value">invalid</p>
+      <p>Every quality and latency gate passed. FP8 measured 391 ms faster, but one shared application failure broke the zero-tolerance completion gate we chose.</p>
+      <a href="/articles/proof-2-fp8-near-miss/">Read Proof 2</a>
+    </article>
+  </div>
+  <p class="report-link"><a href="/demo/">Open the real bundled report</a></p>
+</section>
 
-## Try the complete workflow locally
+RunEconomy joins paired workflow measurements to frozen task-quality,
+completion and identity gates, then returns `verified`, `regression`,
+`inconclusive` or `invalid`.
 
-```bash
-python -m pip install runeconomy==0.2.2
-runeconomy tutorial init ./runeconomy-tutorial
-runeconomy tutorial serve
-```
+Alpha boundary: controlled, sequential experiments for narrow private testing,
+not unattended production use. [Read all current boundaries](/alpha/).
 
-The deterministic localhost tutorial validates the complete product workflow.
-It does not run a model or measure real inference performance. Its
-RunEconomy-enriched OpenInference fixture contains the explicit evidence needed
-for an immediately runnable controlled experiment.
+## The two decisions
 
-Users can import their own traces. Ordinary traces may support diagnosis while
-still producing an unresolved workspace. RunEconomy generates a report from
-newly executed controlled trials, not by relabelling a historical trace.
+1. **Change self-hosted serving.** Compare BF16 with FP8, AWQ or NVFP4, upgrade
+   an engine, or enable speculative decoding.
+2. **Move from a hosted API to self-hosted open weights.** Compare the complete
+   agent workflow, including the evaluator, rather than request latency alone.
 
-[Follow the import, initialization, validation, run and report steps](/start/).
+<!-- INSTALL -->
+
+## Integration paths
+
+**Static replay** starts from normalized request evidence and runs controlled
+baseline and candidate requests against self-hosted vLLM.
+
+**Agent-process experiments** run complete baseline and candidate agent
+commands. This is also the current path for comparing a hosted API with a
+self-hosted open-weight backend.
+
+[Follow the experiment workflow](/start/) or
+[give a coding agent the RunEconomy contract](/agents/).
+
+## Where RunEconomy fits
+
+These categories answer adjacent questions. They are not designed for the same
+frozen, paired decision RunEconomy makes.
+
+| Category | Examples | Designed to answer | Not designed for |
+| --- | --- | --- | --- |
+| Throughput benchmarkers | `vllm bench serve`, GuideLLM, AIPerf | How the serving system performs at the request and load level | Whether a serving change preserves success for a specific multi-step agent workflow |
+| Eval platforms | Braintrust, Promptfoo, Inspect AI | Whether model or application outputs pass evaluators | A paired serving experiment with frozen backend identity, completion and performance gates |
+| Observability tools | Langfuse, Phoenix, LangSmith, Prefixwise | What happened in production traces and where time or tokens went | A preregistered baseline-versus-candidate verdict |
+
+RunEconomy imports or complements evidence from these layers. It does not
+replace load testing, evaluators or observability.

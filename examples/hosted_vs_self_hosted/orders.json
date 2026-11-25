@@ -1,0 +1,10 @@
+{
+  "orders": {
+    "A-1042": {"item": "blue kettle", "status": "in transit", "carrier": "Parcelway", "warehouse": "Reno", "eta": "2026-12-03"},
+    "A-1057": {"item": "desk lamp", "status": "delivered", "carrier": "Northline", "warehouse": "Columbus", "eta": "2026-11-20"},
+    "A-1063": {"item": "wool blanket", "status": "backordered", "carrier": "none assigned", "warehouse": "Reno", "eta": "2027-01-15"},
+    "A-1071": {"item": "chef knife", "status": "in transit", "carrier": "Northline", "warehouse": "Allentown", "eta": "2026-11-29"},
+    "A-1088": {"item": "pour-over set", "status": "processing", "carrier": "Parcelway", "warehouse": "Columbus", "eta": "2026-12-06"},
+    "A-1094": {"item": "cast iron pan", "status": "returned", "carrier": "Coastal Freight", "warehouse": "Allentown", "eta": "2026-11-12"}
+  }
+}

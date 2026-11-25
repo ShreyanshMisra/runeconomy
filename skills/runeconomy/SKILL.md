@@ -104,6 +104,35 @@ truthfully. Use conservative `application_failure` for an otherwise unknown
 unhandled exception, and never put exception text, outputs, prompts, URLs, or
 credentials into `stage` or `code`. Add focused local tests.
 
+Change a workspace only through `experiment patch`, never by editing
+`manifest.json`. Each patch is validated and recorded in `provenance.jsonl`:
+
+```bash
+runeconomy experiment patch experiment/ --set acceptance.min_task_success_rate=0.9 \
+  --reason "match the declared quality floor" --json
+```
+
+For explicit DAG edges without OpenTelemetry, use `runeconomy.track_workflow`
+and `runeconomy.step(..., depends_on=[...])` around the agent's real steps.
+
+Before held-out execution, freeze the reviewed design. A freeze is
+irreversible for that workspace; a changed design needs a new workspace:
+
+```bash
+runeconomy experiment freeze experiment/ --lock agent.py --json
+runeconomy experiment run experiment/ --output result/ --require-frozen
+```
+
+Every command accepts `--json` and prints one object whose `output_schema`
+names its versioned contract (`runeconomy schema` lists them). Read results
+from those objects rather than from human text. Failures print a
+`runeconomy.cli.error.v1` object on stderr.
+
+When RunEconomy is connected as an MCP server (`runeconomy mcp`), use its
+typed tools. `run_experiment` first returns an estimate and an
+`approval_token`: show the estimate to the user and call again with the token
+only after they explicitly approve. Never reuse or fabricate a token.
+
 Run `experiment validate` and the read-only design check before execution:
 
 ```bash

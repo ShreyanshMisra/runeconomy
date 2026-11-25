@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RunEconomy Experiment Report</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; color: #151515; font: 15px/1.55 Arial, Helvetica, sans-serif; }
+main { width: min(1040px, calc(100% - 32px)); margin: 28px auto 64px; }
+.report-header { border-bottom: 2px solid #1f2933; padding-bottom: 16px; margin-bottom: 28px; }
+h1 { margin: 0; font: 700 28px/1.2 Georgia, "Times New Roman", serif; }
+h2 { margin: 34px 0 12px; font: 700 21px/1.25 Georgia, "Times New Roman", serif; }
+h3 { margin: 0 0 8px; font-size: 15px; }
+p { max-width: 880px; margin: 8px 0; }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; padding: 0; list-style: none; }
+.badges li { border: 1px solid #8b949e; padding: 3px 8px; font-size: 13px; }
+.comparison, .result-grid, .quality-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.comparison article, .result-card, .quality-card { border: 1px solid #9aa1a8; padding: 14px; }
+.result-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.result-value { margin: 5px 0; font: 700 27px/1.15 Georgia, "Times New Roman", serif; font-variant-numeric: tabular-nums; }
+.qualification { border-left: 4px solid #4f5963; padding: 10px 12px; background: #f4f5f6; }
+.outcome-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0; list-style: none; }
+.outcome-grid li { border: 1px solid #b5bac0; padding: 9px; }
+.verdict { border: 2px solid #31383f; padding: 16px; }
+.verdict-message { margin: 0 0 8px; font: 700 24px/1.2 Georgia, "Times New Roman", serif; }
+.canonical-status { font-size: 13px; color: #3f464d; }
+.invalid-explanation { font-weight: 700; }
+.decision-path { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0; list-style: none; counter-reset: path; }
+.decision-path li { border-top: 3px solid #343a40; padding: 10px; }
+.decision-path span, .decision-path strong { display: block; }
+.decision-path span { font-size: 13px; color: #4b535b; }
+.later-checks { margin: 10px 0; }
+.recommendation { border: 1px solid #5d646b; padding: 12px; }
+.prefix-visual { margin: 16px 0; padding: 14px; border: 1px solid #8d959d; }
+.variant-row + .variant-row { border-top: 1px solid #c0c5ca; margin-top: 16px; padding-top: 16px; }
+.attempt { display: flex; min-width: 0; margin: 7px 0; font: 12px/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.attempt span { border: 1px solid #4c545c; padding: 7px; overflow-wrap: anywhere; }
+.attempt .stable { flex: 1; background: #eef1f3; }
+.attempt .metadata { background: #fff; }
+figcaption { color: #4b535b; font-size: 12px; }
+.table-wrap { overflow-x: auto; margin: 10px 0 16px; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { border: 1px solid #a5abb1; padding: 7px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+thead th { background: #eef0f2; }
+code { font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+details { border-top: 1px solid #aeb4ba; padding: 9px 0; }
+summary { cursor: pointer; font-weight: 700; }
+summary:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; }
+@media (max-width: 700px) {
+  main { width: min(100% - 20px, 1040px); margin-top: 18px; }
+  .result-grid, .comparison, .quality-grid, .outcome-grid, .decision-path { grid-template-columns: 1fr; }
+  h1 { font-size: 24px; }
+  .attempt { font-size: 11px; }
+}
+</style>
+</head>
+<body>
+<main>
+<header class="report-header"><h1>RunEconomy Experiment Report</h1><ul class="badges" aria-label="Experiment facts"><li>Qwen2.5-7B-Instruct</li><li>vLLM 0.33.0</li><li>A10</li><li>40 paired tasks</li><li>80 attempts</li></ul></header>
+
+<section aria-labelledby="intervention-heading">
+  <h2 id="intervention-heading">Intervention Tested</h2>
+  <p>vLLM can reuse cached prompt tokens while a new prompt matches a previous prompt from the beginning. In the baseline, changing metadata appeared first, so the shared prefix ended immediately. The candidate moved that metadata after the stable instructions.</p>
+  
+<figure class="prefix-visual" aria-labelledby="prefix-caption">
+  <div class="variant-row">
+    <strong>Baseline</strong>
+    <div class="attempt"><span class="metadata">Run metadata A</span><span class="stable">Stable instructions</span></div>
+    <div class="attempt"><span class="metadata">Run metadata B</span><span class="stable">Stable instructions</span></div>
+    <p>First tokens differ, so the shared prefix stops early.</p>
+  </div>
+  <div class="variant-row">
+    <strong>Candidate</strong>
+    <div class="attempt"><span class="stable">Stable instructions</span><span class="metadata">Run metadata A</span></div>
+    <div class="attempt"><span class="stable">Stable instructions</span><span class="metadata">Run metadata B</span></div>
+    <p>Stable instructions form a reusable shared prefix.</p>
+  </div>
+  <figcaption id="prefix-caption">Synthetic labels show ordering only. No private prompt content is included.</figcaption>
+</figure>
+  <p><strong>Why this might help:</strong> A longer stable prefix may allow more prompt tokens to be reused from cache.</p>
+  <p><strong>Control:</strong> The prompt content stayed the same. Only the block order changed.</p>
+</section>
+
+<section aria-labelledby="results-heading">
+  <h2 id="results-heading">Results</h2>
+  <div class="result-grid"><article class="result-card"><h3>Cached input tokens</h3><p class="result-value">+105</p><p>More prompt tokens were served from cache.</p></article><article class="result-card"><h3>Server time to first token</h3><p class="result-value">9 ms lower</p><p>The first token arrived sooner at the server.</p></article><article class="result-card"><h3>Workflow latency</h3><p class="result-value">62 ms lower</p><p>Successful task pairs completed sooner.</p></article></div>
+  <p class="qualification"><strong>Important:</strong> Measured across the 36 task pairs where both variants succeeded. These measurements are not a verified improvement until the quality requirements pass.</p>
+  <ul class="outcome-grid" aria-label="Task outcomes"><li><strong>Baseline:</strong> 37 of 40 tasks succeeded.</li><li><strong>Candidate:</strong> 38 of 40 tasks succeeded.</li><li><strong>Both succeeded:</strong> 36 pairs</li><li><strong>Baseline only succeeded:</strong> 1 pair</li><li><strong>Candidate only succeeded:</strong> 2 pairs</li><li><strong>Both failed:</strong> 1 pair</li></ul>
+  <div class="position-breakdown"><h3>Cache reuse by agent call</h3><div class="table-wrap"><table><thead><tr><th>Agent call</th><th>Mean cached input tokens across both-successful pairs</th></tr></thead><tbody><tr><th scope="row">Planning call</th><td>Baseline 0.00, candidate 108.89, difference 108.89 cached tokens</td></tr><tr><th scope="row">Final answer call</th><td>Baseline 196.00, candidate 192.44, difference -3.56 cached tokens</td></tr></tbody></table></div></div>
+</section>
+
+<section aria-labelledby="verdict-heading">
+  <h2 id="verdict-heading">Verdict</h2>
+  <div class="verdict verdict-invalid">
+    <p class="verdict-message">Result not verified</p>
+    <p>The candidate showed better cache reuse and lower measured latency, but this experiment did not establish the task-quality evidence required for a verified performance claim.</p>
+    <p class="canonical-status">Verdict: Invalid</p>
+    <p class="invalid-explanation">Invalid does not mean the candidate was slower. It means the attractive measurements were not eligible to become a verified improvement or regression claim.</p>
+  </div>
+  <div class="quality-grid"><article class="quality-card"><h3>Was the baseline workload reliable enough?</h3><div class="table-wrap"><table><thead><tr><th>Measure</th><th>Recorded result</th></tr></thead><tbody><tr><th scope="row">Required lower confidence bound</th><td>80.00%</td></tr><tr><th scope="row">Observed baseline lower bound</th><td>79.61%</td></tr><tr><th scope="row">Result</th><td>Failed by 0.39 percentage points</td></tr></tbody></table></div><p>The baseline succeeded on 37 of 40 tasks. With only 40 tasks, the lower confidence bound remained slightly below the required threshold.</p></article><article class="quality-card"><h3>Did the candidate preserve task quality?</h3><div class="table-wrap"><table><thead><tr><th>Measure</th><th>Recorded result</th></tr></thead><tbody><tr><th scope="row">Maximum allowed regression</th><td>10.00 percentage points</td></tr><tr><th scope="row">Observed lower-bound difference</th><td>negative 12.55 percentage points</td></tr><tr><th scope="row">Result</th><td>Failed by 2.55 percentage points</td></tr></tbody></table></div><p>The candidate&#x27;s observed success rate was higher, but the uncertainty was too wide to rule out a regression larger than the allowed margin.</p></article></div>
+  <ol class="decision-path" aria-label="Decision path"><li><span>Evidence usable?</span><strong>Passed</strong></li><li><span>Baseline reliable enough?</span><strong>Failed</strong></li><li><span>Performance claim</span><strong>Not eligible for verification</strong></li></ol>
+  <ul class="later-checks"><li>Candidate absolute quality: Passed</li><li>Paired quality preservation: Failed</li><li>Conditional workflow latency: Favorable but not eligible</li></ul>
+  <p class="recommendation"><strong>Recommended next step:</strong> Do not present this candidate as a verified latency improvement. Establish a more reliable baseline and test the intervention on a new, sufficiently powered held-out workload. The current 40-task workload has been consumed and cannot be reused as fresh evidence.</p>
+</section>
+
+<section aria-labelledby="details-heading">
+  <h2 id="details-heading">Experiment Details</h2>
+  <p>Each task gave the agent a code clue and a bounded set of repository files. The agent planned a search, used a repository-search tool and identified the enclosing Python function or class.</p>
+  <div class="table-wrap"><table><thead><tr><th>Experiment fact</th><th>Recorded value</th></tr></thead><tbody><tr><th scope="row">Task families</th><td>13 direct-call lookup tasks, 13 docstring lookup tasks and 14 unique-string lookup tasks</td></tr><tr><th scope="row">Paired workload</th><td>40 baseline and candidate pairs, 80 total attempts</td></tr><tr><th scope="row">Workflow</th><td>2 model calls and 1 repository-search tool call per attempt</td></tr><tr><th scope="row">Environment</th><td>Qwen2.5-7B-Instruct, vLLM 0.33.0, Modal A10</td></tr><tr><th scope="row">Execution</th><td>Chat Completions, colocated driver and sequential execution</td></tr></tbody></table></div>
+  <p><strong>Controls:</strong> The model, backend, hardware, agent, tasks, evaluator and acceptance rules were chosen and locked before the held-out workload was run.</p>
+</section>
+
+<section class="technical" aria-label="Technical details">
+  <details><summary>Acceptance checks</summary><div class="table-wrap"><table><thead><tr><th>Field</th><th>Recorded value</th></tr></thead><tbody><tr><th scope="row">trace_and_environment_identity</th><td>Passed. Threshold: every attempt has an explicit complete DAG and each variant has complete, stable environment identity. Observed: Baseline: complete DAG count 40, complete DAG rate 1.0, environment identity complete yes, environment identity stable yes, valid trace count 40. Candidate: complete DAG count 40, complete DAG rate 1.0, environment identity complete yes, environment identity stable yes, valid trace count 40</td></tr><tr><th scope="row">baseline_minimum_task_success</th><td>Failed. Threshold: 0.8. Observed: 0.7961352512671009 to 0.9842578201489585</td></tr><tr><th scope="row">candidate_minimum_task_success</th><td>Passed. Threshold: 0.8. Observed: 0.8308031360405823 to 0.9938863534006492</td></tr><tr><th scope="row">task_success_noninferiority</th><td>Failed. Threshold: -0.1. Observed: candidate minus baseline mean 0.025, confidence interval -0.14498205538583642 to 0.18780457959853636, confidence level 0.95, method exact marginal binomial bounds with Bonferroni coverage, one sided lower bound -0.12547221188341495, outcome counts (baseline only 1, both failure 1, both success 36, candidate only 2), paired count 40</td></tr><tr><th scope="row">baseline_completion</th><td>Passed. Threshold: 1.0. Observed: 1.0</td></tr><tr><th scope="row">candidate_completion</th><td>Passed. Threshold: 1.0. Observed: 1.0</td></tr><tr><th scope="row">successful_task_workflow_latency_improvement</th><td>Passed. Threshold: upper bound of paired 95% Student-t interval &lt; 0. Observed: available yes, candidate minus baseline mean -62.43227297222221, confidence interval -123.85694821653173 to -1.0075977279126818, confidence level 0.95, method paired Student-t interval, paired count 36</td></tr><tr><th scope="row">successful_task_workflow_latency_non_regression</th><td>Passed. Threshold: lower bound of paired 95% Student-t interval &lt;= 0. Observed: available yes, candidate minus baseline mean -62.43227297222221, confidence interval -123.85694821653173 to -1.0075977279126818, confidence level 0.95, method paired Student-t interval, paired count 36</td></tr></tbody></table></div></details><details><summary>Statistical details</summary><div class="table-wrap"><table><thead><tr><th>Field</th><th>Recorded value</th></tr></thead><tbody><tr><th scope="row">Cached Input Tokens</th><td>Mean candidate minus baseline: 105.333. 95% interval: 98.648 to 112.018. Pairs: 36</td></tr><tr><th scope="row">Client Ttft Ms</th><td>Mean candidate minus baseline: -9.386. 95% interval: -12.206 to -6.566. Pairs: 36</td></tr><tr><th scope="row">Cost Usd</th><td>Mean candidate minus baseline: Unknown. 95% interval: Unknown. Pairs: 0</td></tr><tr><th scope="row">Critical Path Ms</th><td>Mean candidate minus baseline: -61.980. 95% interval: -123.439 to -0.522. Pairs: 36</td></tr><tr><th scope="row">Decode Ms</th><td>Mean candidate minus baseline: Unknown. 95% interval: Unknown. Pairs: 0</td></tr><tr><th scope="row">Gpu Time Ms</th><td>Mean candidate minus baseline: Unknown. 95% interval: Unknown. Pairs: 0</td></tr><tr><th scope="row">Inference Span Ms</th><td>Mean candidate minus baseline: -61.914. 95% interval: -123.346 to -0.483. Pairs: 36</td></tr><tr><th scope="row">Input Tokens</th><td>Mean candidate minus baseline: -3.444. 95% interval: -5.311 to -1.578. Pairs: 36</td></tr><tr><th scope="row">Output Tokens</th><td>Mean candidate minus baseline: -1.556. 95% interval: -3.419 to 0.308. Pairs: 36</td></tr><tr><th scope="row">Prefill Ms</th><td>Mean candidate minus baseline: Unknown. 95% interval: Unknown. Pairs: 0</td></tr><tr><th scope="row">Queue Ms</th><td>Mean candidate minus baseline: -0.040. 95% interval: -0.334 to 0.254. Pairs: 36</td></tr><tr><th scope="row">Retrieval Span Ms</th><td>Mean candidate minus baseline: Unknown. 95% interval: Unknown. Pairs: 0</td></tr><tr><th scope="row">Server Ttft Ms</th><td>Mean candidate minus baseline: -9.075. 95% interval: -11.846 to -6.304. Pairs: 36</td></tr><tr><th scope="row">Tool Span Ms</th><td>Mean candidate minus baseline: -0.066. 95% interval: -0.199 to 0.067. Pairs: 36</td></tr><tr><th scope="row">Workflow Latency Ms</th><td>Mean candidate minus baseline: -62.432. 95% interval: -123.857 to -1.008. Pairs: 36</td></tr><tr><th scope="row">Paired task success</th><td>Mean candidate minus baseline: 2.50 percentage points. 95% interval: -14.50 percentage points to 18.78 percentage points. One-sided lower bound: -12.55 percentage points. Method: exact marginal binomial bounds with Bonferroni coverage</td></tr><tr><th scope="row">Planning call</th><td>Baseline mean: 0.00. Candidate mean: 108.89. Difference: 108.89 cached tokens. Pairs: 36</td></tr><tr><th scope="row">Final answer call</th><td>Baseline mean: 196.00. Candidate mean: 192.44. Difference: -3.56 cached tokens. Pairs: 36</td></tr></tbody></table></div></details><details><summary>Environment and provenance</summary><div class="table-wrap"><table><thead><tr><th>Field</th><th>Recorded value</th></tr></thead><tbody><tr><th scope="row">Api Dialect</th><td>chat_completions</td></tr><tr><th scope="row">Backend</th><td>vllm</td></tr><tr><th scope="row">Backend Version</th><td>0.33.0</td></tr><tr><th scope="row">Chat Template Digest</th><td>sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f</td></tr><tr><th scope="row">Driver Location</th><td>same Modal container as vLLM</td></tr><tr><th scope="row">Engine Configuration</th><td>{&quot;block_size&quot;: 16, &quot;gpu_memory_utilization&quot;: 0.85, &quot;max_model_len&quot;: 8192, &quot;max_num_seqs&quot;: 8}</td></tr><tr><th scope="row">Hardware</th><td>A10</td></tr><tr><th scope="row">Model</th><td>Qwen/Qwen2.5-7B-Instruct</td></tr><tr><th scope="row">Model Revision</th><td>a09a35458c702b33eeacc393d103063234e8bc28</td></tr><tr><th scope="row">Tokenizer</th><td>Qwen/Qwen2.5-7B-Instruct</td></tr><tr><th scope="row">Tokenizer Revision</th><td>a09a35458c702b33eeacc393d103063234e8bc28</td></tr><tr><th scope="row">Agent hash</th><td>sha256:e6f42c619f15be192512d234ee21b623a09e69402a62ab16516190c9ea348dcb</td></tr><tr><th scope="row">Comparison hash</th><td>sha256:d8df549ebcb7d814aa1d70b02e2d9c482830e02d7812a40376d1c8161dd31e8f</td></tr><tr><th scope="row">Driver hash</th><td>sha256:1a6a589353e5352116a58ee446493fbc83c486f4fc7634a49483ac81b474b1b1</td></tr><tr><th scope="row">Environment Identity hash</th><td>sha256:a62037eec6d2c8d31743f404018469cb8d42c9359b1fe5a84f1e0053c86638ef</td></tr><tr><th scope="row">Evaluator hash</th><td>sha256:8f6f0ac64145392fd9f2086705345871628fce3957bae810f5cd551be4b02dba</td></tr><tr><th scope="row">Experiment Design hash</th><td>sha256:51975b24f8792f6f9ab453fb6a2fcba84ab1247e9f1a230e3ca0b9910564a48e</td></tr><tr><th scope="row">Private Result hash</th><td>sha256:783c08972d972b2cc7aad610c13d9df934d8f4c573915ad6423ebaf74402aa99</td></tr><tr><th scope="row">Status Protocol hash</th><td>sha256:b3885985bfa88510d901600b28e3d6341427b2390b3dedb2c16ccd124e68e723</td></tr><tr><th scope="row">Workload hash</th><td>sha256:85e53d2d2f2ab108b5bc83e27947a67d710ed53326a89467005630dea3bddf61</td></tr></tbody></table></div></details><details><summary>Evidence integrity</summary><div class="table-wrap"><table><thead><tr><th>Field</th><th>Recorded value</th></tr></thead><tbody><tr><th scope="row">Attempt Count</th><td>80</td></tr><tr><th scope="row">Attempt Status Schema Versions</th><td>[&#x27;0.1&#x27;]</td></tr><tr><th scope="row">Complete Dag Count</th><td>80</td></tr><tr><th scope="row">Environment Identity Complete</th><td>True</td></tr><tr><th scope="row">Environment Identity Stable</th><td>True</td></tr><tr><th scope="row">Generated Content Included</th><td>False</td></tr><tr><th scope="row">Raw Attempts Included</th><td>False</td></tr><tr><th scope="row">Valid Trace Count</th><td>80</td></tr><tr><th scope="row">Evaluator Failure</th><td>0</td></tr><tr><th scope="row">Invalid Trace</th><td>0</td></tr><tr><th scope="row">Process Or Infrastructure Failure</th><td>0</td></tr><tr><th scope="row">Task Quality Failure</th><td>5</td></tr><tr><th scope="row">Timeout</th><td>0</td></tr></tbody></table></div></details><details><summary>Limitations</summary><div class="table-wrap"><table><thead><tr><th>Field</th><th>Recorded value</th></tr></thead><tbody><tr><th scope="row">Supported claim</th><td>RunEconomy rejected an apparently faster, more cache-efficient candidate because the frozen successful-task quality requirements were not established.</td></tr><tr><th scope="row">Claims not supported</th><td>a verified performance improvement, universal model behavior, production-concurrency performance, superiority over another tool</td></tr><tr><th scope="row">Limitations</th><td>One pinned model revision, vLLM version, A10 hardware class, and repository-analysis workload were evaluated. Execution was sequential and colocated. Production concurrency and multi-replica routing were not tested. Continuous effects use only the 36 task pairs where both variants succeeded. Workflow latency includes process startup and agent execution but excludes evaluator time. Prefill, decode, retrieval, cost, and GPU-time effects were unavailable and remain unknown rather than zero. The 40-task held-out workload is consumed and cannot be reused as fresh held-out evidence. External readers can audit the aggregate arithmetic, gate logic, provenance hashes, and claim boundary, but cannot independently recompute the experiment without the private raw tasks and traces.</td></tr><tr><th scope="row">Artifact source</th><td>src/runeconomy/data/public-proof-rejection.json</td></tr></tbody></table></div></details>
+</section>
+</main>
+</body>
+</html>

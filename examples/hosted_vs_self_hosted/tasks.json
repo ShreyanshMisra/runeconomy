@@ -1,0 +1,10 @@
+{
+  "tasks": [
+    {"task_id": "carrier-a1042", "question": "Hi, I ordered a blue kettle (order A-1042). Which carrier is shipping it? Requested field: carrier"},
+    {"task_id": "status-a1057", "question": "Can you check order A-1057 for me? What is its status? Requested field: status"},
+    {"task_id": "eta-a1063", "question": "When should I expect order A-1063? Requested field: eta"},
+    {"task_id": "warehouse-a1071", "question": "Which warehouse is order A-1071 shipping from? Requested field: warehouse"},
+    {"task_id": "carrier-a1088", "question": "Order A-1088 still shows processing. Which carrier will it use? Requested field: carrier"},
+    {"task_id": "status-a1094", "question": "What is the current status of order A-1094? Requested field: status"}
+  ]
+}

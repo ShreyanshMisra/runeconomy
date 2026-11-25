@@ -1,15 +1,18 @@
-# RunEconomy 0.2.2 tester guide
+# RunEconomy 0.3.0 tester guide
 
-RunEconomy `0.2.2` adds engine-change verification, resumable agent-process
-experiments, conservative evidence-quality semantics, and decision schema
-`0.2`. RunEconomy remains alpha-stage software for controlled experiments and
+RunEconomy `0.3.0` adds zero-code capture through `runeconomy proxy`,
+experiments under concurrent load, cost and tail-latency gates, SGLang and
+hosted OpenAI-compatible backends, powered planning, an MCP server, `patch`
+and `freeze`, and a GitHub Action. The
+[0.3.0 release notes](release-notes-0.3.0.md) list every change. RunEconomy
+remains alpha-stage software for controlled experiments and
 private testing. It is a local CLI and Python package, not a production service
 or general observability platform.
 
 ## Install
 
 ```bash
-python -m pip install runeconomy==0.2.2
+python -m pip install runeconomy==0.3.0
 runeconomy --version
 runeconomy tutorial init ./runeconomy-tutorial
 runeconomy tutorial serve
@@ -18,7 +21,17 @@ runeconomy tutorial serve
 The tutorial is deterministic and local. It uses RunEconomy-enriched
 OpenInference evidence and validates product plumbing only. Ordinary telemetry
 may produce an unresolved workspace. Use `runeconomy demo --open` to inspect the
-immutable aggregate-only rejection proof.
+immutable aggregate-only proof with an `invalid` verdict.
+
+## Capture an existing agent without code changes
+
+```bash
+runeconomy proxy --upstream http://127.0.0.1:8000 --record session.jsonl
+```
+
+Point the agent's OpenAI base URL at the address the proxy prints, run a few
+tasks, then import `session.jsonl`. Send a correlation header when several
+agents run at once. See [the capture guide](proxy.md).
 
 ## Evidence-to-report workflow
 
@@ -70,7 +83,13 @@ The archive is never uploaded automatically. Inspect it before sharing.
 - AgenticLens has no claimed native adapter until a stable export contract is
   available.
 
-## Compatibility with 0.2.0
+## Compatibility with 0.2.2
+
+Every 0.2.2 manifest, workspace, result and decision artifact keeps its
+meaning. New paired methods, completion policies, load profiles and gates
+apply only to contracts that declare them, at the newer manifest versions.
+
+## Migrating from 0.2.0
 
 Existing normalized traces, structured findings, static manifests, results, and
 the legacy importer commands remain supported. `analyze` remains available for
@@ -101,6 +120,5 @@ results, prompts, responses, evaluator data, endpoints, credentials, paths, and
 arbitrary workspace files. Privacy minimization is not a guarantee of
 anonymity.
 
-RunEconomy does not provide a hosted dashboard, managed collector,
-framework-specific SDK, automatic production changes, automatic resume, SGLang
-runner, or broad diagnosis catalog.
+RunEconomy does not provide a hosted dashboard, a managed collector, a
+framework-specific SDK, or automatic production changes.

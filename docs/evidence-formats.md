@@ -78,6 +78,14 @@ live framework or workload evidence.
 A directory may contain several JSON traces. The imported bundle lists each run
 and requires deliberate selection before runnable initialization.
 
+## Proxy sessions
+
+RunEconomy proxy JSONL sessions normalize into one evidence run per captured
+workflow. Grouping uses explicit trace IDs or a configurable idle gap.
+Dependency edges require explicit assertions. Exact prompt IDs come from
+the serving backend or an explicit token-ID request. Missing evidence stays
+unknown. [Capture and prepare a replay](proxy.md).
+
 ## vLLM captures
 
 Exact-token vLLM JSONL captures can support exact cache analysis. Static replay

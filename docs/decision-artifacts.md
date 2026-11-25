@@ -39,6 +39,17 @@ Discordant outcomes use paired direction explicitly:
 - `baseline_only` means the baseline succeeded and the candidate failed.
 - `candidate_only` means the candidate succeeded and the baseline failed.
 
+## Identity assurance
+
+A contract that preregisters identity policy `0.1` gets a derived
+`identity_assurance` block. It records each variant's identity grade
+(`operator_verified` or `provider_declared`), the claim scope
+(`pinned_configuration` or `observed_service_window`), the supported claim,
+the claim limits, and a per-variant provider fingerprint summary (counts only,
+a drift indicator that never affects validity). Contracts without a policy
+have no such block and keep their legacy identity semantics. See
+[serving backends and identity grades](backends.md#identity-grades).
+
 ## Decisive gates
 
 The decisive gate is the first failed required check in recorded gate order.
