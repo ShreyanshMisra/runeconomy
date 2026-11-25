@@ -1,0 +1,208 @@
+{
+  "$id": "runeconomy.cli.doctor.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Read-only vLLM capability report. Saved output is accepted by experiment validate --doctor-report and support-bundle --doctor-report.",
+  "properties": {
+    "cache_reset": {
+      "properties": {
+        "evidence": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "status"
+      ],
+      "type": "object"
+    },
+    "cache_salt": {
+      "properties": {
+        "evidence": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "status"
+      ],
+      "type": "object"
+    },
+    "cache_telemetry": {
+      "properties": {
+        "evidence": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "status"
+      ],
+      "type": "object"
+    },
+    "chat_completions": {
+      "properties": {
+        "evidence": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "status"
+      ],
+      "type": "object"
+    },
+    "chat_completions_render": {
+      "properties": {
+        "evidence": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "status"
+      ],
+      "type": "object"
+    },
+    "experiment_modes": {
+      "items": {
+        "properties": {
+          "mode": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "status"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "identity": {
+      "type": "object"
+    },
+    "model_ids": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.doctor.v1"
+    },
+    "per_request_timing": {
+      "properties": {
+        "evidence": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "status"
+      ],
+      "type": "object"
+    },
+    "probe_safety": {
+      "type": "object"
+    },
+    "readiness": {
+      "properties": {
+        "status": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "responses": {
+      "properties": {
+        "evidence": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "status"
+      ],
+      "type": "object"
+    },
+    "responses_render": {
+      "properties": {
+        "evidence": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "status"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "tokenize": {
+      "properties": {
+        "evidence": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "status"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "cache_reset",
+    "chat_completions",
+    "experiment_modes",
+    "identity",
+    "model_ids",
+    "output_schema",
+    "probe_safety",
+    "readiness",
+    "responses",
+    "schema_version",
+    "tokenize"
+  ],
+  "title": "runeconomy doctor --json output, version 1",
+  "type": "object"
+}

@@ -1,0 +1,116 @@
+{
+  "$id": "runeconomy.cli.experiment-validate.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Corrective validation report. Exit 0 runnable, 1 not runnable but not invalid, 2 invalid.",
+  "properties": {
+    "experiment_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "freeze": {
+      "properties": {
+        "record_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "not_frozen",
+            "intact",
+            "drifted"
+          ]
+        }
+      },
+      "required": [
+        "record_sha256",
+        "status"
+      ],
+      "type": "object"
+    },
+    "issues": {
+      "items": {
+        "properties": {
+          "artifact_path": {
+            "type": "string"
+          },
+          "claim_weakening": {
+            "type": "boolean"
+          },
+          "code": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "execution_blocking": {
+            "type": "boolean"
+          },
+          "field_path": {
+            "type": "string"
+          },
+          "next_action": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim_weakening",
+          "code",
+          "execution_blocking",
+          "field_path",
+          "next_action",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "mode": {
+      "type": "string"
+    },
+    "next_command": {
+      "type": "string"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.experiment-validate.v1"
+    },
+    "runnable": {
+      "type": "boolean"
+    },
+    "status": {
+      "enum": [
+        "runnable",
+        "unresolved",
+        "invalid",
+        "unsupported_backend",
+        "claim_evidence_incomplete"
+      ]
+    },
+    "validation_version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "experiment_id",
+    "freeze",
+    "issues",
+    "mode",
+    "output_schema",
+    "runnable",
+    "status",
+    "validation_version"
+  ],
+  "title": "runeconomy experiment-validate --json output, version 1",
+  "type": "object"
+}

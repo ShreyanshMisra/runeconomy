@@ -1,0 +1,80 @@
+{
+ "experiment_id": "kv-pressure-fixture",
+ "decision": {
+  "status": "inconclusive",
+  "checks": []
+ },
+ "load_blocks": [
+  {
+   "block": 0,
+   "stage": "gate",
+   "telemetry": {
+    "server_metrics": {
+     "schema_version": "0.1",
+     "targets": {
+      "baseline": {
+       "status": "measured",
+       "samples": 40,
+       "scrape_errors": 0,
+       "interval_seconds": 1.0,
+       "gauges": {
+        "running_requests": {
+         "mean": 14.0,
+         "max": 16.0,
+         "p95": 16.0
+        },
+        "waiting_requests": {
+         "mean": 0.0,
+         "max": 0.0,
+         "p95": 0.0
+        },
+        "kv_cache_usage_ratio": {
+         "mean": 0.52,
+         "max": 0.62,
+         "p95": 0.62
+        },
+        "generation_throughput_tokens_per_s": null
+       },
+       "counters": {
+        "preemptions_total_delta": 0.0,
+        "prefix_cache_hits_total_delta": 100.0,
+        "prefix_cache_queries_total_delta": 400.0
+       },
+       "prefix_cache_hit_rate_in_block": 0.25
+      },
+      "candidate": {
+       "status": "measured",
+       "samples": 40,
+       "scrape_errors": 0,
+       "interval_seconds": 1.0,
+       "gauges": {
+        "running_requests": {
+         "mean": 14.0,
+         "max": 16.0,
+         "p95": 16.0
+        },
+        "waiting_requests": {
+         "mean": 3.0,
+         "max": 6.0,
+         "p95": 6.0
+        },
+        "kv_cache_usage_ratio": {
+         "mean": 0.89,
+         "max": 0.99,
+         "p95": 0.99
+        },
+        "generation_throughput_tokens_per_s": null
+       },
+       "counters": {
+        "preemptions_total_delta": 37.0,
+        "prefix_cache_hits_total_delta": 100.0,
+        "prefix_cache_queries_total_delta": 400.0
+       },
+       "prefix_cache_hit_rate_in_block": 0.25
+      }
+     }
+    }
+   }
+  }
+ ]
+}

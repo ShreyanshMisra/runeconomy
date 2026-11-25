@@ -1,0 +1,51 @@
+{
+  "$id": "runeconomy.cli.experiment-init.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Created experiment workspace or standalone artifact.",
+  "properties": {
+    "generation_status": {
+      "enum": [
+        "runnable",
+        "unresolved"
+      ]
+    },
+    "mode": {
+      "enum": [
+        "static_request",
+        "agent_process"
+      ]
+    },
+    "next_command": {
+      "type": "string"
+    },
+    "output": {
+      "type": "string"
+    },
+    "output_kind": {
+      "enum": [
+        "workspace",
+        "artifact"
+      ]
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.experiment-init.v1"
+    },
+    "unresolved_fields": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "generation_status",
+    "mode",
+    "next_command",
+    "output",
+    "output_kind",
+    "output_schema",
+    "unresolved_fields"
+  ],
+  "title": "runeconomy experiment-init --json output, version 1",
+  "type": "object"
+}

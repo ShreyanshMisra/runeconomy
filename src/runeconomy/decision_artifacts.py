@@ -19,6 +19,7 @@ _DERIVED_FIELDS = {
     "evidence_validity",
     "execution_terminality",
     "failure_origin",
+    "identity_assurance",
     "performance_eligibility",
     "schema_version",
     "task_outcome",
@@ -154,10 +155,12 @@ def _task_outcome(
     }
 
 
-def _common_mode_diagnostics(counts: Mapping[str, int]) -> dict[str, Any]:
+def _common_mode_diagnostics(
+    counts: Mapping[str, int], policy: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
     paired_count = sum(counts.values()) if counts else 0
     both_failure = counts.get("both_failure", 0)
-    return {
+    diagnostics: dict[str, Any] = {
         "paired_count": paired_count,
         "both_failure_count": both_failure,
         "both_failure_rate": both_failure / paired_count if paired_count else None,
@@ -169,6 +172,27 @@ def _common_mode_diagnostics(counts: Mapping[str, int]) -> dict[str, Any]:
             else "No concordant paired task failures were observed."
         ),
     }
+    if isinstance(policy, Mapping):
+        # Present only when the frozen contract declared a completion policy,
+        # so legacy artifacts keep their exact shape.
+        same_failure = policy.get("common_mode_pair_count")
+        reclassified = policy.get("reclassified_as_task_outcome")
+        diagnostics["policy"] = {
+            "schema_version": policy.get("schema_version"),
+            "common_mode_paired_failures": policy.get("common_mode_paired_failures"),
+        }
+        diagnostics["same_failure_pair_count"] = (
+            same_failure if isinstance(same_failure, int) else None
+        )
+        diagnostics["classification"] = (
+            "task_outcome"
+            if policy.get("common_mode_paired_failures") == "task_outcome"
+            else "variant_non_completion"
+        )
+        diagnostics["reclassified_pair_count"] = (
+            reclassified if isinstance(reclassified, int) else 0
+        )
+    return diagnostics
 
 
 def _failure_origin(
@@ -260,6 +284,56 @@ def _decisive_gate(checks: list[dict[str, Any]], status: str, reason: str) -> di
             f"{_brief(check.get('observed'))}; threshold "
             f"{_brief(check.get('threshold'))}. {consequence}"
         ),
+    }
+
+
+def _identity_assurance(
+    record: Mapping[str, Any], status: str
+) -> dict[str, Any]:
+    """State which claim a verdict supports under graded identity.
+
+    Present only for contracts that preregistered an identity policy.
+    """
+
+    scope = record.get("claim_scope")
+    if status == "invalid":
+        supported_claim = "No claim: the verdict is invalid."
+    elif scope == "pinned_configuration":
+        supported_claim = (
+            "The verdict applies to the pinned, operator-verified serving "
+            "configurations recorded in identity."
+        )
+    else:
+        supported_claim = (
+            "The verdict applies only to the declared workload and to the "
+            "provider-declared service as observed during this run. It is not "
+            "a claim about a pinned model or serving configuration."
+        )
+    variants = record.get("variants")
+    variants = variants if isinstance(variants, Mapping) else {}
+    return {
+        "schema_version": record.get("schema_version"),
+        "policy": record.get("policy"),
+        "grades": record.get("grades"),
+        "claim_scope": scope,
+        "supported_claim": supported_claim,
+        "claim_limits": list(record.get("claim_limits") or []),
+        "variants": {
+            name: {
+                key: value.get(key)
+                for key in (
+                    "grade",
+                    "valid",
+                    "meets_minimum_grade",
+                    "missing_fields",
+                    "placeholder_fields",
+                    "undisclosed_fields",
+                    "provider_fingerprint",
+                )
+            }
+            for name, value in sorted(variants.items())
+            if isinstance(value, Mapping)
+        },
     }
 
 
@@ -384,6 +458,20 @@ def enrich_decision_artifact(
             "eligible": eligible,
             "reason": eligibility_reason,
         },
-        "common_mode_paired_failures": _common_mode_diagnostics(paired_counts),
+        "common_mode_paired_failures": _common_mode_diagnostics(
+            paired_counts,
+            source_summary.get("completion_policy")
+            if isinstance(source_summary.get("completion_policy"), Mapping)
+            else None,
+        ),
         "decisive_gate": _decisive_gate(checks, status, reason),
+        **(
+            {
+                "identity_assurance": _identity_assurance(
+                    source_summary["identity_assurance"], status
+                )
+            }
+            if isinstance(source_summary.get("identity_assurance"), Mapping)
+            else {}
+        ),
     }

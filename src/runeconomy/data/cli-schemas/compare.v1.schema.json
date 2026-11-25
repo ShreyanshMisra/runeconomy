@@ -1,0 +1,41 @@
+{
+  "$id": "runeconomy.cli.compare.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Closed-loop agent comparison (compatibility wrapper).",
+  "properties": {
+    "artifacts": {
+      "type": "string"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.compare.v1"
+    },
+    "require_verified": {
+      "type": "boolean"
+    },
+    "result": {
+      "type": "string"
+    },
+    "verdict": {
+      "enum": [
+        "verified",
+        "regression",
+        "inconclusive",
+        "invalid",
+        "unknown"
+      ]
+    },
+    "verified": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "artifacts",
+    "output_schema",
+    "require_verified",
+    "result",
+    "verdict",
+    "verified"
+  ],
+  "title": "runeconomy compare --json output, version 1",
+  "type": "object"
+}

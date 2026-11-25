@@ -26,9 +26,9 @@ class DocumentationTests(unittest.TestCase):
             ROOT / f"docs/release-notes-{documented_version}.md"
         ).read_text(encoding="utf-8")
         for marker in (
-            "Decision schema `0.2`",
-            "Evidence validity is conservative",
-            "permanently `invalid`",
+            "`paired_exact` remains the default",
+            "completion_policy",
+            "provider_declared",
         ):
             self.assertIn(marker, release_notes)
 

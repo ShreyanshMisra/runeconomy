@@ -20,6 +20,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .attempt_status import AttemptStatus, AttemptStatusError
+from .completion_policy import (
+    CompletionPolicy,
+    CompletionPolicyError,
+    common_mode_failure_pairs,
+    completion_policy_record,
+)
 from .critical_path import calculate_critical_path
 from .decision_artifacts import enrich_decision_artifact
 from .evaluators import (
@@ -29,16 +35,50 @@ from .evaluators import (
     validate_evaluator_spec,
 )
 from .evidence_quality import aggregate_evidence_quality
+from .identity import (
+    IdentityPolicy,
+    IdentityPolicyError,
+    assess_request_identity,
+    identity_assurance_record,
+    parse_identity_policy,
+    variant_identity_summary,
+)
+from .execution import (
+    CONCURRENT_ARRIVAL_PATTERNS,
+    ROLE_FILLER,
+    SEQUENTIAL,
+    ArrivalSchedule,
+    JsonlArtifactStore,
+    LoadRunner,
+    LoadSpec,
+    LoadSpecError,
+    ScheduledTrial,
+    build_arrival_schedule,
+    verify_schedule_pin,
+)
+from .metric_gates import (
+    MetricGateError,
+    Observation,
+    economics_of,
+    evaluate_metric_gates,
+    load_integrity_checks,
+    merge_load_and_metric_checks,
+    parse_metric_gates,
+    tpot_ms,
+)
 from .experiments import (
     ExperimentValidationError,
     _clopper_pearson_interval,
-    _paired_success_statistics,
+    _task_success_noninferior,
+    _task_success_statistics,
 )
+from .paired_inference import PAIRED_EXACT, PAIRED_METHODS
 from .importers import import_openinference
 from .models import Trace, TraceValidationError
 
 
 COMPARE_RESULT_VERSION = "0.2"
+COMPARE_LOAD_RESULT_VERSION = "0.3"
 _T_CRITICAL_95 = {
     1: 12.706,
     2: 4.303,
@@ -368,6 +408,16 @@ def _evaluate(
     }
 
 
+def _identities_stable(signatures: set[str]) -> bool:
+    if not signatures:
+        return False
+    by_role: dict[Any, set[str]] = {}
+    for signature in signatures:
+        role = json.loads(signature).get("step_role")
+        by_role.setdefault(role, set()).add(signature)
+    return all(len(members) == 1 for members in by_role.values())
+
+
 def _sum_metric(trace: Trace, name: str) -> float | int | None:
     values = [
         getattr(request.metrics, name)
@@ -404,15 +454,22 @@ def _trace_metrics(payload: Mapping[str, Any], trace: Trace) -> dict[str, Any]:
         "tokenizer_revision",
         "chat_template_digest",
     )
-    identities = [
-        {name: getattr(request, name) for name in identity_fields}
-        for request in trace.requests
-    ]
+    payload_requests = payload.get("requests")
+    payload_requests = payload_requests if isinstance(payload_requests, list) else []
+    identities = []
+    for index, request in enumerate(trace.requests):
+        identity = {name: getattr(request, name) for name in identity_fields}
+        raw = payload_requests[index] if index < len(payload_requests) else None
+        role = raw.get("step_role") if isinstance(raw, Mapping) else None
+        if isinstance(role, str) and role:
+            identity["step_role"] = role
+        identities.append(identity)
     identity_complete = all(
         value not in {None, "", "unknown"}
         for identity in identities
         for value in identity.values()
     )
+    request_metrics = [request.metrics for request in trace.requests]
     return {
         "trace_id": _digest_bytes(trace.trace_id.encode()),
         "dependency_evidence": payload.get("dependency_evidence", "absent"),
@@ -434,11 +491,82 @@ def _trace_metrics(payload: Mapping[str, Any], trace: Trace) -> dict[str, Any]:
         "client_ttft_ms": _sum_metric(trace, "client_ttft_ms"),
         "request_latency_ms": _sum_metric(trace, "total_latency_ms"),
         "request_count": len(trace.requests),
+        # Request-level values for request-level metric gates (TTFT, TPOT).
+        "request_client_ttft_ms": [
+            metrics.client_ttft_ms
+            for metrics in request_metrics
+            if metrics.client_ttft_ms is not None
+        ],
+        "request_server_ttft_ms": [
+            metrics.ttft_ms for metrics in request_metrics if metrics.ttft_ms is not None
+        ],
+        "request_tpot_ms": [
+            value
+            for value in (
+                tpot_ms(metrics.total_latency_ms, metrics.client_ttft_ms, metrics.output_tokens)
+                for metrics in request_metrics
+            )
+            if value is not None
+        ],
         "span_count": len(trace.spans),
         "environment_identity": identities,
         "environment_identity_complete": identity_complete,
         "evidence_quality": payload.get("evidence_quality"),
+        **_identity_declarations(payload),
     }
+
+
+_IDENTITY_DECLARATION_KEYS = (
+    "identity_grade",
+    "identity_undisclosed_fields",
+    "provider_fingerprint_sha256",
+)
+
+
+def _identity_declarations(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Per-request graded-identity declarations, only when a trace has them.
+
+    Legacy traces declare none, so their attempt metrics are unchanged.
+    """
+
+    requests = [
+        request for request in payload.get("requests", []) if isinstance(request, Mapping)
+    ]
+    if not any(key in request for request in requests for key in _IDENTITY_DECLARATION_KEYS):
+        return {}
+    return {
+        "identity_declarations": [
+            {
+                "grade": request.get("identity_grade"),
+                "undisclosed_fields": list(request.get("identity_undisclosed_fields") or []),
+                "provider_fingerprint_sha256": request.get("provider_fingerprint_sha256"),
+            }
+            for request in requests
+        ]
+    }
+
+
+def _graded_identity(
+    traced: list[dict[str, Any]], policy: IdentityPolicy
+) -> dict[str, Any]:
+    """Assess one variant's identity under a declared identity policy."""
+
+    assessments: list[dict[str, Any]] = []
+    fingerprints: list[str | None] = []
+    for item in traced:
+        metrics = item["metrics"]
+        identities = metrics.get("environment_identity", [])
+        declarations = metrics.get("identity_declarations") or [{}] * len(identities)
+        for identity, declaration in zip(identities, declarations):
+            assessments.append(
+                assess_request_identity(
+                    identity,
+                    grade=declaration.get("grade"),
+                    undisclosed=declaration.get("undisclosed_fields"),
+                )
+            )
+            fingerprints.append(declaration.get("provider_fingerprint_sha256"))
+    return variant_identity_summary(policy, assessments, fingerprints)
 
 
 def _schedule(
@@ -517,10 +645,13 @@ def _run_attempt(
     evaluator: tuple[str, Any],
     timeout_seconds: float,
     evaluator_timeout_seconds: float,
+    attempt_prefix: str | None = None,
+    extra_environment: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     task_id_digest = _digest_bytes(str(task["task_id"]).encode())
     task_suffix = task_id_digest.removeprefix("sha256:")[:12]
-    attempt_id = f"{sequence:05d}-task-{task_suffix}-{variant}-r{repetition:03d}"
+    prefix = f"{sequence:05d}" if attempt_prefix is None else attempt_prefix
+    attempt_id = f"{prefix}-task-{task_suffix}-{variant}-r{repetition:03d}"
     attempt_dir = artifacts_dir / "attempts" / attempt_id
     attempt_dir.mkdir(parents=True)
     task_path = attempt_dir / "task.json"
@@ -545,6 +676,8 @@ def _run_attempt(
             "RUNECONOMY_STATUS_PATH": str(status_path.resolve()),
         }
     )
+    if extra_environment:
+        environment.update(extra_environment)
     started = time.perf_counter_ns()
     process_returncode: int | None = None
     status = "infrastructure_failure"
@@ -652,6 +785,10 @@ def _run_attempt(
                 "variant": variant,
                 "repetition": repetition,
                 "attempt_id": attempt_id,
+                # Repo-test and trajectory evaluators read the attempt's own
+                # working copy and trace; both stay variant-local.
+                "attempt_dir": str(attempt_dir.resolve()),
+                "trace_path": str(trace_path.resolve()),
             }
             try:
                 evaluator_result = _evaluate(
@@ -811,7 +948,22 @@ def _paired_t_interval(differences: list[float]) -> dict[str, Any]:
     }
 
 
-def _summarize(attempts: list[dict[str, Any]]) -> dict[str, Any]:
+def _summarize(
+    attempts: list[dict[str, Any]],
+    *,
+    task_success_method: str = PAIRED_EXACT,
+    max_task_success_regression: float = 0.0,
+    completion_policy: CompletionPolicy | None = None,
+    identity_policy: IdentityPolicy | None = None,
+) -> dict[str, Any]:
+    common_mode_pairs = (
+        common_mode_failure_pairs(attempts) if completion_policy is not None else []
+    )
+    reclassified_keys = (
+        {(pair["task_id"], pair["repetition"]) for pair in common_mode_pairs}
+        if completion_policy is not None and completion_policy.reclassifies_common_mode
+        else set()
+    )
     variants: dict[str, Any] = {}
     for variant in ("baseline", "candidate"):
         subset = [item for item in attempts if item["variant"] == variant]
@@ -882,9 +1034,12 @@ def _summarize(attempts: list[dict[str, Any]]) -> dict[str, Any]:
                         for item in traced
                     )
                 ),
-                "environment_identity_stable": bool(
-                    traced and len(identity_signatures) == 1
-                ),
+                # Stable means one identity per declared step role. Traces
+                # that declare no runeconomy.step_role keep the original rule:
+                # exactly one identity for the whole variant. A workflow that
+                # routes steps to different models must declare the roles, so
+                # deliberate routing is never confused with model drift.
+                "environment_identity_stable": _identities_stable(identity_signatures),
                 "environment_identity_signatures": sorted(identity_signatures),
                 "environment_identity_signatures_by_task": {
                     task_id: sorted(signatures)
@@ -928,6 +1083,22 @@ def _summarize(attempts: list[dict[str, Any]]) -> dict[str, Any]:
                 },
             },
         }
+        if completion_policy is not None:
+            completed = sum(
+                item["status"] in {"completed", "task_failure"} for item in subset
+            )
+            reclassified = sum(
+                (item["task_id"], item["repetition"]) in reclassified_keys
+                for item in subset
+            )
+            variants[variant]["completion_gate"] = {
+                "policy": completion_policy.to_dict(),
+                "attempt_count": len(subset),
+                "completed_count": completed,
+                "common_mode_task_outcome_count": reclassified,
+                "counted_complete": completed + reclassified,
+                "rate": (completed + reclassified) / len(subset) if subset else None,
+            }
 
     by_key = {
         (item["task_id"], item["repetition"], item["variant"]): item
@@ -983,14 +1154,18 @@ def _summarize(attempts: list[dict[str, Any]]) -> dict[str, Any]:
         name: _paired_t_interval(values)
         for name, values in metric_differences.items()
     }
-    effects["task_success"] = _paired_success_statistics(task_pairs)
+    effects["task_success"] = _task_success_statistics(
+        task_pairs,
+        method=task_success_method,
+        margin=max_task_success_regression,
+    )
     quality_records = [
         item["metrics"]["evidence_quality"]
         for item in attempts
         if isinstance(item.get("metrics"), Mapping)
         and isinstance(item["metrics"].get("evidence_quality"), Mapping)
     ]
-    return {
+    summary: dict[str, Any] = {
         "variants": variants,
         "effects": effects,
         "evidence_quality": aggregate_evidence_quality(
@@ -1000,6 +1175,29 @@ def _summarize(attempts: list[dict[str, Any]]) -> dict[str, Any]:
             "task-level pairs where both baseline and candidate succeeded"
         ),
     }
+    if completion_policy is not None:
+        summary["completion_policy"] = completion_policy_record(
+            completion_policy, common_mode_pairs
+        )
+    if identity_policy is not None:
+        graded: dict[str, Any] = {}
+        for variant, values in variants.items():
+            traced = [
+                item
+                for item in attempts
+                if item["variant"] == variant and item["metrics"]
+            ]
+            graded[variant] = _graded_identity(traced, identity_policy)
+            # Under a declared policy, completeness means complete graded
+            # identity at or above the preregistered minimum grade.
+            values["trace_evidence"]["environment_identity_complete"] = bool(
+                traced and graded[variant]["valid"]
+            )
+            values["trace_evidence"]["identity_grade"] = graded[variant]["grade"]
+        summary["identity_assurance"] = identity_assurance_record(
+            identity_policy, graded
+        )
+    return summary
 
 
 def _decision(
@@ -1011,6 +1209,7 @@ def _decision(
     optimization_target: str = "successful_workflow_latency",
     latency_semantics: str = "superiority",
     max_latency_regression_ms: float = 0.0,
+    task_success_method: str = PAIRED_EXACT,
 ) -> dict[str, Any]:
     baseline = summary["variants"]["baseline"]
     candidate = summary["variants"]["candidate"]
@@ -1020,15 +1219,23 @@ def _decision(
     candidate_ci = candidate["task_success_95_ci"]
     absolute_baseline = bool(baseline_ci and baseline_ci[0] >= min_task_success_rate)
     absolute_candidate = bool(candidate_ci and candidate_ci[0] >= min_task_success_rate)
-    lower = success.get("one_sided_lower_bound")
-    noninferior = bool(lower is not None and lower >= -max_task_success_regression)
+    noninferior = _task_success_noninferior(
+        success, method=task_success_method, margin=max_task_success_regression
+    )
+
+    def completion_rate(variant: Mapping[str, Any]) -> Any:
+        gate = variant.get("completion_gate")
+        return gate.get("rate") if isinstance(gate, Mapping) else variant["completed_rate"]
+
+    baseline_completion_rate = completion_rate(baseline)
+    candidate_completion_rate = completion_rate(candidate)
     baseline_complete = bool(
-        baseline["completed_rate"] is not None
-        and baseline["completed_rate"] >= min_completed_rate
+        baseline_completion_rate is not None
+        and baseline_completion_rate >= min_completed_rate
     )
     candidate_complete = bool(
-        candidate["completed_rate"] is not None
-        and candidate["completed_rate"] >= min_completed_rate
+        candidate_completion_rate is not None
+        and candidate_completion_rate >= min_completed_rate
     )
     latency_ci = latency["confidence_interval"]
     latency_limit = 0.0 if latency_semantics == "superiority" else max_latency_regression_ms
@@ -1097,18 +1304,33 @@ def _decision(
             "passed": noninferior,
             "observed": success,
             "threshold": -max_task_success_regression,
+            **(
+                {"method": task_success_method}
+                if task_success_method != PAIRED_EXACT
+                else {}
+            ),
         },
         {
             "name": "baseline_completion",
             "passed": baseline_complete,
-            "observed": baseline["completed_rate"],
+            "observed": baseline_completion_rate,
             "threshold": min_completed_rate,
+            **(
+                {"completion_gate": baseline["completion_gate"]}
+                if isinstance(baseline.get("completion_gate"), Mapping)
+                else {}
+            ),
         },
         {
             "name": "candidate_completion",
             "passed": candidate_complete,
-            "observed": candidate["completed_rate"],
+            "observed": candidate_completion_rate,
             "threshold": min_completed_rate,
+            **(
+                {"completion_gate": candidate["completion_gate"]}
+                if isinstance(candidate.get("completion_gate"), Mapping)
+                else {}
+            ),
         },
         {
             "name": (
@@ -1205,6 +1427,109 @@ def _decision(
     )
 
 
+class _AgentTrialExecutor:
+    """Run one agent-process attempt per scheduled trial (thread-safe)."""
+
+    def __init__(
+        self,
+        *,
+        tasks: list[dict[str, Any]],
+        commands: Mapping[str, list[str]],
+        seed: int,
+        workdir: Path,
+        artifacts_dir: Path,
+        evaluator: tuple[str, Any],
+        timeout_seconds: float,
+        evaluator_timeout_seconds: float,
+    ) -> None:
+        self.tasks = tasks
+        self.commands = commands
+        self.seed = seed
+        self.workdir = workdir
+        self.artifacts_dir = artifacts_dir
+        self.evaluator = evaluator
+        self.timeout_seconds = timeout_seconds
+        self.evaluator_timeout_seconds = evaluator_timeout_seconds
+
+    def execute(
+        self, trial: ScheduledTrial, *, role: str, filler_index: int | None
+    ) -> dict[str, Any]:
+        prefix = (
+            f"filler-{filler_index:05d}"
+            if role == ROLE_FILLER
+            else f"{trial.index + 1:05d}"
+        )
+        return _run_attempt(
+            argv=self.commands[trial.variant],
+            task=self.tasks[trial.unit],
+            variant=trial.variant,
+            repetition=trial.repetition,
+            sequence=trial.index + 1,
+            seed=self.seed,
+            workdir=self.workdir,
+            artifacts_dir=self.artifacts_dir,
+            evaluator=self.evaluator,
+            timeout_seconds=self.timeout_seconds,
+            evaluator_timeout_seconds=self.evaluator_timeout_seconds,
+            attempt_prefix=prefix,
+            extra_environment={
+                "RUNECONOMY_LOAD_ROLE": role,
+                "RUNECONOMY_LOAD_STAGE": str(trial.stage),
+                "RUNECONOMY_LOAD_LEVEL": f"{trial.level:g}",
+                "RUNECONOMY_LOAD_BLOCK": str(trial.block),
+            },
+        )
+
+
+def _agent_observations(attempts: list[dict[str, Any]]) -> list[Observation]:
+    observations: list[Observation] = []
+    for attempt in attempts:
+        metrics = attempt.get("metrics")
+        metrics = metrics if isinstance(metrics, Mapping) else {}
+        cost, gpu = economics_of(attempt)
+        measured = attempt.get("status") in {"completed", "task_failure"}
+        observations.append(
+            Observation(
+                cluster=str(attempt["task_id"]),
+                repetition=int(attempt["repetition"]),
+                variant=str(attempt["variant"]),
+                success=(
+                    None
+                    if attempt.get("task_success") is None
+                    else bool(attempt["task_success"])
+                ),
+                workflow_latency_ms=(
+                    float(attempt["workflow_latency_ms"]) if measured else None
+                ),
+                requests={
+                    "client_ttft_ms": tuple(metrics.get("request_client_ttft_ms", ())),
+                    "server_ttft_ms": tuple(metrics.get("request_server_ttft_ms", ())),
+                    "tpot_ms": tuple(metrics.get("request_tpot_ms", ())),
+                },
+                cost_usd=cost,
+                gpu_time_ms=gpu,
+            )
+        )
+    return observations
+
+
+def agent_arrival_schedule(
+    load: LoadSpec, tasks: list[dict[str, Any]], *, repetitions: int, seed: int, order: str
+) -> ArrivalSchedule:
+    """Frozen schedule over task-ID digests, so it can be shared without task text."""
+
+    try:
+        return build_arrival_schedule(
+            load,
+            [_digest_bytes(str(task["task_id"]).encode()) for task in tasks],
+            repetitions=repetitions,
+            seed=seed,
+            order=order,
+        )
+    except LoadSpecError as exc:
+        raise ExperimentValidationError(str(exc)) from exc
+
+
 def run_comparison(
     *,
     baseline_command: str,
@@ -1226,8 +1551,25 @@ def run_comparison(
     latency_semantics: str = "superiority",
     max_latency_regression_ms: float = 0.0,
     resume: bool = False,
+    task_success_method: str = PAIRED_EXACT,
+    completion_policy: Mapping[str, Any] | None = None,
+    identity_policy: Mapping[str, Any] | None = None,
+    arrival_pattern: str = SEQUENTIAL,
+    load: Mapping[str, Any] | None = None,
+    metric_gates: list[Mapping[str, Any]] | None = None,
+    observers: Any = (),
+    attempt_economics: Any = None,
 ) -> dict[str, Any]:
-    """Execute and compare two real agent commands on paired tasks."""
+    """Execute and compare two real agent commands on paired tasks.
+
+    ``task_success_method`` and ``completion_policy`` are preregistered
+    acceptance semantics. Their defaults reproduce the original contract, and
+    they enter the frozen design only when a non-default value is declared.
+    ``arrival_pattern``/``load`` and ``metric_gates`` follow
+    ``docs/load-pairing-and-tail-gates.md`` and likewise enter the design only
+    when declared. ``observers`` and ``attempt_economics`` are the telemetry
+    and cost seams; neither changes the frozen design.
+    """
 
     if repetitions <= 0:
         raise ExperimentValidationError("repetitions must be positive")
@@ -1261,6 +1603,45 @@ def run_comparison(
     ):
         if value < 0 or value > 1:
             raise ExperimentValidationError(f"{name} must be between 0 and 1")
+    if task_success_method not in PAIRED_METHODS:
+        raise ExperimentValidationError(
+            "task_success_method must be paired_exact or paired_score_exact"
+        )
+    try:
+        parsed_policy = (
+            None
+            if completion_policy is None
+            else CompletionPolicy.from_value(completion_policy)
+        )
+    except CompletionPolicyError as exc:
+        raise ExperimentValidationError(str(exc)) from exc
+    try:
+        parsed_identity_policy = parse_identity_policy(identity_policy)
+    except IdentityPolicyError as exc:
+        raise ExperimentValidationError(str(exc)) from exc
+    parsed_load: LoadSpec | None = None
+    if arrival_pattern != SEQUENTIAL:
+        if arrival_pattern not in CONCURRENT_ARRIVAL_PATTERNS:
+            raise ExperimentValidationError(
+                "arrival_pattern must be sequential, closed_loop, constant_rps, or poisson"
+            )
+        try:
+            parsed_load = LoadSpec.from_value(arrival_pattern, load)
+        except LoadSpecError as exc:
+            raise ExperimentValidationError(str(exc)) from exc
+        if resume:
+            raise ExperimentValidationError(
+                "resume is not supported for concurrent arrival patterns; a "
+                "partial block cannot be replayed under the same load"
+            )
+    elif load is not None:
+        raise ExperimentValidationError("load requires a concurrent arrival_pattern")
+    try:
+        parsed_gates = parse_metric_gates(
+            None if metric_gates is None else list(metric_gates)
+        )
+    except MetricGateError as exc:
+        raise ExperimentValidationError(str(exc)) from exc
     workdir = workdir.resolve()
     if not workdir.is_dir():
         raise ExperimentValidationError(f"workdir is not a directory: {workdir}")
@@ -1297,9 +1678,70 @@ def run_comparison(
             "min_completed_rate": min_completed_rate,
         },
     }
+    # Non-default semantics are added only when declared so existing frozen
+    # designs keep their fingerprint and resume checks.
+    if task_success_method != PAIRED_EXACT:
+        design["acceptance"]["task_success_method"] = task_success_method
+    if parsed_policy is not None:
+        design["acceptance"]["completion_policy"] = parsed_policy.to_dict()
+    if parsed_identity_policy is not None:
+        design["acceptance"]["identity_policy"] = parsed_identity_policy.to_dict()
+    if parsed_gates:
+        design["acceptance"]["metric_gates"] = [gate.to_dict() for gate in parsed_gates]
+    cost_model_record = getattr(attempt_economics, "to_dict", None)
+    if callable(cost_model_record):
+        design["cost_model"] = {
+            "model": cost_model_record(),
+            "sha256": getattr(attempt_economics, "sha256", None),
+        }
+    arrival_schedule: ArrivalSchedule | None = None
+    if parsed_load is not None:
+        arrival_schedule = agent_arrival_schedule(
+            parsed_load, tasks, repetitions=repetitions, seed=seed, order=order
+        )
+        try:
+            verify_schedule_pin(arrival_schedule)
+        except LoadSpecError as exc:
+            raise ExperimentValidationError(str(exc)) from exc
+        design["execution_load"] = {
+            "arrival_pattern": arrival_pattern,
+            "load": parsed_load.to_dict(),
+            "arrival_schedule_sha256": arrival_schedule.digest(),
+        }
     design["fingerprint"] = _digest_bytes(
         json.dumps(design, sort_keys=True, separators=(",", ":")).encode()
     )
+    if parsed_load is not None:
+        assert arrival_schedule is not None
+        return _run_comparison_under_load(
+            design=design,
+            load=parsed_load,
+            schedule=arrival_schedule,
+            tasks=tasks,
+            commands=commands,
+            seed=seed,
+            workdir=workdir,
+            workdir_identity=workdir_identity,
+            artifacts_dir=artifacts_dir,
+            output_path=output_path,
+            evaluator=evaluator,
+            timeout_seconds=timeout_seconds,
+            evaluator_timeout_seconds=evaluator_timeout_seconds,
+            observers=tuple(observers),
+            attempt_economics=attempt_economics,
+            decision_arguments={
+                "max_task_success_regression": max_task_success_regression,
+                "min_task_success_rate": min_task_success_rate,
+                "min_completed_rate": min_completed_rate,
+                "optimization_target": optimization_target,
+                "latency_semantics": latency_semantics,
+                "max_latency_regression_ms": float(max_latency_regression_ms),
+                "task_success_method": task_success_method,
+            },
+            completion_policy=parsed_policy,
+            metric_gates=parsed_gates,
+            identity_policy=parsed_identity_policy,
+        )
     schedule = _schedule(tasks, repetitions, order, seed)
     if artifacts_dir.exists():
         if not resume:
@@ -1355,7 +1797,16 @@ def run_comparison(
             handle.write(json.dumps(attempt, sort_keys=True, separators=(",", ":")) + "\n")
             handle.flush()
             os.fsync(handle.fileno())
-    summary = _summarize(attempts)
+    if attempt_economics is not None:
+        for attempt in attempts:
+            attempt["economics"] = dict(attempt_economics(attempt))
+    summary = _summarize(
+        attempts,
+        task_success_method=task_success_method,
+        max_task_success_regression=max_task_success_regression,
+        completion_policy=parsed_policy,
+        identity_policy=parsed_identity_policy,
+    )
     decision = _decision(
         summary,
         max_task_success_regression=max_task_success_regression,
@@ -1364,7 +1815,19 @@ def run_comparison(
         optimization_target=optimization_target,
         latency_semantics=latency_semantics,
         max_latency_regression_ms=float(max_latency_regression_ms),
+        task_success_method=task_success_method,
     )
+    if parsed_gates:
+        decision = enrich_decision_artifact(
+            merge_load_and_metric_checks(
+                decision,
+                integrity_checks=[],
+                metric_checks=evaluate_metric_gates(
+                    parsed_gates, _agent_observations(attempts), seed=seed
+                ),
+            ),
+            summary,
+        )
     result = {
         "result_type": "runeconomy.closed_loop_comparison",
         "result_version": COMPARE_RESULT_VERSION,
@@ -1386,6 +1849,143 @@ def run_comparison(
             "Continuous effects use only task pairs where both variants succeeded.",
             "Critical-path latency is available only when every imported work span declares runeconomy.depends_on.",
             "Raw outputs and traces remain in the local artifacts directory and may contain sensitive data.",
+        ],
+    }
+    _write_json(artifacts_dir / "result.json", result)
+    return result
+
+
+def _run_comparison_under_load(
+    *,
+    design: dict[str, Any],
+    load: LoadSpec,
+    schedule: ArrivalSchedule,
+    tasks: list[dict[str, Any]],
+    commands: Mapping[str, list[str]],
+    seed: int,
+    workdir: Path,
+    workdir_identity: Mapping[str, Any],
+    artifacts_dir: Path,
+    output_path: Path,
+    evaluator: tuple[str, Any],
+    timeout_seconds: float,
+    evaluator_timeout_seconds: float,
+    observers: tuple[Any, ...],
+    attempt_economics: Any,
+    decision_arguments: Mapping[str, Any],
+    completion_policy: CompletionPolicy | None,
+    metric_gates: tuple[Any, ...],
+    identity_policy: IdentityPolicy | None = None,
+) -> dict[str, Any]:
+    if artifacts_dir.exists():
+        raise ExperimentValidationError(
+            f"artifacts directory already exists: {artifacts_dir}"
+        )
+    artifacts_dir.mkdir(parents=True)
+    _write_json(artifacts_dir / "design.json", design)
+    _write_json(artifacts_dir / "arrival-schedule.json", schedule.to_dict())
+    executor = _AgentTrialExecutor(
+        tasks=tasks,
+        commands=commands,
+        seed=seed,
+        workdir=workdir,
+        artifacts_dir=artifacts_dir,
+        evaluator=evaluator,
+        timeout_seconds=timeout_seconds,
+        evaluator_timeout_seconds=evaluator_timeout_seconds,
+    )
+    run = LoadRunner(
+        schedule,
+        executor,
+        store=JsonlArtifactStore(artifacts_dir / "attempts.jsonl"),
+        observers=observers,
+    ).run()
+    attempts = run.records
+    if attempt_economics is not None:
+        for attempt in attempts:
+            attempt["economics"] = dict(attempt_economics(attempt))
+    gate_stage = load.gate_stage
+    summary_arguments = {
+        "task_success_method": decision_arguments["task_success_method"],
+        "max_task_success_regression": decision_arguments["max_task_success_regression"],
+        "completion_policy": completion_policy,
+        "identity_policy": identity_policy,
+    }
+    gated = [attempt for attempt in attempts if attempt["load"]["stage"] == gate_stage]
+    summary = _summarize(gated, **summary_arguments)
+    stages: list[dict[str, Any]] = []
+    for stage, level in enumerate(load.levels):
+        if stage == gate_stage:
+            continue
+        stage_attempts = [
+            attempt for attempt in attempts if attempt["load"]["stage"] == stage
+        ]
+        stages.append(
+            {
+                "stage": stage,
+                load.level_name: level,
+                "gated": False,
+                "descriptive_only": True,
+                "summary": _summarize(stage_attempts, **summary_arguments),
+                "metric_gates": evaluate_metric_gates(
+                    metric_gates, _agent_observations(stage_attempts), seed=seed
+                ),
+            }
+        )
+    summary["load"] = {
+        "arrival_schedule": schedule.summary(),
+        "gate_stage": gate_stage,
+        load.level_name: load.gate_level,
+        "population": "gate-stage attempts only; other stages are descriptive",
+        "stages": stages,
+        "filler_attempts": len(run.fillers),
+    }
+    decision = _decision(summary, **decision_arguments)
+    decision = enrich_decision_artifact(
+        merge_load_and_metric_checks(
+            decision,
+            integrity_checks=load_integrity_checks(
+                gated,
+                open_loop=load.open_loop,
+                gate_level=load.gate_level,
+                max_dispatch_lag_ms=load.max_dispatch_lag_ms,
+            ),
+            metric_checks=evaluate_metric_gates(
+                metric_gates, _agent_observations(gated), seed=seed
+            ),
+        ),
+        summary,
+    )
+    _write_json(
+        artifacts_dir / "load-fillers.json",
+        {"filler_attempts": run.fillers, "blocks": run.blocks},
+    )
+    result = {
+        "result_type": "runeconomy.closed_loop_comparison",
+        "result_version": COMPARE_LOAD_RESULT_VERSION,
+        "design": design,
+        "summary": summary,
+        "evidence_quality": summary["evidence_quality"],
+        "decision": decision,
+        "attempts": attempts,
+        "load_blocks": run.blocks,
+        "provenance": {
+            "runeconomy_version": __import__("runeconomy").__version__,
+            "python": sys.version.split()[0],
+            "platform": platform.platform(),
+            "workdir_identity": workdir_identity,
+            "artifacts_directory": artifacts_dir.name,
+            "result_path": output_path.name,
+            "arrival_schedule": "arrival-schedule.json",
+            "arrival_schedule_sha256": schedule.digest(),
+        },
+        "limitations": [
+            "Workflow latency includes process startup and agent execution but excludes evaluator time.",
+            "Continuous effects use only task pairs where both variants succeeded.",
+            "Critical-path latency is available only when every imported work span declares runeconomy.depends_on.",
+            "Raw outputs and traces remain in the local artifacts directory and may contain sensitive data.",
+            f"Load claim boundary: {load.claim_boundary()}; only the preregistered gate level is gated.",
+            "Interval methods assume independent units given the design; transient server stalls shared by concurrent trials can make intervals optimistic.",
         ],
     }
     _write_json(artifacts_dir / "result.json", result)

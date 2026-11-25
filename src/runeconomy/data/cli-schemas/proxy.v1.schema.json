@@ -1,0 +1,74 @@
+{
+  "$id": "runeconomy.cli.proxy.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Printed once when a --record capture is stopped and flushed, or when a --attempt child exits. Exit 0 complete, 1 capture gaps, or the child's exit code for --attempt.",
+  "properties": {
+    "agent_exit_code": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "gaps": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "mode": {
+      "enum": [
+        "record",
+        "attempt"
+      ]
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.proxy.v1"
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "session": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "summary": {
+      "properties": {
+        "exchanges_recorded": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "in_flight_drained": {
+          "type": "boolean"
+        },
+        "token_resolution_exact": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "token_resolution_unknown": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "agent_exit_code",
+    "gaps",
+    "mode",
+    "output_schema",
+    "reason",
+    "session",
+    "summary"
+  ],
+  "title": "runeconomy proxy --json output, version 1",
+  "type": "object"
+}

@@ -1,0 +1,39 @@
+{
+  "artifact_type": "runeconomy.preregistration_template",
+  "template_version": "0.1",
+  "purpose": "Fields a frozen RunEconomy experiment must fix before held-out execution. The planner fills each field from the manifest and design.planning; anything it cannot establish stays explicitly unknown.",
+  "fields": {
+    "claim": {
+      "required": true,
+      "description": "Claim level, primary metric, predicted direction, the single intervention variable, and references to the operator-authored hypothesis and claim boundary. Free text is referenced by field path and digest, never copied."
+    },
+    "population": {
+      "required": true,
+      "description": "Experimental unit, pairing key, unique tasks, repetitions, planned pairs and attempts, the workload digest, and the held-out declaration."
+    },
+    "gates": {
+      "required": true,
+      "description": "Every required gate with its rule and threshold: absolute task success for both variants, paired task-success non-inferiority, completion for both variants, and the latency criterion."
+    },
+    "method": {
+      "required": true,
+      "description": "The preregistered task_success_method, its significance level, and its documented coverage properties."
+    },
+    "n": {
+      "required": true,
+      "description": "Planned pairs, the power of every gate at that n under the declared assumptions, and the minimum pairs for the target power."
+    },
+    "tolerance": {
+      "required": true,
+      "description": "The completion threshold as an exact integer tolerance per variant, the expected-failure model it came from, and the common-mode paired-failure policy."
+    },
+    "cost_estimate": {
+      "required": true,
+      "description": "Estimated spend from declared per-attempt cost, compared with the declared ceiling."
+    },
+    "stopping_rule": {
+      "required": true,
+      "description": "Fixed sample or a predeclared outcome-independent rule."
+    }
+  }
+}

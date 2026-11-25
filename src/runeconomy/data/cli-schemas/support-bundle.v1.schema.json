@@ -1,0 +1,46 @@
+{
+  "$id": "runeconomy.cli.support-bundle.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Local privacy-minimized support archive.",
+  "properties": {
+    "error_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "excluded_data_classes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "included_sections": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "output": {
+      "type": "string"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.support-bundle.v1"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "status": {
+      "const": "created"
+    }
+  },
+  "required": [
+    "error_count",
+    "excluded_data_classes",
+    "included_sections",
+    "output",
+    "output_schema",
+    "schema_version",
+    "status"
+  ],
+  "title": "runeconomy support-bundle --json output, version 1",
+  "type": "object"
+}

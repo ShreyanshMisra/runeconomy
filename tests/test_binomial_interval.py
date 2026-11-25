@@ -13,6 +13,16 @@ from __future__ import annotations
 import math
 import unittest
 
+from runeconomy import experiments as experiments_module
+from runeconomy import paired_inference as paired_inference_module
+from runeconomy.binomial import (
+    IncompleteBetaConvergenceError,
+    _incomplete_beta_fraction,
+    binomial_cdf,
+    binomial_lower_bound,
+    binomial_upper_bound,
+    clopper_pearson_interval,
+)
 from runeconomy.experiments import (
     _binomial_cdf,
     _clopper_pearson_interval,
@@ -162,6 +172,79 @@ class OriginalAlgorithmEquivalenceTests(unittest.TestCase):
         # Documents the bug this module fixes.
         with self.assertRaises(OverflowError):
             _original_clopper_pearson_interval(515, 1030)
+
+
+class SharedImplementationTests(unittest.TestCase):
+    def test_decisions_and_planning_import_one_shared_implementation(self) -> None:
+        self.assertIs(experiments_module._binomial_cdf, binomial_cdf)
+        self.assertIs(paired_inference_module.binomial_cdf, binomial_cdf)
+        self.assertIs(
+            experiments_module._clopper_pearson_interval,
+            clopper_pearson_interval,
+        )
+        self.assertIs(
+            experiments_module._one_sided_binomial_lower,
+            binomial_lower_bound,
+        )
+        self.assertIs(paired_inference_module.binomial_lower_bound, binomial_lower_bound)
+        self.assertIs(
+            experiments_module._one_sided_binomial_upper,
+            binomial_upper_bound,
+        )
+        self.assertIs(paired_inference_module.binomial_upper_bound, binomial_upper_bound)
+
+    def test_large_n_nonconvergence_raises_instead_of_returning_partial_value(self) -> None:
+        # The central n=10^7 case takes about 865 terms. The retired planner
+        # copy stopped after 499 and returned its partial fraction as if valid.
+        with self.assertRaisesRegex(
+            IncompleteBetaConvergenceError,
+            r"did not converge after 500 iterations.*a=5000000.*b=5000001.*x=0.5",
+        ):
+            _incomplete_beta_fraction(
+                5_000_000.0,
+                5_000_001.0,
+                0.5,
+                iteration_limit=500,
+            )
+        self.assertTrue(
+            math.isfinite(_incomplete_beta_fraction(5_000_000.0, 5_000_001.0, 0.5))
+        )
+
+    def test_verdict_statistics_match_pre_refactor_outputs(self) -> None:
+        cases = {
+            "agreement_40": (
+                [(True, True)] * 40,
+                [-0.10376324540031562, 0.10376324540031562],
+                -0.08809730287880221,
+            ),
+            "proof_2": (
+                [(True, True)] * 179 + [(False, False)],
+                [-0.02405065293505941, 0.02405065293505941],
+                -0.020285204570112604,
+            ),
+            "discordant_2000": (
+                [(True, True)] * 1900
+                + [(False, False)] * 60
+                + [(False, True)] * 25
+                + [(True, False)] * 15,
+                [-0.0055041761980708925, 0.01545679878281471],
+                -0.004234752896904424,
+            ),
+        }
+        for name, (pairs, expected_interval, expected_lower) in cases.items():
+            with self.subTest(name=name):
+                statistics = _paired_success_statistics(pairs)
+                for actual, expected in zip(
+                    statistics["confidence_interval"], expected_interval, strict=True
+                ):
+                    self.assertAlmostEqual(
+                        actual, expected, delta=EQUIVALENCE_TOLERANCE
+                    )
+                self.assertAlmostEqual(
+                    statistics["one_sided_lower_bound"],
+                    expected_lower,
+                    delta=EQUIVALENCE_TOLERANCE,
+                )
 
 
 class LargeSampleTests(unittest.TestCase):

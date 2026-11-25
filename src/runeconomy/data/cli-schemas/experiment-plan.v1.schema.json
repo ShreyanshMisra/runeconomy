@@ -1,0 +1,76 @@
+{
+  "$id": "runeconomy.cli.experiment-plan.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Design-readiness assessment. Exit 0 ready_for_calibration or ready_to_freeze, 1 needs_design_input, 2 blocked.",
+  "properties": {
+    "artifact_type": {
+      "const": "runeconomy.experiment_plan"
+    },
+    "execution_readiness": {
+      "properties": {
+        "runnable": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "runnable",
+        "status"
+      ],
+      "type": "object"
+    },
+    "issues": {
+      "items": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "severity"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "next_action_code": {
+      "type": "string"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.experiment-plan.v1"
+    },
+    "preregistration": {},
+    "proposed_claim": {
+      "type": "object"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "blocked",
+        "needs_design_input",
+        "ready_for_calibration",
+        "ready_to_freeze"
+      ]
+    }
+  },
+  "required": [
+    "artifact_type",
+    "execution_readiness",
+    "issues",
+    "next_action_code",
+    "output_schema",
+    "proposed_claim",
+    "schema_version",
+    "state"
+  ],
+  "title": "runeconomy experiment-plan --json output, version 1",
+  "type": "object"
+}

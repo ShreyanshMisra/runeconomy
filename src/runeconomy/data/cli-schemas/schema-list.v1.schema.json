@@ -1,0 +1,72 @@
+{
+  "$id": "runeconomy.cli.schema-list.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Registry of CLI output contracts (runeconomy schema --json).",
+  "properties": {
+    "contracts": {
+      "items": {
+        "properties": {
+          "commands": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "stream": {
+            "enum": [
+              "stdout",
+              "stderr"
+            ]
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "commands",
+          "id",
+          "name",
+          "stream",
+          "version"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "exempt_commands": {
+      "items": {
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.schema-list.v1"
+    }
+  },
+  "required": [
+    "contracts",
+    "exempt_commands",
+    "output_schema"
+  ],
+  "title": "runeconomy schema-list --json output, version 1",
+  "type": "object"
+}

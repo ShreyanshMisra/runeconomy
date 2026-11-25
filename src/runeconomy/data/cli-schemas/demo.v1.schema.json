@@ -1,0 +1,40 @@
+{
+  "$id": "runeconomy.cli.demo.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Bundled demo report rendering.",
+  "properties": {
+    "case": {
+      "enum": [
+        "rejection",
+        "historical"
+      ]
+    },
+    "opened": {
+      "type": "boolean"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.demo.v1"
+    },
+    "report": {
+      "type": "string"
+    },
+    "verdict": {
+      "enum": [
+        "verified",
+        "regression",
+        "inconclusive",
+        "invalid",
+        "unknown"
+      ]
+    }
+  },
+  "required": [
+    "case",
+    "opened",
+    "output_schema",
+    "report",
+    "verdict"
+  ],
+  "title": "runeconomy demo --json output, version 1",
+  "type": "object"
+}

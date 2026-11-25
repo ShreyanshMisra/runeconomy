@@ -1,0 +1,144 @@
+{
+  "$id": "runeconomy.cli.experiment-freeze.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Preregistration record summary for a frozen workspace.",
+  "properties": {
+    "design_completeness": {
+      "enum": [
+        "complete",
+        "incomplete"
+      ]
+    },
+    "freeze_verification": {
+      "enum": [
+        "intact"
+      ]
+    },
+    "frozen_at": {
+      "type": "string"
+    },
+    "locks": {
+      "properties": {
+        "additional_files": {
+          "items": {
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "execution_sha256": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "gates_sha256": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "manifest_sha256": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "additional_files",
+        "execution_sha256",
+        "gates_sha256",
+        "inputs",
+        "manifest_sha256"
+      ],
+      "type": "object"
+    },
+    "mode": {
+      "enum": [
+        "static_request",
+        "agent_process"
+      ]
+    },
+    "next_command": {
+      "type": "string"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.experiment-freeze.v1"
+    },
+    "planner_state": {
+      "type": "string"
+    },
+    "record": {
+      "type": "string"
+    },
+    "record_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "frozen",
+        "already_frozen"
+      ]
+    },
+    "unknown_fields": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "unlocked_inputs": {
+      "items": {
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "workspace": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "design_completeness",
+    "freeze_verification",
+    "frozen_at",
+    "locks",
+    "mode",
+    "next_command",
+    "output_schema",
+    "planner_state",
+    "record",
+    "record_sha256",
+    "status",
+    "unknown_fields",
+    "unlocked_inputs",
+    "workspace"
+  ],
+  "title": "runeconomy experiment-freeze --json output, version 1",
+  "type": "object"
+}

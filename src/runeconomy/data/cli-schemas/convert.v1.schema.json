@@ -1,0 +1,55 @@
+{
+  "$id": "runeconomy.cli.convert.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of a single-format conversion command (import-vllm-jsonl, import-openinference, import-ledger-jsonl, import-prefixwise-jsonl).",
+  "properties": {
+    "artifact": {
+      "enum": [
+        "normalized_trace",
+        "findings"
+      ]
+    },
+    "command": {
+      "enum": [
+        "import-vllm-jsonl",
+        "import-openinference",
+        "import-ledger-jsonl",
+        "import-prefixwise-jsonl"
+      ]
+    },
+    "finding_count": {
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "next_command": {
+      "type": "string"
+    },
+    "output": {
+      "type": "string"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.convert.v1"
+    },
+    "request_count": {
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "artifact",
+    "command",
+    "finding_count",
+    "next_command",
+    "output",
+    "output_schema",
+    "request_count"
+  ],
+  "title": "runeconomy convert --json output, version 1",
+  "type": "object"
+}

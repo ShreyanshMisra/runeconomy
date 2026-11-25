@@ -1,0 +1,120 @@
+{
+  "$id": "runeconomy.cli.experiment-patch.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Schema-validated manifest patch with provenance.",
+  "properties": {
+    "manifest_sha256_after": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "manifest_sha256_before": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "static_request",
+        "agent_process"
+      ]
+    },
+    "next_command": {
+      "type": "string"
+    },
+    "operations": {
+      "items": {
+        "properties": {
+          "op": {
+            "enum": [
+              "set",
+              "unset"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "previous": {},
+          "previous_present": {
+            "type": "boolean"
+          },
+          "source": {
+            "enum": [
+              "operator",
+              "derived_digest"
+            ]
+          },
+          "value": {}
+        },
+        "required": [
+          "op",
+          "path",
+          "previous_present",
+          "source"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.experiment-patch.v1"
+    },
+    "provenance": {
+      "properties": {
+        "entries": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "entry_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "file": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "entries",
+        "entry_sha256",
+        "file"
+      ],
+      "type": "object"
+    },
+    "status": {
+      "enum": [
+        "patched",
+        "unchanged",
+        "dry_run"
+      ]
+    },
+    "untracked_change_before": {
+      "type": "boolean"
+    },
+    "workspace": {
+      "type": "string"
+    },
+    "written": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "manifest_sha256_after",
+    "manifest_sha256_before",
+    "mode",
+    "next_command",
+    "operations",
+    "output_schema",
+    "provenance",
+    "status",
+    "untracked_change_before",
+    "workspace",
+    "written"
+  ],
+  "title": "runeconomy experiment-patch --json output, version 1",
+  "type": "object"
+}
