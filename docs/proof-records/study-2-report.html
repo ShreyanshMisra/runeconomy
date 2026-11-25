@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RunEconomy Experiment Report</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; color: #151515; font: 15px/1.55 Arial, Helvetica, sans-serif; }
+main { width: min(1040px, calc(100% - 32px)); margin: 28px auto 64px; }
+.report-header { border-bottom: 2px solid #1f2933; padding-bottom: 16px; margin-bottom: 28px; }
+h1 { margin: 0; font: 700 28px/1.2 Georgia, "Times New Roman", serif; }
+h2 { margin: 34px 0 12px; font: 700 21px/1.25 Georgia, "Times New Roman", serif; }
+h3 { margin: 0 0 8px; font-size: 15px; }
+p { max-width: 880px; margin: 8px 0; }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; padding: 0; list-style: none; }
+.badges li { border: 1px solid #8b949e; padding: 3px 8px; font-size: 13px; }
+.comparison, .result-grid, .quality-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.comparison article, .result-card, .quality-card { border: 1px solid #9aa1a8; padding: 14px; }
+.result-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.result-value { margin: 5px 0; font: 700 27px/1.15 Georgia, "Times New Roman", serif; font-variant-numeric: tabular-nums; }
+.qualification { border-left: 4px solid #4f5963; padding: 10px 12px; background: #f4f5f6; }
+.outcome-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0; list-style: none; }
+.outcome-grid li { border: 1px solid #b5bac0; padding: 9px; }
+.verdict { border: 2px solid #31383f; padding: 16px; }
+.verdict-message { margin: 0 0 8px; font: 700 24px/1.2 Georgia, "Times New Roman", serif; }
+.canonical-status { font-size: 13px; color: #3f464d; }
+.invalid-explanation { font-weight: 700; }
+.decision-path { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0; list-style: none; counter-reset: path; }
+.decision-path li { border-top: 3px solid #343a40; padding: 10px; }
+.decision-path span, .decision-path strong { display: block; }
+.decision-path span { font-size: 13px; color: #4b535b; }
+.later-checks { margin: 10px 0; }
+.recommendation { border: 1px solid #5d646b; padding: 12px; }
+.prefix-visual { margin: 16px 0; padding: 14px; border: 1px solid #8d959d; }
+.variant-row + .variant-row { border-top: 1px solid #c0c5ca; margin-top: 16px; padding-top: 16px; }
+.attempt { display: flex; min-width: 0; margin: 7px 0; font: 12px/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.attempt span { border: 1px solid #4c545c; padding: 7px; overflow-wrap: anywhere; }
+.attempt .stable { flex: 1; background: #eef1f3; }
+.attempt .metadata { background: #fff; }
+figcaption { color: #4b535b; font-size: 12px; }
+.table-wrap { overflow-x: auto; margin: 10px 0 16px; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { border: 1px solid #a5abb1; padding: 7px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+thead th { background: #eef0f2; }
+code { font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+details { border-top: 1px solid #aeb4ba; padding: 9px 0; }
+summary { cursor: pointer; font-weight: 700; }
+summary:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; }
+@media (max-width: 700px) {
+  main { width: min(100% - 20px, 1040px); margin-top: 18px; }
+  .result-grid, .comparison, .quality-grid, .outcome-grid, .decision-path { grid-template-columns: 1fr; }
+  h1 { font-size: 24px; }
+  .attempt { font-size: 11px; }
+}
+</style>
+</head>
+<body>
+<main>
+<header class="report-header"><h1>RunEconomy Experiment Report</h1><ul class="badges" aria-label="Experiment facts"><li>runeconomy-qwen2.5-14b-bf16</li><li>vLLM 0.34.0</li><li>1x NVIDIA L40S 48GB on Modal</li><li>480 evaluated attempts</li></ul></header>
+
+<section aria-labelledby="intervention-heading">
+  <h2 id="intervention-heading">Intervention Tested</h2>
+  <p>The experiment compared a recorded baseline with a recorded candidate.</p>
+  <div class="comparison" role="group" aria-label="Baseline and candidate"><article><h3>Baseline</h3><p>The recorded baseline request or workflow.</p></article><article><h3>Candidate</h3><p>The recorded candidate request or workflow.</p></article></div>
+  <p><strong>Why this might help:</strong> The candidate was expected to improve the recorded optimization target.</p>
+  <p><strong>Control:</strong> Only the changes declared in the experiment manifest were intended to vary.</p>
+</section>
+
+<section aria-labelledby="results-heading">
+  <h2 id="results-heading">Results</h2>
+  <div class="result-grid"><article class="result-card"><h3>Cached input tokens</h3><p class="result-value">+1740</p><p>More prompt tokens were served from cache.</p></article><article class="result-card"><h3>Server time to first token</h3><p class="result-value">786 ms lower</p><p>The first token arrived sooner at the server.</p></article><article class="result-card"><h3>Workflow latency</h3><p class="result-value">1954 ms lower</p><p>Successful task pairs completed sooner.</p></article></div>
+  <p class="qualification"><strong>Important:</strong> Measured across 240 paired observations. The declared quality and performance requirements passed.</p>
+  <ul class="outcome-grid" aria-label="Task outcomes"><li><strong>Baseline:</strong> 240 of 240 tasks succeeded.</li><li><strong>Candidate:</strong> 240 of 240 tasks succeeded.</li></ul>
+  
+</section>
+
+<section aria-labelledby="verdict-heading">
+  <h2 id="verdict-heading">Verdict</h2>
+  <div class="verdict verdict-verified">
+    <p class="verdict-message">Improvement verified</p>
+    <p>The declared task-quality and performance requirements passed. The candidate is eligible for deployment review.</p>
+    <p class="canonical-status">Verdict: Verified</p>
+    
+  </div>
+  <div class="quality-grid"><article class="quality-card"><h3>Did the variants meet the task-quality floor?</h3><div class="table-wrap"><table><thead><tr><th>Measure</th><th>Recorded result</th></tr></thead><tbody><tr><th scope="row">Required</th><td>Yes</td></tr><tr><th scope="row">Result</th><td>Passed</td></tr></tbody></table></div><p>See the exact threshold and observed value in Acceptance checks.</p></article><article class="quality-card"><h3>Did the candidate preserve task quality?</h3><div class="table-wrap"><table><thead><tr><th>Measure</th><th>Recorded result</th></tr></thead><tbody><tr><th scope="row">Required</th><td>Yes</td></tr><tr><th scope="row">Result</th><td>Passed</td></tr></tbody></table></div><p>See the exact threshold and observed value in Acceptance checks.</p></article><article class="quality-card"><h3>Usd per 1k successful workflows superiority</h3><div class="table-wrap"><table><thead><tr><th>Measure</th><th>Recorded result</th></tr></thead><tbody><tr><th scope="row">Required</th><td>Yes</td></tr><tr><th scope="row">Result</th><td>Passed</td></tr></tbody></table></div><p>See the exact threshold and observed value in Acceptance checks.</p></article></div>
+  <ol class="decision-path" aria-label="Decision path"><li><span>Recorded verdict</span><strong>Verified</strong></li></ol>
+  
+  <p class="recommendation"><strong>Recommended next step:</strong> The candidate is eligible for deployment review. Review operational risk and production safeguards first.</p>
+</section>
+
+<section aria-labelledby="details-heading">
+  <h2 id="details-heading">Experiment Details</h2>
+  <p>This report describes the recorded baseline and candidate comparison without adding evidence that was not present in the result.</p>
+  <div class="table-wrap"><table><thead><tr><th>Experiment fact</th><th>Recorded value</th></tr></thead><tbody><tr><th scope="row">Model</th><td>runeconomy-qwen2.5-14b-bf16</td></tr><tr><th scope="row">Backend</th><td>vLLM 0.34.0</td></tr><tr><th scope="row">Hardware</th><td>1x NVIDIA L40S 48GB on Modal</td></tr></tbody></table></div>
+  <p><strong>Controls:</strong> The report uses only the workload, environment and acceptance rules recorded in the experiment result.</p>
+</section>
+
+<section class="technical" aria-label="Technical details">
+  <details><summary>Acceptance checks</summary><div class="table-wrap"><table><thead><tr><th>Field</th><th>Recorded value</th></tr></thead><tbody><tr><th scope="row">Recorded decision reason</th><td>all required quality, optimization-target, and performance checks passed</td></tr><tr><th scope="row">minimum_task_success_rate</th><td>Passed. Required: yes</td></tr><tr><th scope="row">task_success_noninferior</th><td>Passed. Required: yes</td></tr><tr><th scope="row">completion_rate</th><td>Passed. Required: yes</td></tr><tr><th scope="row">cached_token_gain</th><td>Passed. Required: yes</td></tr><tr><th scope="row">prediction_direction_matches_observation</th><td>Passed. Required: yes</td></tr><tr><th scope="row">input_token_reduction</th><td>Passed. Required: no</td></tr><tr><th scope="row">server_ttft_ms_improvement</th><td>Passed. Required: yes</td></tr><tr><th scope="row">observed_concurrency_balance</th><td>Passed. Required: no</td></tr><tr><th scope="row">p95_client_ttft_ms_superiority</th><td>Passed. Required: yes</td></tr><tr><th scope="row">usd_per_1k_successful_workflows_superiority</th><td>Passed. Required: yes</td></tr></tbody></table></div></details><details><summary>Statistical details</summary><div class="table-wrap"><table><thead><tr><th>Field</th><th>Recorded value</th></tr></thead><tbody><tr><th scope="row">Cache Coverage</th><td>Mean candidate minus baseline: 0.970. 95% interval: 0.954 to 0.982. Pairs: 240</td></tr><tr><th scope="row">Cached Tokens</th><td>Mean candidate minus baseline: 1740.333. 95% interval: 1711.133 to 1762.533. Pairs: 240</td></tr><tr><th scope="row">Client Server Ttft Gap Ms</th><td>Mean candidate minus baseline: -576.267. 95% interval: -611.761 to -542.110. Pairs: 240</td></tr><tr><th scope="row">Client Ttft Ms</th><td>Mean candidate minus baseline: -1362.572. 95% interval: -1404.623 to -1319.714. Pairs: 240</td></tr><tr><th scope="row">Generation Time Ms</th><td>Mean candidate minus baseline: -595.511. 95% interval: -608.892 to -582.181. Pairs: 240</td></tr><tr><th scope="row">Input Tokens</th><td>Mean candidate minus baseline: 0.000. 95% interval: 0.000 to 0.000. Pairs: 240</td></tr><tr><th scope="row">Output Tokens</th><td>Mean candidate minus baseline: 0.000. 95% interval: 0.000 to 0.000. Pairs: 240</td></tr><tr><th scope="row">Predicted Eligible Cached Tokens</th><td>Mean candidate minus baseline: 1760.000. 95% interval: 1760.000 to 1760.000. Pairs: 240</td></tr><tr><th scope="row">Server Queue Ms</th><td>Mean candidate minus baseline: -356.031. 95% interval: -394.387 to -323.529. Pairs: 240</td></tr><tr><th scope="row">Server Ttft Ms</th><td>Mean candidate minus baseline: -786.306. 95% interval: -808.086 to -762.238. Pairs: 240</td></tr><tr><th scope="row">Task Success</th><td>Mean candidate minus baseline: 0.000. 95% interval: Unknown. Pairs: 240</td></tr><tr><th scope="row">Total Latency Ms</th><td>Mean candidate minus baseline: -1954.301. 95% interval: -2000.777 to -1906.078. Pairs: 240</td></tr></tbody></table></div></details><details><summary>Environment and provenance</summary><div class="table-wrap"><table><thead><tr><th>Field</th><th>Recorded value</th></tr></thead><tbody><tr><th scope="row">Acceptance</th><td>{&quot;max_task_success_regression&quot;: 0.05, &quot;metric_gates&quot;: [{&quot;margin&quot;: 0.0, &quot;method&quot;: &quot;paired_cluster_bootstrap&quot;, &quot;metric&quot;: &quot;client_ttft_ms&quot;, &quot;population&quot;: &quot;successful_pairs&quot;, &quot;semantics&quot;: &quot;superiority&quot;, &quot;statistic&quot;: &quot;p95&quot;}, {&quot;margin&quot;: 0.0, &quot;method&quot;: &quot;paired_cluster_bootstrap&quot;, &quot;metric&quot;: &quot;usd_per_1k_successful_workflows&quot;, &quot;semantics&quot;: &quot;superiority&quot;, &quot;statistic&quot;: &quot;ratio&quot;}], &quot;min_cached_token_gain&quot;: 256.0, &quot;min_completed_rate&quot;: 1.0, &quot;min_input_token_reduction&quot;: 0.0, &quot;min_task_success_rate&quot;: 0.8, &quot;optimization_target&quot;: &quot;cache_reuse&quot;, &quot;primary_metric&quot;: &quot;server_ttft_ms&quot;, &quot;require_environment_identity&quot;: false, &quot;require_latency_improvement&quot;: true, &quot;task_success_method&quot;: &quot;paired_score_exact&quot;}</td></tr><tr><th scope="row">Api Dialect</th><td>chat_completions</td></tr><tr><th scope="row">Arrival Pattern</th><td>closed_loop</td></tr><tr><th scope="row">Arrival Schedule Sha256</th><td>sha256:4a43ce4905fde3cf5ff436f5008e63bf251d773d9b9a7828d6cf25313c75fca8</td></tr><tr><th scope="row">Backend Kind</th><td>vllm</td></tr><tr><th scope="row">Backend Version</th><td>0.34.0</td></tr><tr><th scope="row">Block Size</th><td>16</td></tr><tr><th scope="row">Cache Isolation</th><td>shared</td></tr><tr><th scope="row">Cache Treatment</th><td>warm</td></tr><tr><th scope="row">Cases Form Workflow</th><td>False</td></tr><tr><th scope="row">Chat Template Digest</th><td>sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f</td></tr><tr><th scope="row">Cost Model</th><td>{&quot;model&quot;: {&quot;gpus_per_variant&quot;: 1, &quot;kind&quot;: &quot;gpu_hourly&quot;, &quot;schema_version&quot;: &quot;0.1&quot;, &quot;source&quot;: &quot;Modal L40S list price, USD per GPU-hour, checked 2026-11-25&quot;, &quot;usd_per_gpu_hour&quot;: 1.95}, &quot;sha256&quot;: &quot;sha256:54528fa8a3a4b2e1f4e2ebaf245d9bc9b332246f5d98180d405dd70d011fdd10&quot;}</td></tr><tr><th scope="row">Design</th><td>{}</td></tr><tr><th scope="row">Engine Config</th><td>{&quot;dtype&quot;: &quot;bfloat16&quot;, &quot;enable_prefix_caching&quot;: true, &quot;gpu_memory_utilization&quot;: 0.88, &quot;max_model_len&quot;: 8192, &quot;max_num_seqs&quot;: 32}</td></tr><tr><th scope="row">Environment Identity</th><td>{&quot;after&quot;: null, &quot;before&quot;: null, &quot;drift&quot;: {}, &quot;expected&quot;: {&quot;backend_version&quot;: &quot;0.34.0&quot;, &quot;chat_template_digest&quot;: &quot;sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f&quot;, &quot;engine_config&quot;: {&quot;dtype&quot;: &quot;bfloat16&quot;, &quot;enable_prefix_caching&quot;: true, &quot;gpu_memory_utilization&quot;: 0.88, &quot;max_model_len&quot;: 8192, &quot;max_num_seqs&quot;: 32}, &quot;model&quot;: &quot;runeconomy-qwen2.5-14b-bf16&quot;, &quot;model_revision&quot;: &quot;cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8&quot;, &quot;tokenizer_revision&quot;: &quot;cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8&quot;}, &quot;expected_mismatches&quot;: {}, &quot;missing_after&quot;: [&quot;model&quot;, &quot;model_revision&quot;, &quot;tokenizer_revision&quot;, &quot;chat_template_digest&quot;, &quot;backend_version&quot;, &quot;engine_config&quot;], &quot;missing_before&quot;: [&quot;model&quot;, &quot;model_revision&quot;, &quot;tokenizer_revision&quot;, &quot;chat_template_digest&quot;, &quot;backend_version&quot;, &quot;engine_config&quot;], &quot;verified&quot;: false}</td></tr><tr><th scope="row">Hardware</th><td>1x NVIDIA L40S 48GB on Modal</td></tr><tr><th scope="row">Load</th><td>{&quot;concurrency&quot;: 8, &quot;pairing&quot;: &quot;variant_blocked&quot;, &quot;serving_topology&quot;: &quot;shared&quot;, &quot;tail&quot;: &quot;sustain&quot;}</td></tr><tr><th scope="row">Manifest Sha256</th><td>3087a2610c5b2961cf658bb716a9981cf2b5288a630e3d4667e82bb3593474c0</td></tr><tr><th scope="row">Model</th><td>runeconomy-qwen2.5-14b-bf16</td></tr><tr><th scope="row">Model Revision</th><td>cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8</td></tr><tr><th scope="row">Order</th><td>alternating</td></tr><tr><th scope="row">Reproducibility Manifest Sha256</th><td>b94d9db31224da03868b28d8dccfe455613f99814ad565b51bda643d07c5733e</td></tr><tr><th scope="row">Sampling</th><td>{&quot;max_tokens&quot;: 8, &quot;temperature&quot;: 0.0}</td></tr><tr><th scope="row">Seed</th><td>20261125</td></tr><tr><th scope="row">Tokenizer Revision</th><td>cf98f3b3bbb457ad9e2bb7baf9a0125b6b88caa8</td></tr></tbody></table></div></details><details><summary>Evidence quality</summary><div class="table-wrap"><table><thead><tr><th>Field</th><th>Recorded value</th></tr></thead><tbody><tr><th scope="row">Overall grade</th><td>Not recorded by this result schema.</td></tr></tbody></table></div></details><details><summary>Preregistration and economics</summary><div class="table-wrap"><table><thead><tr><th>Field</th><th>Recorded value</th></tr></thead><tbody><tr><th scope="row">Cost model</th><td>gpu_hourly (sha256:54528fa8a3a4b2e1f4e2ebaf245d9bc9b332246f5d98180d405dd70d011fdd10). Source: Modal L40S list price, USD per GPU-hour, checked 2026-11-25</td></tr></tbody></table></div></details><details><summary>Evidence integrity</summary><div class="table-wrap"><table><thead><tr><th>Field</th><th>Recorded value</th></tr></thead><tbody><tr><th scope="row">Evaluator infrastructure errors</th><td>0</td></tr><tr><th scope="row">Generated content</th><td>Generated output is not embedded in this report.</td></tr></tbody></table></div></details><details><summary>Limitations</summary><div class="table-wrap"><table><thead><tr><th>Field</th><th>Recorded value</th></tr></thead><tbody><tr><th scope="row">Claim boundary</th><td>The verdict applies only to the recorded workload, backend, hardware and acceptance rules.</td></tr><tr><th scope="row">Limitations</th><td>No additional limitations were recorded.</td></tr></tbody></table></div></details>
+</section>
+</main>
+</body>
+</html>

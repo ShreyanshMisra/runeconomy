@@ -1,0 +1,463 @@
+{
+  "arms": {
+    "baseline": {
+      "application_failure_rate": 0.0,
+      "attempts": 100,
+      "infrastructure_failure_rate": 0.0,
+      "mean_cached_input_tokens": null,
+      "mean_cost_usd_per_attempt": 0.0007,
+      "mean_input_tokens": 470.42,
+      "mean_output_tokens": 28.12,
+      "status_counts": {
+        "completed": 100
+      },
+      "successful_workflow_latency_ms": {
+        "mean": 1306.0512,
+        "p50": 1279.789,
+        "p95": 1642.4018
+      },
+      "task_success_rate": 1.0
+    },
+    "candidate": {
+      "application_failure_rate": 0.0,
+      "attempts": 100,
+      "infrastructure_failure_rate": 0.0,
+      "mean_cached_input_tokens": null,
+      "mean_cost_usd_per_attempt": 0.0003,
+      "mean_input_tokens": 206.11,
+      "mean_output_tokens": 11.23,
+      "status_counts": {
+        "completed": 54,
+        "task_failure": 46
+      },
+      "successful_workflow_latency_ms": {
+        "mean": 594.079,
+        "p50": 585.79,
+        "p95": 670.1051
+      },
+      "task_success_rate": 0.54
+    }
+  },
+  "calibration": {
+    "archive_sha256": "sha256:f635caa2fad34ecf3b2ec0473fbf267710e4e925674f34bd2ae4c7c81c30e597",
+    "assumptions": {
+      "completion_model": {
+        "application_failure_rate": 0.0125,
+        "artifact_sha256": "sha256:a8c8b28f1a0b6197476310811d653c0ec642eef12997b2c93888294bbc80300d",
+        "infrastructure_failure_rate": 0.005,
+        "pass_probability": 0.95,
+        "source": "calibration"
+      },
+      "cost_assumptions": {
+        "fixed_usd": 0.0,
+        "source": "calibration",
+        "usd_per_attempt": 0.000514
+      },
+      "latency_assumptions": {
+        "expected_difference_ms": -755.9,
+        "paired_standard_deviation_ms": 168.3
+      },
+      "schema_version": "0.2",
+      "success_assumptions": {
+        "artifact_sha256": "sha256:a8c8b28f1a0b6197476310811d653c0ec642eef12997b2c93888294bbc80300d",
+        "expected_difference": -0.45,
+        "expected_discordance_rate": 0.45,
+        "expected_success_rate": 0.9875,
+        "source": "calibration"
+      },
+      "target_power": 0.8
+    },
+    "planned_pairs": 100
+  },
+  "claim_boundary": [
+    "One model (Qwen/Qwen2.5-14B-Instruct at a pinned revision) on one vLLM 0.34.0 BF16 server.",
+    "One synthetic multi-step repository-lookup agent whose answers need repository evidence.",
+    "The regression shows that RunEconomy blocks a change that request benchmarks favor; it is not a claim about tool pruning in general."
+  ],
+  "decision": {
+    "decisive_explanation": "Required task_outcome gate 'candidate_minimum_task_success' failed: observed [0.43741157986647183,0.6401566470205877]; threshold 0.8. Performance evidence is ineligible for a claim.",
+    "decisive_gate": "candidate_minimum_task_success",
+    "reason": "the candidate failed completion or absolute task-success guardrails",
+    "rerun_permitted": false,
+    "status": "regression"
+  },
+  "effects": {
+    "cached_input_tokens": {
+      "candidate_minus_baseline_mean": null,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 0
+    },
+    "client_ttft_ms": {
+      "candidate_minus_baseline_mean": -72.208,
+      "confidence_interval": [
+        -74.218,
+        -70.198
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 54
+    },
+    "cost_usd": {
+      "candidate_minus_baseline_mean": null,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 0
+    },
+    "critical_path_ms": {
+      "candidate_minus_baseline_mean": -727.019,
+      "confidence_interval": [
+        -766.3858,
+        -687.6521
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 54
+    },
+    "decode_ms": {
+      "candidate_minus_baseline_mean": null,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 0
+    },
+    "gpu_time_ms": {
+      "candidate_minus_baseline_mean": null,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 0
+    },
+    "inference_span_ms": {
+      "candidate_minus_baseline_mean": -712.7226,
+      "confidence_interval": [
+        -752.5384,
+        -672.9068
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 54
+    },
+    "input_tokens": {
+      "candidate_minus_baseline_mean": -265.1111,
+      "confidence_interval": [
+        -267.2147,
+        -263.0075
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 54
+    },
+    "output_tokens": {
+      "candidate_minus_baseline_mean": -17.2222,
+      "confidence_interval": [
+        -18.246,
+        -16.1985
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 54
+    },
+    "prefill_ms": {
+      "candidate_minus_baseline_mean": null,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 0
+    },
+    "queue_ms": {
+      "candidate_minus_baseline_mean": null,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 0
+    },
+    "retrieval_span_ms": {
+      "candidate_minus_baseline_mean": null,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 0
+    },
+    "server_ttft_ms": {
+      "candidate_minus_baseline_mean": null,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 0
+    },
+    "task_success": {
+      "candidate_minus_baseline_mean": -0.46,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "interval_note": "this method reports a one-sided lower bound that inverts the exact test; no two-sided interval is preregistered",
+      "method": "exact unconditional non-inferiority test ordered by the Tango paired score",
+      "method_id": "paired_score_exact",
+      "noninferiority_alpha": 0.05,
+      "noninferiority_margin": 0.05,
+      "noninferiority_p_value": 1.0,
+      "one_sided_lower_bound": -0.5482,
+      "outcome_counts": {
+        "baseline_only": 46,
+        "both_failure": 0,
+        "both_success": 54,
+        "candidate_only": 0
+      },
+      "paired_count": 100,
+      "rejects_inferiority": false
+    },
+    "tool_span_ms": {
+      "candidate_minus_baseline_mean": null,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 0
+    },
+    "workflow_latency_ms": {
+      "candidate_minus_baseline_mean": -727.5686,
+      "confidence_interval": [
+        -766.6573,
+        -688.4799
+      ],
+      "confidence_level": 0.95,
+      "method": "paired Student-t interval",
+      "paired_count": 54
+    }
+  },
+  "environment": {
+    "chat_template_digest": "sha256:cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+    "gpu": "L40S:2",
+    "gpu_inventory": [
+      {
+        "index": "0",
+        "name": "NVIDIA L40S"
+      },
+      {
+        "index": "1",
+        "name": "NVIDIA L40S"
+      }
+    ],
+    "runeconomy_version": "0.2.2",
+    "servers": {
+      "bf16": {
+        "gpu": 0,
+        "gpu_memory_utilization": 0.88,
+        "max_model_len": 8192,
+        "max_num_seqs": 32,
+        "model": "14b",
+        "quantization": null,
+        "served_model": "runeconomy-qwen2.5-14b-bf16"
+      },
+      "fp8": {
+        "gpu": 1,
+        "gpu_memory_utilization": 0.88,
+        "max_model_len": 8192,
+        "max_num_seqs": 32,
+        "model": "14b",
+        "quantization": "fp8_per_tensor",
+        "served_model": "runeconomy-qwen2.5-14b-fp8-per-tensor"
+      }
+    },
+    "vllm_version": "0.34.0"
+  },
+  "execution": {
+    "attempts_per_variant": 100,
+    "cost_model": {
+      "model": {
+        "gpus_per_variant": 1,
+        "kind": "gpu_hourly",
+        "schema_version": "0.1",
+        "source": "Modal L40S list price, USD per GPU-hour, checked 2026-11-25",
+        "usd_per_gpu_hour": 1.95
+      },
+      "sha256": "sha256:54528fa8a3a4b2e1f4e2ebaf245d9bc9b332246f5d98180d405dd70d011fdd10"
+    },
+    "load": null,
+    "pairs": 100,
+    "remote_window_seconds": 625.6,
+    "window_cost_usd_estimate": 0.9
+  },
+  "gates": [
+    {
+      "name": "intentional_backend_identity_difference",
+      "observed": {
+        "baseline_identity_count": 1,
+        "candidate_identity_count": 1,
+        "distinct": false
+      },
+      "passed": false,
+      "required": false,
+      "threshold": "one complete stable identity per variant, and baseline differs from candidate"
+    },
+    {
+      "name": "trace_and_environment_identity",
+      "observed": {
+        "baseline": {
+          "complete_dag_count": 100,
+          "complete_dag_rate": 1.0,
+          "environment_identity_complete": true
+        },
+        "candidate": {
+          "complete_dag_count": 100,
+          "complete_dag_rate": 1.0,
+          "environment_identity_complete": true
+        }
+      },
+      "passed": true,
+      "required": true,
+      "threshold": "every attempt has an explicit complete DAG and each variant has complete, stable environment identity"
+    },
+    {
+      "name": "baseline_minimum_task_success",
+      "observed": [
+        0.9638,
+        1.0
+      ],
+      "passed": true,
+      "required": true,
+      "threshold": 0.8
+    },
+    {
+      "name": "candidate_minimum_task_success",
+      "observed": [
+        0.4374,
+        0.6402
+      ],
+      "passed": false,
+      "required": true,
+      "threshold": 0.8
+    },
+    {
+      "name": "task_success_noninferiority",
+      "observed": {
+        "candidate_minus_baseline_mean": -0.46,
+        "confidence_interval": null,
+        "confidence_level": 0.95,
+        "interval_note": "this method reports a one-sided lower bound that inverts the exact test; no two-sided interval is preregistered",
+        "method": "exact unconditional non-inferiority test ordered by the Tango paired score",
+        "method_id": "paired_score_exact",
+        "noninferiority_alpha": 0.05,
+        "noninferiority_margin": 0.05,
+        "noninferiority_p_value": 1.0,
+        "one_sided_lower_bound": -0.5482,
+        "outcome_counts": {
+          "baseline_only": 46,
+          "both_failure": 0,
+          "both_success": 54,
+          "candidate_only": 0
+        },
+        "paired_count": 100,
+        "rejects_inferiority": false
+      },
+      "passed": false,
+      "required": true,
+      "threshold": -0.05
+    },
+    {
+      "name": "baseline_completion",
+      "observed": 1.0,
+      "passed": true,
+      "required": true,
+      "threshold": 0.96
+    },
+    {
+      "name": "candidate_completion",
+      "observed": 1.0,
+      "passed": true,
+      "required": true,
+      "threshold": 0.96
+    },
+    {
+      "name": "successful_task_workflow_latency_improvement",
+      "observed": {
+        "candidate_minus_baseline_mean": -727.5686,
+        "confidence_interval": [
+          -766.6573,
+          -688.4799
+        ],
+        "confidence_level": 0.95,
+        "method": "paired Student-t interval",
+        "paired_count": 54
+      },
+      "passed": true,
+      "required": true,
+      "threshold": "upper bound of paired 95% Student-t interval < 0 ms"
+    },
+    {
+      "name": "successful_task_workflow_latency_non_regression",
+      "observed": {
+        "candidate_minus_baseline_mean": -727.5686,
+        "confidence_interval": [
+          -766.6573,
+          -688.4799
+        ],
+        "confidence_level": 0.95,
+        "method": "paired Student-t interval",
+        "paired_count": 54
+      },
+      "passed": true,
+      "required": false,
+      "threshold": "lower bound of paired 95% Student-t interval <= 0 ms"
+    }
+  ],
+  "hypothesis": "Pruning the repository-search tool makes the workflow faster on every request benchmark, but it lowers task success below the declared floor and margin.",
+  "intervention": "Remove the repository-search tool and answer directly (same model and server)",
+  "outcome_matches_target": true,
+  "paired": {
+    "discordance_rate": 0.46,
+    "pairs": 100,
+    "success_difference": -0.46,
+    "successful_pair_latency_difference_ms": {
+      "mean": -727.5686,
+      "n": 54,
+      "sd": 140.6671
+    }
+  },
+  "preregistration": {
+    "additional_files": [
+      {
+        "path": "../../agent/agent.py",
+        "sha256": "sha256:96ba367d067bb30262360d6c785fd1f2f6d8728be7e1d3c9295fa364d79576ec"
+      },
+      {
+        "path": "../../repo/SNAPSHOT.json",
+        "sha256": "sha256:0cf0880ad983f18f156382f235afb1b15bfb8c693caa10fb2985bdb70402405e"
+      }
+    ],
+    "arrival_schedule_sha256": null,
+    "dataset_sha256": "sha256:53ac74526cad616946ae878ba4b73a3369031dba0b03fdc8d81cb085915a606e",
+    "design_completeness": "complete",
+    "evaluator_sha256": "sha256:5a0460bdfa829116e1ab5583b38cc0a3308f1bf93b558b70e13f00b94be5ac25",
+    "execution_sha256": "sha256:8efd75f79009f94cfe26db92ea93b0846e2325d551a8eb19ee09a6832111b8e5",
+    "frozen_at": "2026-11-25T16:33:23Z",
+    "gates": {
+      "completion_policy": {
+        "common_mode_paired_failures": "task_outcome",
+        "schema_version": "0.1"
+      },
+      "latency_semantics": "superiority",
+      "max_latency_regression_ms": 0.0,
+      "max_task_success_regression": 0.05,
+      "min_completed_rate": 0.96,
+      "min_task_success_rate": 0.8,
+      "optimization_target": "successful_workflow_latency",
+      "task_success_method": "paired_score_exact"
+    },
+    "gates_sha256": "sha256:d70e7c4bd5e57ebbf3d6cb03e9d1799e32c0c6fd5be6e787e2a5795a3c68dcad",
+    "manifest_sha256": "sha256:83d4225e72999802f829fc51414848fc313746110fca6487b4e362d0f1750476",
+    "record_sha256": "sha256:fa2af0f21bf17cdf0b80426d49488a9c45119eda56fb9369adf73ed44f446b70",
+    "status_at_execution": "intact"
+  },
+  "proof": 4,
+  "provenance": {
+    "contains_task_level_data": false,
+    "private_raw_archive_sha256": "sha256:cdef3b25e1d2f9f85f7cbc50ad9c7611898d6025b28bb98e4f1aec998ce65707",
+    "result_sha256": "sha256:d2b61b2689810b082c18d0d7311b20a57a0b54c2bdaac9cf9764cc03551c96a4"
+  },
+  "publication_status": "private_unpublished",
+  "result_type": "runeconomy.phase7_proof_decision",
+  "schema_version": "0.1",
+  "target_outcome": "regression"
+}

@@ -1,0 +1,197 @@
+[
+  {
+    "claim_boundary": [
+      "One model (Qwen/Qwen2.5-14B-Instruct at a pinned revision), one GPU type (NVIDIA L40S), and vLLM 0.34.0.",
+      "One synthetic multi-step repository-lookup agent on a fixed repository snapshot; not production traffic.",
+      "16 closed-loop agents per variant, each variant on its own GPU (isolated serving topology).",
+      "Cost uses the Modal L40S list price with fair-share attribution by in-flight time; it is not an invoice.",
+      "Both arms succeeded on every task, so non-inferiority is shown against a 5-point margin, not equality of quality on harder work."
+    ],
+    "decisive_gate": "all_required_gates",
+    "environment": {
+      "engine": "vllm",
+      "engine_version": "0.34.0",
+      "gpu": "NVIDIA L40S",
+      "quantization": {
+        "bf16": null,
+        "fp8": "fp8_per_tensor"
+      },
+      "served_models": [
+        "runeconomy-qwen2.5-14b-bf16",
+        "runeconomy-qwen2.5-14b-fp8-per-tensor"
+      ]
+    },
+    "hypothesis": "Online FP8 lowers p95 successful-workflow latency and cost per successful workflow under 16-agent load without lowering task success.",
+    "id": "proof-3",
+    "intervention": "BF16 weights versus vLLM online fp8_per_tensor quantization (one GPU per variant)",
+    "kind": "proof",
+    "p95_gate": {
+      "passed": true,
+      "required": true
+    },
+    "paired_latency_difference_ms": {
+      "mean": -498.9504,
+      "pairs": 200
+    },
+    "preregistered": true,
+    "reason": "task success was non-inferior and successful-task latency superiority was established",
+    "record": {
+      "path": "docs/proof-records/proof-3-decision.json",
+      "sha256": "sha256:b1eed0ec96a63d32c8b717d97553c73f33d170346fd92a6e208c38d2a8a2fd07"
+    },
+    "schema_version": "0.1",
+    "successful_workflow_latency_ms": {
+      "baseline": {
+        "mean": 1828.7332,
+        "p50": 1788.3605,
+        "p95": 2254.2908
+      },
+      "candidate": {
+        "mean": 1329.7828,
+        "p50": 1310.7271,
+        "p95": 1624.9811
+      }
+    },
+    "task_success": {
+      "baseline": 1.0,
+      "candidate": 1.0
+    },
+    "title": "Proof 3",
+    "usd_per_1k_successful_workflows": {
+      "baseline": 0.0647,
+      "candidate": 0.0481,
+      "passed": true
+    },
+    "verdict": "verified",
+    "workload": {
+      "arrival_pattern": "closed_loop",
+      "concurrency": 16,
+      "pairs": 200
+    }
+  },
+  {
+    "claim_boundary": [
+      "One model (Qwen/Qwen2.5-14B-Instruct at a pinned revision) on one vLLM 0.34.0 BF16 server.",
+      "One synthetic multi-step repository-lookup agent whose answers need repository evidence.",
+      "The regression shows that RunEconomy blocks a change that request benchmarks favor; it is not a claim about tool pruning in general."
+    ],
+    "decisive_gate": "candidate_minimum_task_success",
+    "environment": {
+      "engine": "vllm",
+      "engine_version": "0.34.0",
+      "gpu": "NVIDIA L40S",
+      "quantization": {
+        "bf16": null,
+        "fp8": "fp8_per_tensor"
+      },
+      "served_models": [
+        "runeconomy-qwen2.5-14b-bf16",
+        "runeconomy-qwen2.5-14b-fp8-per-tensor"
+      ]
+    },
+    "hypothesis": "Pruning the repository-search tool makes the workflow faster on every request benchmark, but it lowers task success below the declared floor and margin.",
+    "id": "proof-4",
+    "intervention": "Remove the repository-search tool and answer directly (same model and server)",
+    "kind": "proof",
+    "p95_gate": null,
+    "paired_latency_difference_ms": {
+      "mean": -727.5686,
+      "pairs": 54
+    },
+    "preregistered": true,
+    "reason": "Required task_outcome gate 'candidate_minimum_task_success' failed: observed [0.43741157986647183,0.6401566470205877]; threshold 0.8. Performance evidence is ineligible for a claim.",
+    "record": {
+      "path": "docs/proof-records/proof-4-decision.json",
+      "sha256": "sha256:59ac25c5d43e4c2a79beb96ab701599890c0aadd65ee01303b47b5d56fa842ca"
+    },
+    "schema_version": "0.1",
+    "successful_workflow_latency_ms": {
+      "baseline": {
+        "mean": 1306.0512,
+        "p50": 1279.789,
+        "p95": 1642.4018
+      },
+      "candidate": {
+        "mean": 594.079,
+        "p50": 585.79,
+        "p95": 670.1051
+      }
+    },
+    "task_success": {
+      "baseline": 1.0,
+      "candidate": 0.54
+    },
+    "title": "Proof 4",
+    "usd_per_1k_successful_workflows": null,
+    "verdict": "regression",
+    "workload": {
+      "arrival_pattern": "sequential",
+      "concurrency": 1,
+      "pairs": 100
+    }
+  },
+  {
+    "evidence_grade": "descriptive (not preregistered; the gate verdict at the top level is reported, not claimed)",
+    "id": "study-1",
+    "kind": "study",
+    "levels": [
+      {
+        "baseline_p95_ms": 1650.148,
+        "candidate_p95_ms": 1149.239,
+        "concurrency": 1,
+        "paired_mean_difference_ms": -391.51,
+        "relative": -0.296
+      },
+      {
+        "baseline_p95_ms": 1920.317,
+        "candidate_p95_ms": 1289.972,
+        "concurrency": 8,
+        "paired_mean_difference_ms": -490.092,
+        "relative": -0.315
+      },
+      {
+        "baseline_p95_ms": 2879.354,
+        "candidate_p95_ms": 2053.735,
+        "concurrency": 32,
+        "paired_mean_difference_ms": -719.033,
+        "relative": -0.31
+      }
+    ],
+    "preregistered": false,
+    "record": {
+      "path": "docs/proof-records/study-1.json",
+      "sha256": "sha256:4ce9baf2a4b6363c830d354607ffd574d89e585409ad25b0f6ae5c56a08fe172"
+    },
+    "schema_version": "0.1",
+    "title": "FP8 vs BF16 on a multi-step agent under load",
+    "verdict": "descriptive"
+  },
+  {
+    "arms": {
+      "baseline": {
+        "mean_cached_tokens": 1.267,
+        "mean_input_tokens": 1793.5,
+        "server_ttft_p50_ms": 934.962,
+        "task_success_rate": 1.0
+      },
+      "candidate": {
+        "mean_cached_tokens": 1741.6,
+        "mean_input_tokens": 1793.5,
+        "server_ttft_p50_ms": 95.655,
+        "task_success_rate": 1.0
+      }
+    },
+    "design": "48 routing requests share one ~1.8K-token system prompt. The baseline puts a per-request ID and timestamp first; the candidate moves it after the stable prefix. Same model, server, and sampling; 8 closed-loop clients; 5 repetitions.",
+    "evidence_grade": "descriptive (not preregistered)",
+    "id": "study-2",
+    "kind": "study",
+    "preregistered": false,
+    "record": {
+      "path": "docs/proof-records/study-2.json",
+      "sha256": "sha256:df65dfed138df29f23a7cd78a3a4616596757967b986de8ef75c204f4a770d3e"
+    },
+    "schema_version": "0.1",
+    "title": "What a dynamic value at the start of a prompt prefix costs in vLLM prefix-cache reuse",
+    "verdict": "descriptive"
+  }
+]
