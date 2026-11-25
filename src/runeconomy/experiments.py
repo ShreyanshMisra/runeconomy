@@ -873,17 +873,80 @@ def _bootstrap_interval(
     ]
 
 
+_BETA_FRACTION_TINY = 1e-300
+_BETA_FRACTION_EPSILON = 1e-15
+
+
+def _incomplete_beta_fraction(a: float, b: float, x: float) -> float:
+    """Evaluate the continued fraction of ``I_x(a, b)`` by modified Lentz.
+
+    The caller picks the side of ``(a + 1) / (a + b + 2)`` on which the
+    fraction converges in ``O(sqrt(max(a, b)))`` terms.
+    """
+
+    tiny = _BETA_FRACTION_TINY
+    sum_ab, a_plus, a_minus = a + b, a + 1.0, a - 1.0
+    c = 1.0
+    d = 1.0 - sum_ab * x / a_plus
+    d = 1.0 / (tiny if abs(d) < tiny else d)
+    result = d
+    term_limit = 1000 + 20 * math.isqrt(int(max(a, b)) + 1)
+    for m in range(1, term_limit + 1):
+        m2 = 2 * m
+        numerator = m * (b - m) * x / ((a_minus + m2) * (a + m2))
+        d = 1.0 + numerator * d
+        d = 1.0 / (tiny if abs(d) < tiny else d)
+        c = 1.0 + numerator / c
+        c = tiny if abs(c) < tiny else c
+        result *= d * c
+        numerator = -(a + m) * (sum_ab + m) * x / ((a + m2) * (a_plus + m2))
+        d = 1.0 + numerator * d
+        d = 1.0 / (tiny if abs(d) < tiny else d)
+        c = 1.0 + numerator / c
+        c = tiny if abs(c) < tiny else c
+        delta = d * c
+        result *= delta
+        if abs(delta - 1.0) <= _BETA_FRACTION_EPSILON:
+            return result
+    raise ArithmeticError(
+        f"incomplete beta continued fraction did not converge for a={a}, b={b}"
+    )
+
+
 def _binomial_cdf(successes: int, trials: int, probability: float) -> float:
+    """Return ``P(Binomial(trials, probability) <= successes)``.
+
+    Uses the identity ``P(X <= k) = I_{1-p}(n - k, k + 1)`` with the
+    regularized incomplete beta evaluated in log space. Summing
+    ``comb(n, k) * p**k * q**(n - k)`` directly overflows a float once the
+    binomial coefficient passes ~1e308 (around n = 1030); this form never
+    materializes a factorial, so it holds for any realistic ``trials``.
+    """
+
     if successes < 0:
         return 0.0
     if successes >= trials:
         return 1.0
-    return sum(
-        math.comb(trials, count)
-        * probability**count
-        * (1.0 - probability) ** (trials - count)
-        for count in range(successes + 1)
+    if probability <= 0.0:
+        return 1.0
+    if probability >= 1.0:
+        return 0.0
+    a = float(trials - successes)
+    b = float(successes + 1)
+    q = 1.0 - probability
+    log_front = (
+        math.lgamma(a + b)
+        - math.lgamma(a)
+        - math.lgamma(b)
+        + a * math.log1p(-probability)
+        + b * math.log(probability)
     )
+    front = math.exp(log_front)
+    if q < (a + 1.0) / (a + b + 2.0):
+        value = front * _incomplete_beta_fraction(a, b, q) / a
+    else:
+        value = 1.0 - front * _incomplete_beta_fraction(b, a, probability) / b
+    return min(1.0, max(0.0, value))
 
 
 def _inverse_binomial_cdf(successes: int, trials: int, target: float) -> float:
