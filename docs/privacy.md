@@ -13,6 +13,16 @@ booleans, safe categories, confidence calculations, and stable issue codes. It
 does not echo task IDs, task contents, commands, paths, hypothesis text, claim
 boundaries, endpoint data, or artifact names.
 
+## Local proxy recordings
+
+A full `runeconomy proxy --record` session can retain prompts, tool messages,
+model output and exact prompt token IDs. Record outside version control and
+keep the session and imported evidence out of issue attachments and chat.
+The client’s credential header is forwarded upstream and excluded from the
+recording. A trusted `--redact MODULE:FUNCTION` hook can scrub recorded bodies.
+To omit both bodies and prompt token arrays, combine `--payload-capture digest_only`
+with `--token-resolution off`. [Capture guide](proxy.md).
+
 ## Create a support bundle
 
 ```bash

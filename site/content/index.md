@@ -5,12 +5,24 @@ faster without breaking it.**
 
 <section class="verdict-preview" aria-labelledby="proof-verdicts">
   <p class="eyebrow">Recorded verdicts</p>
-  <h2 id="proof-verdicts">The attractive number does not outrank the contract.</h2>
+  <h2 id="proof-verdicts">When does a faster workflow count as a win?</h2>
   <div class="verdict-grid">
+    <article>
+      <p class="proof-label">Proof 3 · Online FP8</p>
+      <p class="verdict-value">verified</p>
+      <p>With 16 concurrent agents per variant, FP8 cut mean workflow latency by 499 ms (27%). All 200 tasks succeeded in both arms and every frozen gate passed.</p>
+      <a href="/proofs/#proof-3">Read Proof 3</a>
+    </article>
+    <article>
+      <p class="proof-label">Proof 4 · Search tool removed</p>
+      <p class="verdict-value">regression</p>
+      <p>Removing search halved median latency. All attempts completed, but task success fell from 100% to 54%, below the 80% floor.</p>
+      <a href="/proofs/#proof-4">Read Proof 4</a>
+    </article>
     <article>
       <p class="proof-label">Proof 1</p>
       <p class="verdict-value">invalid</p>
-      <p>The candidate measured 62 ms faster on 36 both-successful pairs, but two frozen task-quality gates failed.</p>
+      <p>The candidate measured 62 ms faster on 36 both-successful pairs, but the baseline success lower bound was 79.61% against an 80% floor. Paired non-inferiority also failed.</p>
       <a href="/proof/">Read Proof 1</a>
     </article>
     <article>
@@ -27,8 +39,8 @@ RunEconomy joins paired workflow measurements to frozen task-quality,
 completion and identity gates, then returns `verified`, `regression`,
 `inconclusive` or `invalid`.
 
-Alpha boundary: controlled, sequential experiments for narrow private testing,
-not unattended production use. [Read all current boundaries](/alpha/).
+The alpha supports local, operator-run experiments, sequentially or at fixed
+concurrency, for controlled private testing. [Read all current boundaries](/alpha/).
 
 ## The two decisions
 
@@ -41,12 +53,17 @@ not unattended production use. [Read all current boundaries](/alpha/).
 
 ## Integration paths
 
-**Static replay** starts from normalized request evidence and runs controlled
-baseline and candidate requests against self-hosted vLLM.
+**Local proxy capture.** Point your OpenAI-compatible client at the loopback
+URL printed by `runeconomy proxy` to record a workflow. Import the private
+session file and check which requests and metrics it captured. [Capture guide](/proxy/).
 
-**Agent-process experiments** run complete baseline and candidate agent
-commands. This is also the current path for comparing a hosted API with a
-self-hosted open-weight backend.
+**Static replay.** Compare baseline and candidate requests using captured
+traffic or imported traces. The read-only `doctor` probe and static replay
+support vLLM, SGLang and OpenAI-compatible endpoints. Hosted model identity
+is provider-declared.
+
+**Agent-process experiments.** Run both complete agent commands against the
+same tasks when a tool change, retry or model migration can alter later calls.
 
 [Follow the experiment workflow](/start/) or
 [give a coding agent the RunEconomy contract](/agents/).

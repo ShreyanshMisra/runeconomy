@@ -8,8 +8,9 @@ Validation statuses are `runnable`, `unresolved`, `invalid`,
 `unsupported_backend`, and `claim_evidence_incomplete`.
 
 Each issue identifies the artifact, field, reason, execution impact, claim
-impact, and next action. Fix only the identified field. A skeleton with
-unresolved replay context or evaluator logic is not runnable.
+impact, and next action. For an unresolved static workspace, supply the missing replay context or
+evaluator in the source inputs, re-import, and initialize a fresh directory.
+Patching an unresolved skeleton cannot make it runnable.
 
 Before execution, freeze calibration and held-out boundaries, the intervention,
 evaluator, metrics, quality gates, sample size or stopping rule, trial order,
@@ -22,7 +23,8 @@ model-output failure, application failure, infrastructure failure, timeout,
 evaluator failure, and invalid trace separately. Failed attempts must not vanish
 from latency accounting.
 
-Use `runeconomy.agent.Attempt` at the existing agent entry point. It reads the
+Use `runeconomy.agent.Attempt` only in a runner-specific wrapper or the
+`RUNECONOMY_STATUS_PATH` branch of the existing agent entry point. It reads the
 runner environment, exposes typed paths and attempt identity, and writes one
 atomic schema `0.1` terminal status. Call exactly one of `completed`,
 `task_failure`, `model_output_failure`, `application_failure`, or
@@ -40,6 +42,39 @@ validation. Validation checks execution structure. Planning checks pairing,
 quality-gate feasibility, performance metric alignment, sample assumptions,
 and calibration versus held-out declarations. A planning state is not an
 experiment verdict. Run it before consuming held-out data or paid compute.
+
+With `runeconomy.track_workflow`, declare actual predecessors using
+`runeconomy.step(..., depends_on=[...])`. A worker thread without a workflow
+context can fall back to one active tracker. With multiple active trackers,
+propagate the intended context or the worker raises `WorkflowTraceError`.
+
+## Change and freeze a reviewed workspace
+
+Preview a design change on an unfrozen runnable workspace with a documented
+reason. Use the floor specified for the experiment in place of the example.
+
+```bash
+runeconomy experiment patch experiment/ --set acceptance.min_task_success_rate=0.9 \
+  --reason "use the declared quality floor" --dry-run --json
+```
+
+Review the preview, then repeat without `--dry-run` to apply the change.
+`experiment patch` validates it and appends the change to `provenance.jsonl`.
+Use this command for manifest changes. For a prospective design, choose the
+paired method before execution (`paired_exact` is the default,
+`paired_score_exact` is available), declare how `completion_policy` treats
+shared failures, and pin a `cost_model` when gating on cost. Review the
+planner’s sample size, power and assumptions before freezing.
+
+```bash
+runeconomy experiment plan experiment/ --json
+runeconomy experiment freeze experiment/ --lock agent.py --json
+runeconomy experiment run experiment/ --output results/ --require-frozen --json
+```
+
+Repeat `--lock FILE` for additional agent or runner code. The freeze pins
+workspace files and the agent-process dataset and evaluator. A changed frozen
+design needs a new workspace. Obtain execution approval before the run.
 
 The legacy `compare` command may exist in older releases. For new work, use
 `runeconomy experiment init --mode agent-process` followed by `experiment run`.

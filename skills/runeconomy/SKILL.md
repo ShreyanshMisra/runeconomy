@@ -1,6 +1,6 @@
 ---
 name: runeconomy
-description: Import agent inference evidence, assess what it can support, prepare a controlled baseline and candidate experiment, and interpret a quality-gated RunEconomy verdict. Use when onboarding a repository to RunEconomy, diagnosing vLLM compatibility, converting OpenInference, Phoenix, vLLM, or Prefixwise evidence, or running an experiment safely.
+description: Capture OpenAI-compatible agent traffic with runeconomy proxy, import workflow traces, and test a serving or agent change against task-quality and performance gates. Use for RunEconomy onboarding, vLLM or SGLang compatibility, hosted API comparisons, and controlled experiments.
 ---
 
 # RunEconomy
@@ -13,8 +13,9 @@ the declared task-quality and performance gates support the claim.
 
 1. Inspect the repository and deployment without changing them.
 2. Run `runeconomy --version`. Read documentation from the matching release or
-   tag. If RunEconomy is missing, install the version requested by the user.
-3. Never upgrade RunEconomy without asking first.
+   tag. If the package is missing, install the requested or project-pinned
+   version. If neither specifies a version, ask which release to install.
+3. Never upgrade RunEconomy without asking first. Confirm downgrades as well.
 4. Never print or commit credentials, prompts, model output, evaluator answers,
    raw traces, private endpoints, or unsanitized result artifacts.
 5. Ask before paid compute, cache reset, development-mode endpoints,
@@ -23,11 +24,12 @@ the declared task-quality and performance gates support the claim.
 `runeconomy doctor` is read-only. It does not generate text or reset caches:
 
 ```bash
-runeconomy doctor --base-url "$VLLM_BASE_URL" --api-key-env VLLM_API_KEY
+runeconomy doctor --backend vllm --base-url "$VLLM_BASE_URL" --api-key-env VLLM_API_KEY --json > doctor.json
 ```
 
-Follow its exact next action. An optional capability is not a blocker unless the
-selected experiment mode requires it.
+Use `--backend sglang` for an SGLang root or `--backend openai_compat` for a
+provider API base URL. Follow the reported next action for capabilities
+required by the selected experiment mode.
 
 When the user wants to learn the workflow before supplying real evidence, use
 the installed deterministic tutorial:
@@ -55,7 +57,8 @@ before handling a support artifact.
 
 ## Evidence-first workflow
 
-Import the evidence without guessing its format:
+To capture new client traffic, follow the [proxy recording and import steps](references/evidence-imports.md)
+and [capture privacy rules](references/privacy.md). For existing evidence:
 
 ```bash
 runeconomy import SOURCE --output evidence.json
@@ -66,13 +69,12 @@ an experiment workspace:
 
 ```bash
 runeconomy experiment init --from-evidence evidence.json --output experiment/
-runeconomy experiment validate experiment/
+runeconomy experiment validate experiment/ --doctor-report doctor.json --json
 ```
 
-Validation is corrective. Resolve only the fields it identifies and only from
-real evidence. Do not make an unresolved workspace runnable by inventing
-requests, dependencies, token boundaries, identity, an evaluator, or replay
-context.
+If import produced an unresolved workspace, complete its source evidence or
+replay context, re-import, and initialize a fresh directory. Keep missing
+requests, dependencies, token boundaries, identity and evaluators explicit.
 
 For a new real-agent experiment, initialize the agent-process mode directly:
 
@@ -85,24 +87,37 @@ runeconomy experiment init --mode agent-process \
   --output experiment/
 ```
 
-Before initialization, integrate the repository's real agent entry point with
-the supported runtime helper:
+Locate the existing entry point and tracing and explain the smallest edit.
+Use a runner-only wrapper or guard the shared entry point. Adapt the function
+names below to the repository. The normal branch returns the existing CLI’s
+exit value. The runner branch assumes the agent returns text and its existing
+instrumentation flushes the trace to `RUNECONOMY_TRACE_PATH` before returning.
 
 ```python
-from runeconomy.agent import Attempt
+import os
 
-with Attempt.from_environment() as attempt:
-    result = run_agent(attempt.task_path)
-    attempt.completed()
+def main():
+    if not os.environ.get("RUNECONOMY_STATUS_PATH"):
+        return run_agent_normal_cli()
+
+    from runeconomy.agent import Attempt
+
+    with Attempt.from_environment() as attempt:
+        result = run_agent(attempt.task_path)
+        attempt.output_path.write_text(result, encoding="utf-8")
+        attempt.completed()
 ```
 
-Begin read-only. Locate the existing entry point and tracing, then explain the
-smallest proposed integration before editing. Preserve normal execution, exit
-behavior, and existing telemetry. Do not recreate the status JSON or replace
-the application's tracing. Map only failures the repository can identify
-truthfully. Use conservative `application_failure` for an otherwise unknown
-unhandled exception, and never put exception text, outputs, prompts, URLs, or
-credentials into `stage` or `code`. Add focused local tests.
+A missing or invalid runner variable raises `AttemptEnvironmentError`. Let
+environment and lifecycle errors propagate. Call exactly one terminal method
+per attempt. Call `completed()` after writing its output and trace. A second
+terminal call raises
+`AttemptLifecycleError`. A clean exit with no call records
+`terminal_status_not_declared` and raises. The context manager also handles
+`SystemExit` and `KeyboardInterrupt`: when no status exists it attempts to
+record `application_failure` and propagates the original exception. Keep
+`stage` and `code` fixed and content-free (for example, `stage="tool_call"`
+and `code="timeout"`). Map only failures the application can identify.
 
 Change a workspace only through `experiment patch`, never by editing
 `manifest.json`. Each patch is validated and recorded in `provenance.jsonl`:
@@ -115,40 +130,44 @@ runeconomy experiment patch experiment/ --set acceptance.min_task_success_rate=0
 For explicit DAG edges without OpenTelemetry, use `runeconomy.track_workflow`
 and `runeconomy.step(..., depends_on=[...])` around the agent's real steps.
 
-Before held-out execution, freeze the reviewed design. A freeze is
-irreversible for that workspace; a changed design needs a new workspace:
+Before benchmarking, review the read-only doctor report and run local readiness
+checks. For an agent-process integration, use a stubbed backend to test both
+the ordinary CLI invocation and the runner branch with its output, trace and
+terminal status. Validate the workspace and inspect design blockers and power:
+
+```bash
+runeconomy experiment validate experiment/ --json
+runeconomy experiment plan experiment/ --json
+```
+
+Before held-out execution, freeze the reviewed design and lock the code that
+will run. Add a `--lock` for each additional agent or runner file. Changes
+after freezing require a new workspace. Obtain explicit approval for paid
+compute, non-local GPU runs, held-out execution, backend or CI changes, and
+publication or deployment.
 
 ```bash
 runeconomy experiment freeze experiment/ --lock agent.py --json
-runeconomy experiment run experiment/ --output result/ --require-frozen
 ```
 
-Every command accepts `--json` and prints one object whose `output_schema`
-names its versioned contract (`runeconomy schema` lists them). Read results
-from those objects rather than from human text. Failures print a
-`runeconomy.cli.error.v1` object on stderr.
+Commands that return a result support `--json`. Read the object identified
+by `output_schema` (`runeconomy schema` lists the contracts). Command errors
+use `runeconomy.cli.error.v1` on stderr.
 
-When RunEconomy is connected as an MCP server (`runeconomy mcp`), use its
-typed tools. `run_experiment` first returns an estimate and an
-`approval_token`: show the estimate to the user and call again with the token
-only after they explicitly approve. Never reuse or fabricate a token.
+When connected via `runeconomy mcp`, use its typed tools. Call
+`run_experiment` without a token and show the operator the planned attempts,
+commands, cost estimate and freeze status. After explicit approval, repeat
+the same arguments with the returned `approval_token`. The token is single-use,
+expires after 15 minutes and belongs to this server process. A restart, changed
+arguments or changed bound files (including manifest, dataset or evaluator)
+require a fresh estimate and approval. Preserve this boundary even if shell
+execution is available.
 
-Run `experiment validate` and the read-only design check before execution:
-
-```bash
-runeconomy experiment validate experiment/
-runeconomy experiment plan experiment/
-```
-
-Run a free local compatibility trial before any benchmark. Stop before paid
-compute, backend changes, held-out execution, publication, or deployment unless
-the user explicitly approves that next action.
-
-Run and report through the same command family:
+For an approved held-out run through the standalone CLI:
 
 ```bash
-runeconomy experiment run experiment/ --output result/
-runeconomy experiment report result/ --output report.html
+runeconomy experiment run experiment/ --output results/ --require-frozen --json
+runeconomy experiment report results/result.json --output report.html --json
 ```
 
 Review executable agent commands and evaluators before running them. Keep every

@@ -12,8 +12,25 @@ rewrite the source merely to satisfy detection.
 ## Workspace is unresolved
 
 Run `runeconomy experiment validate WORKSPACE`. Follow each issue's next action.
-Do not fabricate missing replay requests, dependencies, evaluator logic, or
-identity.
+For static replay, complete the source inputs, re-import, and initialize in a
+new directory. For a proxy session, use `--replay-context` to supply the design. Use `experiment patch`
+for subsequent design changes to the runnable workspace.
+
+## Capture has gaps
+
+Inspect the summary and the final `session_close` counters locally.
+`observations_dropped` and `record_errors` indicate missing exchanges.
+`token_resolution_incomplete_at_close` means exact prompt tokens may be
+missing. Re-import to check which analyses the remaining evidence supports
+and recapture if the relevant calls are incomplete.
+
+## Plan is blocked
+
+Check validation first, then the issue codes and corrective actions in
+`experiment plan WORKSPACE --json`. Preview a design fix with
+`experiment patch WORKSPACE --dry-run`, supply the reviewed operations and
+reason, apply the patch, and plan again. A changed frozen design requires a
+new workspace.
 
 ## Backend is unsupported
 
