@@ -1,0 +1,30 @@
+{
+  "$id": "runeconomy.cli.experiment-report.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Rendered experiment report.",
+  "properties": {
+    "format": {
+      "enum": [
+        "markdown",
+        "html"
+      ]
+    },
+    "opened": {
+      "type": "boolean"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.experiment-report.v1"
+    },
+    "report": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "format",
+    "opened",
+    "output_schema",
+    "report"
+  ],
+  "title": "runeconomy experiment-report --json output, version 1",
+  "type": "object"
+}

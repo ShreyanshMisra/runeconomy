@@ -11,6 +11,8 @@ from typing import Any, Mapping
 
 import jsonschema
 
+from .evaluator_kinds import EXTENDED_KINDS, evaluate_extended, is_executable, validate_extended
+
 
 class EvaluatorError(ValueError):
     pass
@@ -90,11 +92,26 @@ def validate_evaluator_spec(spec: Any, location: str = "evaluator") -> dict[str,
             raise EvaluatorError(f"{location}.evaluators must be a non-empty array")
         for index, child in enumerate(evaluators):
             validate_evaluator_spec(child, f"{location}.evaluators[{index}]")
+    elif kind in EXTENDED_KINDS:
+        return validate_extended(value, location)
     else:
         raise EvaluatorError(
-            f"{location}.kind must be exact, regex, json_schema, python, command, or all"
+            f"{location}.kind must be exact, regex, json_schema, python, command, all, "
+            + ", ".join(EXTENDED_KINDS)
         )
     return dict(value)
+
+
+def is_executable_evaluator(spec: Mapping[str, Any] | None) -> bool:
+    """Whether a spec runs local code or contacts a network judge."""
+
+    if not isinstance(spec, Mapping):
+        return False
+    if spec.get("kind") in {"python", "command"} or is_executable(spec):
+        return True
+    return spec.get("kind") == "all" and any(
+        is_executable_evaluator(child) for child in spec.get("evaluators", [])
+    )
 
 
 def _normalize_text(text: str, spec: Mapping[str, Any]) -> str:
@@ -216,6 +233,10 @@ def evaluate_output(
         if completed.stderr:
             details["stderr"] = completed.stderr[-2000:]
         return EvaluationResult(success, kind, float(success), details)
+
+    if kind in EXTENDED_KINDS:
+        success, score, details = evaluate_extended(validated, output_text, context)
+        return EvaluationResult(success, kind, score, details)
 
     child_results = [
         evaluate_output(child, output_text, context)

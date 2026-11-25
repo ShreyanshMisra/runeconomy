@@ -1,0 +1,33 @@
+{
+  "$id": "runeconomy.cli.capture-vllm.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One rendered and executed vLLM request. capture is the capture record documented in docs/evidence-formats.md.",
+  "properties": {
+    "appended_to": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "capture": {
+      "type": "object"
+    },
+    "output": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.capture-vllm.v1"
+    }
+  },
+  "required": [
+    "appended_to",
+    "capture",
+    "output",
+    "output_schema"
+  ],
+  "title": "runeconomy capture-vllm --json output, version 1",
+  "type": "object"
+}

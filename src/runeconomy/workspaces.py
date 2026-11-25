@@ -2,20 +2,40 @@
 
 from __future__ import annotations
 
+import os
+
 import hashlib
 import json
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Mapping
 
+from .completion_policy import CompletionPolicy, CompletionPolicyError
+from .cost_model import CostModelError, parse_cost_model
+from .identity import IdentityPolicyError, parse_identity_policy
 from .experiment_init import initialize_experiment, select_finding
 from .errors import classify_exception
+from .execution import (
+    CONCURRENT_ARRIVAL_PATTERNS,
+    SEQUENTIAL,
+    LoadSpec,
+    LoadSpecError,
+)
 from .experiments import ExperimentManifest, ExperimentValidationError
+from .metric_gates import MetricGateError, parse_metric_gates
+from .paired_inference import PAIRED_EXACT, PAIRED_METHODS
 
 
 WORKSPACE_VERSION = "0.1"
 AGENT_MANIFEST_VERSION = "0.2"
-SUPPORTED_AGENT_MANIFEST_VERSIONS = {"0.1", "0.2"}
+# Schema 0.3 adds the preregistered task_success_method and completion_policy
+# acceptance fields. Earlier versions reject them so the new semantics can
+# only be declared prospectively, never applied to an existing contract.
+AGENT_MANIFEST_PREREGISTERED_SEMANTICS_VERSION = "0.3"
+# Schema 0.4 adds concurrent arrival patterns (execution.arrival_pattern and
+# execution.load) and preregistered acceptance.metric_gates, on top of 0.3.
+AGENT_MANIFEST_LOAD_VERSION = "0.4"
+SUPPORTED_AGENT_MANIFEST_VERSIONS = {"0.1", "0.2", "0.3", "0.4"}
 
 
 def _digest_path(path: Path) -> str:
@@ -77,6 +97,42 @@ def create_workspace_from_evidence(
     analysis = evidence.get("analysis")
     finding_source: Any = analysis if isinstance(analysis, Mapping) else evidence
     finding = select_finding(finding_source, finding_id)
+    finding_grouping = finding.get("capture_workflow_grouping")
+    if isinstance(finding_grouping, Mapping) and finding_grouping.get(
+        "ambiguous"
+    ) is True:
+        raise ExperimentValidationError(
+            "cannot create a runnable workspace from an ambiguous capture workflow: "
+            "overlapping in-flight requests lacked X-RunEconomy-Workflow-Id or W3C "
+            "traceparent correlation; recapture with a unique workflow or trace ID"
+        )
+    selected_id = finding.get("finding_id")
+    candidate_runs = evidence.get("runs")
+    runs = (
+        [item for item in candidate_runs if isinstance(item, Mapping)]
+        if isinstance(candidate_runs, list)
+        else [evidence]
+    )
+    for run in runs:
+        run_analysis = run.get("analysis")
+        run_findings = (
+            run_analysis.get("findings", [])
+            if isinstance(run_analysis, Mapping)
+            else run.get("findings", [])
+        )
+        contains_selected = any(
+            isinstance(item, Mapping) and item.get("finding_id") == selected_id
+            for item in run_findings
+        )
+        grouping = run.get("trace", {}).get("workflow_grouping", {})
+        if contains_selected and isinstance(grouping, Mapping) and grouping.get(
+            "ambiguous"
+        ) is True:
+            raise ExperimentValidationError(
+                "cannot create a runnable workspace from an ambiguous capture workflow: "
+                "overlapping in-flight requests lacked X-RunEconomy-Workflow-Id or W3C "
+                "traceparent correlation; recapture with a unique workflow or trace ID"
+            )
     artifact = initialize_experiment(finding)
     unresolved = deepcopy(artifact.get("unresolved_fields", []))
     runnable = artifact.get("generation_status") != "unresolved"
@@ -173,8 +229,15 @@ def create_workspace_from_finding(
 
 
 def _relative_reference(path: Path, workspace: Path) -> str:
+    """Reference an input relative to the workspace, even outside it.
+
+    A relative reference keeps the workspace portable and keeps the local
+    home directory out of files people share or freeze. Only a path on a
+    different drive (Windows) has no relative form and stays absolute.
+    """
+
     try:
-        return str(path.resolve().relative_to(workspace.resolve()))
+        return os.path.relpath(path.resolve(), workspace.resolve())
     except ValueError:
         return str(path.resolve())
 
@@ -198,6 +261,12 @@ def create_agent_workspace(
     latency_semantics: str = "superiority",
     max_latency_regression_ms: float = 0.0,
     cost_ceiling_usd: float | None = None,
+    task_success_method: str | None = None,
+    completion_policy: Mapping[str, Any] | None = None,
+    identity_policy: Mapping[str, Any] | None = None,
+    arrival_pattern: str | None = None,
+    load: Mapping[str, Any] | None = None,
+    metric_gates: list[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     for path, label in ((dataset_path, "dataset"), (evaluator_path, "evaluator")):
         if not path.is_file():
@@ -233,6 +302,30 @@ def create_agent_workspace(
         },
         "cost_ceiling_usd": cost_ceiling_usd,
     }
+    if (
+        task_success_method is not None
+        or completion_policy is not None
+        or identity_policy is not None
+    ):
+        manifest["schema_version"] = AGENT_MANIFEST_PREREGISTERED_SEMANTICS_VERSION
+        if task_success_method is not None:
+            manifest["acceptance"]["task_success_method"] = task_success_method
+        if completion_policy is not None:
+            manifest["acceptance"]["completion_policy"] = dict(completion_policy)
+        if identity_policy is not None:
+            manifest["acceptance"]["identity_policy"] = dict(identity_policy)
+    if (
+        (arrival_pattern not in (None, SEQUENTIAL))
+        or load is not None
+        or metric_gates is not None
+    ):
+        manifest["schema_version"] = AGENT_MANIFEST_LOAD_VERSION
+        if arrival_pattern is not None:
+            manifest["execution"]["arrival_pattern"] = arrival_pattern
+        if load is not None:
+            manifest["execution"]["load"] = dict(load)
+        if metric_gates is not None:
+            manifest["acceptance"]["metric_gates"] = [dict(gate) for gate in metric_gates]
     validate_agent_manifest(manifest, output)
     descriptor = {
         "artifact_type": "runeconomy.experiment_workspace",
@@ -297,8 +390,16 @@ def load_workspace(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
 
 
 def _resolve_reference(workspace: Path, value: str) -> Path:
+    """Resolve a workspace reference, including ``..`` before the directory exists.
+
+    References are written relative to the resolved workspace, so joining
+    them to the resolved workspace and normalizing lexically is exact.
+    """
+
     path = Path(value)
-    return path if path.is_absolute() else workspace / path
+    if path.is_absolute():
+        return path
+    return Path(os.path.normpath(workspace.resolve() / path))
 
 
 def validate_agent_manifest(manifest: Mapping[str, Any], workspace: Path) -> None:
@@ -386,10 +487,95 @@ def validate_agent_manifest(manifest: Mapping[str, Any], workspace: Path) -> Non
             raise ExperimentValidationError(
                 f"acceptance.{field} must be between 0 and 1"
             )
+    method = acceptance.get("task_success_method", PAIRED_EXACT)
+    if method not in PAIRED_METHODS:
+        raise ExperimentValidationError(
+            "acceptance.task_success_method must be paired_exact or paired_score_exact"
+        )
+    prospective = manifest.get("schema_version") in {
+        AGENT_MANIFEST_PREREGISTERED_SEMANTICS_VERSION,
+        AGENT_MANIFEST_LOAD_VERSION,
+    }
+    if method != PAIRED_EXACT and not prospective:
+        raise ExperimentValidationError(
+            "acceptance.task_success_method paired_score_exact requires agent "
+            "manifest schema_version '0.3'"
+        )
+    if "completion_policy" in acceptance:
+        if not prospective:
+            raise ExperimentValidationError(
+                "acceptance.completion_policy requires agent manifest "
+                "schema_version '0.3'"
+            )
+        try:
+            CompletionPolicy.from_value(acceptance["completion_policy"])
+        except CompletionPolicyError as exc:
+            raise ExperimentValidationError(str(exc)) from exc
+    if "identity_policy" in acceptance:
+        if not prospective:
+            raise ExperimentValidationError(
+                "acceptance.identity_policy requires agent manifest "
+                "schema_version '0.3'"
+            )
+        try:
+            parse_identity_policy(acceptance["identity_policy"])
+        except IdentityPolicyError as exc:
+            raise ExperimentValidationError(str(exc)) from exc
+    load_version = manifest.get("schema_version") == AGENT_MANIFEST_LOAD_VERSION
+    agent_load_spec(manifest)
+    if (
+        execution.get("arrival_pattern", SEQUENTIAL) != SEQUENTIAL
+        or "load" in execution
+    ) and not load_version:
+        raise ExperimentValidationError(
+            "execution.arrival_pattern and execution.load require agent manifest "
+            "schema_version '0.4'"
+        )
+    if "metric_gates" in acceptance:
+        if not load_version:
+            raise ExperimentValidationError(
+                "acceptance.metric_gates requires agent manifest schema_version '0.4'"
+            )
+        try:
+            parse_metric_gates(acceptance["metric_gates"])
+        except MetricGateError as exc:
+            raise ExperimentValidationError(str(exc)) from exc
+    if manifest.get("cost_model") is not None:
+        if not load_version:
+            raise ExperimentValidationError(
+                "cost_model requires agent manifest schema_version '0.4'"
+            )
+        try:
+            parse_cost_model(manifest["cost_model"])
+        except CostModelError as exc:
+            raise ExperimentValidationError(str(exc)) from exc
     if manifest.get("design") is not None and not isinstance(
         manifest.get("design"), Mapping
     ):
         raise ExperimentValidationError("design must be an object when supplied")
+
+
+def agent_load_spec(manifest: Mapping[str, Any]) -> LoadSpec | None:
+    """Parse an agent manifest's load declaration, or ``None`` if sequential."""
+
+    execution = manifest.get("execution")
+    execution = execution if isinstance(execution, Mapping) else {}
+    pattern = execution.get("arrival_pattern", SEQUENTIAL)
+    if pattern == SEQUENTIAL:
+        if "load" in execution:
+            raise ExperimentValidationError(
+                "execution.load requires a concurrent execution.arrival_pattern"
+            )
+        return None
+    if pattern not in CONCURRENT_ARRIVAL_PATTERNS:
+        raise ExperimentValidationError(
+            "execution.arrival_pattern must be sequential, closed_loop, "
+            "constant_rps, or poisson"
+        )
+    try:
+        return LoadSpec.from_value(pattern, execution.get("load"))
+    except LoadSpecError as exc:
+        raise ExperimentValidationError(str(exc)) from exc
 
 
 def _issue(
@@ -429,6 +615,11 @@ def validate_experiment_artifact(
         descriptor: dict[str, Any] | None = None
         parsed: ExperimentManifest | None = None
         if path.is_dir():
+            from .freeze import require_intact_freeze
+
+            # A frozen workspace whose locked digests drifted is invalid even
+            # when the drifted manifest would otherwise parse.
+            require_intact_freeze(path)
             descriptor, manifest = load_workspace(path)
             mode = str(descriptor.get("mode", "unknown"))
             unresolved = descriptor.get("unresolved_fields", [])
@@ -634,5 +825,36 @@ def agent_run_arguments(manifest: Mapping[str, Any], workspace: Path) -> dict[st
         ),
         "max_latency_regression_ms": float(
             acceptance.get("max_latency_regression_ms", 0.0)
+        ),
+        "task_success_method": str(
+            acceptance.get("task_success_method", PAIRED_EXACT)
+        ),
+        "completion_policy": (
+            dict(acceptance["completion_policy"])
+            if isinstance(acceptance.get("completion_policy"), Mapping)
+            else None
+        ),
+        **(
+            {"identity_policy": dict(acceptance["identity_policy"])}
+            if isinstance(acceptance.get("identity_policy"), Mapping)
+            else {}
+        ),
+        **(
+            {}
+            if execution.get("arrival_pattern", SEQUENTIAL) == SEQUENTIAL
+            else {
+                "arrival_pattern": str(execution["arrival_pattern"]),
+                "load": dict(execution["load"]),
+            }
+        ),
+        **(
+            {"metric_gates": [dict(gate) for gate in acceptance["metric_gates"]]}
+            if isinstance(acceptance.get("metric_gates"), list)
+            else {}
+        ),
+        **(
+            {"attempt_economics": parse_cost_model(manifest["cost_model"])}
+            if manifest.get("cost_model") is not None
+            else {}
         ),
     }

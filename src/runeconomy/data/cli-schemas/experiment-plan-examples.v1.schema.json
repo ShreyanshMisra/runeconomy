@@ -1,0 +1,27 @@
+{
+  "$id": "runeconomy.cli.experiment-plan-examples.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Worked planning examples (experiment plan --examples).",
+  "properties": {
+    "n180": {
+      "type": "object"
+    },
+    "n40": {
+      "type": "object"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.experiment-plan-examples.v1"
+    },
+    "proof_3_scenario": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "n180",
+    "n40",
+    "output_schema",
+    "proof_3_scenario"
+  ],
+  "title": "runeconomy experiment-plan-examples --json output, version 1",
+  "type": "object"
+}

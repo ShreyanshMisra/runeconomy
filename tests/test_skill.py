@@ -90,6 +90,11 @@ class AgentSkillTests(unittest.TestCase):
             "compatibility_trial_first",
             "preserve_entrypoint_and_tracing",
             "protect_runtime_artifacts",
+            "patch_not_hand_edit",
+            "freeze_before_heldout",
+            "mcp_approval_boundary",
+            "zero_json_edit_golden_path",
+            "frozen_contract_is_immutable",
         }
         self.assertEqual(observed, required)
         for case in cases:

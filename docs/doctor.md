@@ -11,6 +11,10 @@ runeconomy doctor \
   --startup-timeout 600
 ```
 
+SGLang and OpenAI-compatible APIs use `--backend sglang` or
+`--backend openai_compat`, and their reports carry a unified capability table
+and graded identity. See [serving backends and identity grades](backends.md).
+
 ## What doctor reads
 
 `doctor` reads advertised API routes, model metadata and safe rendering or

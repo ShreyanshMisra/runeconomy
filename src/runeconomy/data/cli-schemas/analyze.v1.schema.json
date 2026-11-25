@@ -1,0 +1,76 @@
+{
+  "$id": "runeconomy.cli.analyze.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Normalized trace analysis report.",
+  "properties": {
+    "critical_path": {},
+    "findings": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.analyze.v1"
+    },
+    "report_version": {
+      "type": "string"
+    },
+    "requests": {
+      "type": "array"
+    },
+    "success": {},
+    "summary": {
+      "properties": {
+        "critical_path_duration_ms": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "finding_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "observed_cache_coverage": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "request_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total_input_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "finding_count",
+        "request_count"
+      ],
+      "type": "object"
+    },
+    "trace_id": {
+      "type": "string"
+    },
+    "workload": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "findings",
+    "output_schema",
+    "report_version",
+    "requests",
+    "summary",
+    "trace_id",
+    "workload"
+  ],
+  "title": "runeconomy analyze --json output, version 1",
+  "type": "object"
+}

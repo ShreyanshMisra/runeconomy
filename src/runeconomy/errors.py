@@ -43,6 +43,13 @@ _ERRORS = {
         "RunEconomy could not select one evidence type or run without explicit guidance.",
         "runeconomy.action.select_evidence_type_or_run",
     ),
+    "runeconomy.evidence.workflow_ambiguous": ErrorDescriptor(
+        "runeconomy.evidence.workflow_ambiguous",
+        "evidence",
+        "Overlapping in-flight requests lacked workflow correlation headers, so the "
+        "capture cannot support a runnable workspace.",
+        "runeconomy.action.recapture_with_workflow_correlation",
+    ),
     "runeconomy.workspace.unresolved": ErrorDescriptor(
         "runeconomy.workspace.unresolved",
         "workspace",
@@ -60,6 +67,48 @@ _ERRORS = {
         "workspace",
         "The workspace schema is not supported by this RunEconomy version.",
         "runeconomy.action.use_matching_runeconomy_version",
+    ),
+    "runeconomy.workspace.frozen": ErrorDescriptor(
+        "runeconomy.workspace.frozen",
+        "workspace",
+        "The workspace is frozen, so its contract cannot change.",
+        "runeconomy.action.create_new_workspace",
+    ),
+    "runeconomy.patch.invalid": ErrorDescriptor(
+        "runeconomy.patch.invalid",
+        "workspace",
+        "The manifest patch was malformed or produced an invalid manifest, so nothing was written.",
+        "runeconomy.action.correct_patch",
+    ),
+    "runeconomy.provenance.broken": ErrorDescriptor(
+        "runeconomy.provenance.broken",
+        "workspace",
+        "The workspace provenance log is unreadable or its hash chain is broken.",
+        "runeconomy.action.review_workspace_provenance",
+    ),
+    "runeconomy.freeze.not_ready": ErrorDescriptor(
+        "runeconomy.freeze.not_ready",
+        "freeze",
+        "The design is not ready to freeze under the execution validator or planner.",
+        "runeconomy.action.complete_design_before_freeze",
+    ),
+    "runeconomy.freeze.drift": ErrorDescriptor(
+        "runeconomy.freeze.drift",
+        "freeze",
+        "A frozen workspace no longer matches the digests in its preregistration record.",
+        "runeconomy.action.restore_frozen_inputs",
+    ),
+    "runeconomy.freeze.required": ErrorDescriptor(
+        "runeconomy.freeze.required",
+        "freeze",
+        "The command requires a frozen workspace, and no preregistration record exists.",
+        "runeconomy.action.freeze_workspace",
+    ),
+    "runeconomy.ci.failed": ErrorDescriptor(
+        "runeconomy.ci.failed",
+        "ci",
+        "The CI verdict summary could not be rendered or posted.",
+        "runeconomy.action.review_ci_configuration",
     ),
     "runeconomy.backend.unsupported": ErrorDescriptor(
         "runeconomy.backend.unsupported",
@@ -168,6 +217,8 @@ def descriptor_for_code(code: str) -> ErrorDescriptor:
 
 def _validation_code(message: str, stage: str) -> str:
     lowered = message.lower()
+    if "ambiguous capture workflow" in lowered:
+        return "runeconomy.evidence.workflow_ambiguous"
     if stage == "experiment.report" or "render experiment report" in lowered:
         return "runeconomy.report.generation"
     if "checkpoint" in lowered and (

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" role="img" aria-labelledby="title desc">
-  <title id="title">Prompt order and rejected result</title>
+  <title id="title">Prompt order and invalid verdict</title>
   <desc id="desc">Changing metadata moves behind stable instructions before a result not verified marker.</desc>
   <rect width="640" height="400" fill="#fbfaf6"/>
   <g stroke="#cbc9c1" stroke-width="1"><path d="M0 80h640M0 160h640M0 240h640M0 320h640"/><path d="M128 0v400M256 0v400M384 0v400M512 0v400"/></g>

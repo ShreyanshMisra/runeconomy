@@ -1,0 +1,70 @@
+{
+  "$id": "runeconomy.cli.ci-summary.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Markdown verdict table for CI. verified is true only for a frozen-mode verified verdict with intact preregistration.",
+  "properties": {
+    "comment": {
+      "properties": {
+        "action": {
+          "enum": [
+            "created",
+            "updated"
+          ]
+        },
+        "pull_request": {
+          "type": "integer"
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "failed_required_checks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "frozen": {
+      "type": "boolean"
+    },
+    "markdown": {
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "frozen",
+        "compatibility"
+      ]
+    },
+    "output": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.ci-summary.v1"
+    },
+    "verdict": {
+      "type": "string"
+    },
+    "verified": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "comment",
+    "failed_required_checks",
+    "frozen",
+    "markdown",
+    "mode",
+    "output",
+    "output_schema",
+    "verdict",
+    "verified"
+  ],
+  "title": "runeconomy ci-summary --json output, version 1",
+  "type": "object"
+}

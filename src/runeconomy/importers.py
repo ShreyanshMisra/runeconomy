@@ -10,6 +10,16 @@ from pathlib import Path
 from typing import Any
 
 from .evidence_quality import build_evidence_quality, evidence_field
+from .identity import (
+    PROVIDER_DECLARED,
+    TRACE_FINGERPRINT_ATTRIBUTE,
+    TRACE_GRADE_ATTRIBUTE,
+    TRACE_UNDISCLOSED_ATTRIBUTE,
+    IdentityPolicyError,
+    fingerprint_digest,
+    parse_grade,
+    parse_undisclosed,
+)
 from .models import Trace, TraceValidationError
 
 
@@ -784,6 +794,11 @@ def import_openinference(
                     "total_latency_ms": (end_ns - start_ns) / 1_000_000,
                 },
             }
+            step_role = attributes.get("runeconomy.step_role")
+            if isinstance(step_role, str) and step_role.strip():
+                # Declared step role: identity stability is checked per role,
+                # so deliberate step-level model routing is not drift.
+                request_payload["step_role"] = step_role.strip()
             model_revision, _ = _consistent_first(
                 attributes,
                 "llm.model_revision",
@@ -814,6 +829,24 @@ def import_openinference(
                     if value is not None
                 }
             )
+            # Graded identity declarations (identity policy 0.1). Keys are added
+            # only when a trace declares them, so legacy traces are unchanged.
+            try:
+                grade = parse_grade(attributes.get(TRACE_GRADE_ATTRIBUTE))
+                undisclosed = parse_undisclosed(
+                    attributes.get(TRACE_UNDISCLOSED_ATTRIBUTE)
+                )
+            except IdentityPolicyError as exc:
+                raise TraceValidationError(f"span {span_id}: {exc}") from exc
+            if grade is not None:
+                request_payload["identity_grade"] = grade
+            if undisclosed is not None:
+                request_payload["identity_undisclosed_fields"] = undisclosed
+            fingerprint = fingerprint_digest(
+                attributes.get(TRACE_FINGERPRINT_ATTRIBUTE)
+            )
+            if fingerprint is not None:
+                request_payload["provider_fingerprint_sha256"] = fingerprint
             requests.append(request_payload)
         normalized_spans.append(
             {
@@ -922,11 +955,21 @@ def import_openinference(
                 if dependency_evidence != "absent"
                 else "no explicit workflow dependencies",
             ),
-            "backend_identity": evidence_field(
-                "directly_observed" if identity_complete else "unresolved",
-                "trace identity attributes"
-                if identity_complete
-                else "one or more pinned identity fields are absent",
+            "backend_identity": (
+                evidence_field(
+                    "weakly_inferred",
+                    "provider-declared identity; undisclosed fields are recorded explicitly",
+                )
+                if any(
+                    request.get("identity_grade") == PROVIDER_DECLARED
+                    for request in requests
+                )
+                else evidence_field(
+                    "directly_observed" if identity_complete else "unresolved",
+                    "trace identity attributes"
+                    if identity_complete
+                    else "one or more pinned identity fields are absent",
+                )
             ),
             "task_identity": evidence_field(
                 "directly_observed" if len(task_ids) == 1 else "unresolved",

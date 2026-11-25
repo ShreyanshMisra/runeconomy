@@ -4,22 +4,35 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
+import signal
 import sys
+import threading
 import webbrowser
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from . import __version__
+from . import cli_contracts
 from .analysis import analyze_trace
 from .attempt_status import AttemptStatusError
+from .adapters import create_adapter, format_report as format_adapter_report
 from .backends import BackendProbeError, discover_vllm_capabilities
 from .comparison import run_comparison
 from .evidence import import_evidence, load_evidence_bundle
 from .errors import ERROR_CODE_VERSION, classify_exception
 from .evaluators import EvaluatorInfrastructureError
 from .experiment_init import initialize_experiment, select_finding
+from .cost_model import parse_cost_model
+from .freeze import freeze_workspace, require_intact_freeze, verify_freeze
+from .manifest_patch import (
+    PatchOperation,
+    load_patch_file,
+    parse_assignment,
+    patch_workspace,
+)
 from .experiments import (
     ExperimentManifest,
     ExperimentValidationError,
@@ -31,7 +44,7 @@ from .importers import (
     import_vllm_jsonl,
 )
 from .models import Trace, TraceValidationError
-from .planning import plan_experiment
+from .planning import plan_experiment, worked_examples
 from .reports import (
     load_demo_result,
     render_demo_html,
@@ -113,6 +126,119 @@ def _format_human(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _add_json_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="print one versioned JSON result on stdout (see `runeconomy schema`)",
+    )
+
+
+def _json_mode(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "json_output", False)) or getattr(args, "format", None) == "json"
+
+
+def _emit(contract: str, payload: Mapping[str, Any]) -> None:
+    print(cli_contracts.render(contract, payload))
+
+
+def _convert_payload(args: argparse.Namespace, payload: Mapping[str, Any]) -> dict[str, Any]:
+    trace = "requests" in payload
+    return {
+        "command": args.command,
+        "artifact": "normalized_trace" if trace else "findings",
+        "output": str(args.output),
+        "request_count": len(payload["requests"]) if trace else None,
+        "finding_count": None if trace else len(payload.get("findings", [])),
+        "next_command": (
+            f"runeconomy analyze {args.output}"
+            if trace
+            else f"runeconomy experiment init --from-finding {args.output} --output experiment/"
+        ),
+    }
+
+
+def _init_json(
+    args: argparse.Namespace, descriptor: Mapping[str, Any], *, output_kind: str = "workspace"
+) -> bool:
+    if not _json_mode(args):
+        return False
+    _emit(
+        "experiment-init",
+        {
+            "mode": descriptor.get("mode", "static_request"),
+            "output": str(args.output),
+            "output_kind": output_kind,
+            "generation_status": descriptor.get("generation_status", "runnable"),
+            "unresolved_fields": list(descriptor.get("unresolved_fields") or []),
+            "next_command": descriptor["next_command"],
+        },
+    )
+    return True
+
+
+def _freeze_state(path: Path) -> dict[str, Any]:
+    try:
+        state = verify_freeze(path)
+    except ExperimentValidationError:
+        return {"status": "drifted", "record_sha256": None}
+    return {"status": state["status"], "record_sha256": state["record_sha256"]}
+
+
+def _metrics_observers(args: argparse.Namespace, client: Any = None) -> tuple[Any, ...]:
+    from .telemetry import SERVER_TARGET, ServerMetricsSampler, prometheus_url_scraper
+
+    targets: dict[str, Any] = {}
+    for item in args.server_metrics_url:
+        name, separator, url = item.partition("=")
+        if not separator or name not in {"baseline", "candidate", SERVER_TARGET} or not url:
+            raise ExperimentValidationError(
+                "--server-metrics-url must be TARGET=URL with TARGET baseline, candidate, or server"
+            )
+        targets[name] = prometheus_url_scraper(url)
+    if args.server_metrics:
+        scrape = getattr(client, "scrape_metrics", None)
+        if not callable(scrape):
+            raise ExperimentValidationError(
+                "--server-metrics requires a static backend adapter with Prometheus metrics; "
+                "use --server-metrics-url for agent-process runs"
+            )
+        targets.setdefault(SERVER_TARGET, scrape)
+    if not targets:
+        return ()
+    try:
+        return (ServerMetricsSampler(targets, interval_seconds=args.server_metrics_interval),)
+    except ValueError as exc:
+        raise ExperimentValidationError(str(exc)) from exc
+
+
+def _run_json(
+    args: argparse.Namespace,
+    mode: str,
+    result: Mapping[str, Any],
+    result_path: Path,
+    artifacts_path: Path | None,
+    checkpoint: Path | None,
+    freeze_state: Mapping[str, Any],
+) -> int:
+    verified = result["decision"]["status"] == "verified"
+    _emit(
+        "experiment-run",
+        {
+            "mode": mode,
+            "verdict": result["decision"]["status"],
+            "result": str(result_path),
+            "artifacts": str(artifacts_path) if artifacts_path else None,
+            "checkpoint": str(checkpoint) if checkpoint else None,
+            "require_verified": bool(args.require_verified),
+            "verified": verified,
+            "freeze": {"status": freeze_state["status"], "record_sha256": freeze_state["record_sha256"]},
+        },
+    )
+    return 3 if args.require_verified and not verified else 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="runeconomy")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -131,16 +257,36 @@ def _build_parser() -> argparse.ArgumentParser:
     unified_import.add_argument("--output", type=Path, required=True)
     unified_import.add_argument(
         "--type",
-        choices=("auto", "openinference", "vllm", "prefixwise", "phoenix"),
+        choices=("auto", "openinference", "vllm", "prefixwise", "phoenix", "proxy"),
         default="auto",
     )
-    unified_import.add_argument("--trace-id")
+    unified_import.add_argument("--trace-id", help="select a trace or proxy workflow")
     unified_import.add_argument("--workload", default="unknown")
     unified_import.add_argument("--backend", default="unknown")
     unified_import.add_argument("--model")
     unified_import.add_argument("--block-size", type=int, default=16)
+    unified_import.add_argument(
+        "--replay-context", type=Path, help="read operator-supplied static replay design JSON for a proxy session"
+    )
+    unified_import.add_argument(
+        "--proxy-identity", type=Path, help="read operator-supplied trace identity JSON for a proxy session"
+    )
+    unified_import.add_argument(
+        "--idle-gap-ms", type=float, help="override the proxy fallback grouping gap (default: 10000 ms)"
+    )
     unified_import.add_argument("--format", choices=("human", "json"), default="human")
     unified_import.add_argument("--json", dest="format", action="store_const", const="json")
+
+    proxy = subparsers.add_parser("proxy", help="capture OpenAI-compatible requests through a local proxy")
+    proxy.add_argument("--upstream", required=True, help="upstream HTTP(S) URL, with or without /v1")
+    proxy_mode = proxy.add_mutually_exclusive_group(required=True)
+    proxy_mode.add_argument("--record", type=Path, help="path to a new JSONL session")
+    proxy_mode.add_argument("--attempt", action="store_true", help="wrap an agent-process command after --")
+    proxy.add_argument("--port", type=int, help="local listen port (default: 8767, use 0 for an available port)")
+    proxy.add_argument("--token-resolution", choices=("background", "on_close", "off"), default="background")
+    proxy.add_argument("--payload-capture", choices=("full", "digest_only"), default="full")
+    proxy.add_argument("--redact", action="append", default=[], metavar="MODULE:FUNCTION", help="apply a trusted local body redaction hook")
+    proxy.add_argument("agent_command", nargs=argparse.REMAINDER, metavar="COMMAND")
 
     import_vllm = subparsers.add_parser(
         "import-vllm-jsonl",
@@ -221,7 +367,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--case",
         choices=("rejection", "historical"),
         default="rejection",
-        help="bundled case to render (default: quality-gated rejection)",
+        help="bundled case to render (default: frozen invalid proof)",
     )
     demo.add_argument("--output", type=Path, default=Path("runeconomy-demo.html"))
     demo.add_argument("--open", action="store_true", help="open the report in a browser")
@@ -266,9 +412,18 @@ def _build_parser() -> argparse.ArgumentParser:
     support.add_argument("--json", dest="format", action="store_const", const="json")
 
     doctor = subparsers.add_parser(
-        "doctor", help="inspect a vLLM server without running inference"
+        "doctor", help="inspect a serving backend without running inference"
     )
     doctor.add_argument("--base-url", required=True)
+    doctor.add_argument(
+        "--backend",
+        choices=("vllm", "sglang", "openai_compat"),
+        default="vllm",
+        help=(
+            "backend kind (default vllm). openai_compat takes the provider's API "
+            "base URL, usually ending in /v1"
+        ),
+    )
     doctor.add_argument("--api-key-env")
     doctor.add_argument("--timeout", type=float, default=10.0)
     doctor.add_argument(
@@ -359,6 +514,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     initialize.add_argument("--max-latency-regression-ms", type=float, default=0.0)
     initialize.add_argument("--cost-ceiling-usd", type=float)
+    initialize.add_argument(
+        "--min-identity-grade",
+        choices=("operator-verified", "provider-declared"),
+        help=(
+            "preregister identity policy 0.1 (agent-process): the weakest "
+            "serving-identity grade a valid verdict may rest on"
+        ),
+    )
     validate = experiment_commands.add_parser("validate", help="validate a manifest")
     validate.add_argument("manifest", type=Path)
     validate.add_argument("--format", choices=("human", "json"), default="human")
@@ -376,7 +539,11 @@ def _build_parser() -> argparse.ArgumentParser:
     plan = experiment_commands.add_parser(
         "plan", help="assess claim-design readiness without executing the experiment"
     )
-    plan.add_argument("manifest", type=Path)
+    plan_input = plan.add_mutually_exclusive_group(required=True)
+    plan_input.add_argument("manifest", type=Path, nargs="?")
+    plan_input.add_argument(
+        "--examples", action="store_true", help="show worked sample-size and completion scenarios"
+    )
     plan.add_argument("--format", choices=("human", "json"), default="human")
     plan.add_argument("--json", dest="format", action="store_const", const="json")
     run = experiment_commands.add_parser("run", help="run a manifest against vLLM")
@@ -416,6 +583,132 @@ def _build_parser() -> argparse.ArgumentParser:
     report.add_argument("--output", type=Path, required=True)
     report.add_argument("--format", choices=("markdown", "html"))
     report.add_argument("--open", action="store_true", help="open an HTML report in a browser")
+
+    patch_command = experiment_commands.add_parser(
+        "patch",
+        help="apply schema-validated manifest field updates and record their provenance",
+    )
+    patch_command.add_argument("workspace", type=Path)
+    patch_command.add_argument(
+        "--set",
+        dest="patch_set",
+        action="append",
+        default=[],
+        metavar="PATH=JSON",
+        help="set a field to a JSON value, e.g. acceptance.min_task_success_rate=0.9",
+    )
+    patch_command.add_argument(
+        "--set-string",
+        dest="patch_set_string",
+        action="append",
+        default=[],
+        metavar="PATH=TEXT",
+        help="set a field to a literal string without JSON quoting",
+    )
+    patch_command.add_argument(
+        "--unset", dest="patch_unset", action="append", default=[], metavar="PATH", help="remove a field"
+    )
+    patch_command.add_argument(
+        "--patch-file", type=Path, help="read operations from a patch JSON file (applied before flags)"
+    )
+    patch_command.add_argument("--reason", help="short reason recorded in provenance.jsonl")
+    patch_command.add_argument(
+        "--repin",
+        action="store_true",
+        help="re-pin agent-process dataset and evaluator digests to the current file contents",
+    )
+    patch_command.add_argument(
+        "--dry-run", action="store_true", help="validate and report the patch without writing it"
+    )
+
+    freeze_command = experiment_commands.add_parser(
+        "freeze",
+        help="lock digests and gates and write the preregistration record",
+    )
+    freeze_command.add_argument("workspace", type=Path)
+    freeze_command.add_argument(
+        "--lock",
+        dest="lock_files",
+        action="append",
+        type=Path,
+        default=[],
+        metavar="FILE",
+        help="also digest-lock a file the run depends on (agent code, runner, allocator)",
+    )
+    freeze_command.add_argument(
+        "--allow-incomplete-design",
+        action="store_true",
+        help="freeze a needs_design_input or ready_for_calibration design and record it as incomplete",
+    )
+    freeze_command.add_argument("--reason", help="short reason recorded in the preregistration record")
+
+    run.add_argument(
+        "--server-metrics",
+        action="store_true",
+        help="sample the static backend's Prometheus metrics during concurrent load blocks",
+    )
+    run.add_argument(
+        "--server-metrics-url",
+        action="append",
+        default=[],
+        metavar="TARGET=URL",
+        help="sample a /metrics URL during load blocks; TARGET is baseline, candidate, or server",
+    )
+    run.add_argument(
+        "--server-metrics-interval",
+        type=float,
+        default=1.0,
+        metavar="SECONDS",
+        help="seconds between metric samples (default: 1)",
+    )
+    run.add_argument(
+        "--require-frozen",
+        action="store_true",
+        help="refuse to run unless the workspace has an intact preregistration record",
+    )
+
+    subparsers.add_parser(
+        "mcp",
+        help="serve RunEconomy as Model Context Protocol tools over stdio",
+    )
+
+    ci_summary = subparsers.add_parser(
+        "ci-summary", help="render a result as a Markdown verdict table, optionally as a PR comment"
+    )
+    ci_summary.add_argument("result", type=Path)
+    ci_summary.add_argument("--mode", choices=("frozen", "compatibility"), default="frozen")
+    ci_summary.add_argument("--title")
+    ci_summary.add_argument("--output", type=Path, help="also write the Markdown to this file")
+    ci_summary.add_argument(
+        "--github-comment",
+        action="store_true",
+        help="create or update the marked RunEconomy comment on the triggering pull request",
+    )
+
+    schema_command = subparsers.add_parser(
+        "schema", help="list the versioned --json output contracts or print one JSON Schema"
+    )
+    schema_command.add_argument("name", nargs="?", help="contract name, e.g. experiment-validate")
+
+    for command_parser in (
+        import_vllm,
+        import_oi,
+        import_ledger,
+        import_prefixwise,
+        capture,
+        demo,
+        tutorial_init,
+        compare,
+        initialize,
+        run,
+        report,
+        proxy,
+        ci_summary,
+        patch_command,
+        freeze_command,
+        schema_command,
+    ):
+        _add_json_flag(command_parser)
     return parser
 
 
@@ -637,14 +930,28 @@ def _format_evidence_assessment(payload: Mapping[str, Any]) -> str:
         requests = trace.get("requests", []) if isinstance(trace, Mapping) else []
         spans = trace.get("spans", []) if isinstance(trace, Mapping) else []
     findings = (
-        analysis.get("findings", [])
-        if isinstance(analysis, Mapping)
-        else payload.get("findings", [])
+        payload.get("findings", []) if runs else analysis.get("findings", [])
     )
     lines = [
         "RunEconomy import",
         f"Imported {len(requests)} inference request(s), {len(spans)} work span(s), and {len(findings)} finding(s)",
     ]
+    proxy_session = payload.get("proxy_session")
+    if isinstance(proxy_session, Mapping):
+        lines.append(f"Proxy workflows: {proxy_session['workflow_count']}.")
+        warnings = proxy_session.get("warnings", [])
+        for warning in warnings:
+            lines.append(f"WARNING: {warning}")
+        for limitation in proxy_session["limitations"]:
+            if limitation in warnings:
+                continue
+            lines.append(f"Capture limitation: {limitation}")
+        for finding in findings:
+            lines.append(f"Finding {finding['finding_id']} ({finding['rule_id']})")
+            if reason := finding.get("unsupported_reason"):
+                lines.append(f"  Replay input: {reason}")
+        if len(findings) > 1:
+            lines.append("Select a finding with experiment init --finding-id.")
     quality = assessment.get("evidence_quality")
     if isinstance(quality, Mapping):
         lines.extend(
@@ -727,6 +1034,56 @@ def _format_validation_report(report: Mapping[str, Any], path: Path) -> str:
     return "\n".join(lines)
 
 
+def _format_planning_examples(examples: Mapping[str, Any]) -> str:
+    small = examples["n40"]
+    bounds = small["best_case_all_pairs_agree"]["margin_0.05"]
+    historical = examples["n180"]
+    completion = historical["completion"]
+    failure = completion["scenario_failure_model"]
+    rate = failure["infrastructure_failure_rate"] + failure["application_failure_rate"]
+    historical_power = historical["scenario_power"]["margin_0.05"]
+    historical_assumptions = historical["scenario_power"]["assumptions"]
+    proof = examples["proof_3_scenario"]
+    methods = proof["minimum_pairs"]
+    power = proof["power_at_minimum"]["paired_score_exact"]["quality_gates"]
+    assumptions = proof["assumptions"]
+    contract = proof["contract"]
+    return "\n".join(
+        [
+            "RunEconomy planning examples",
+            "",
+            "40 pairs, all successful: at a 5 pp margin the one-sided lower bounds are "
+            f"{bounds['paired_exact']['one_sided_lower_bound'] * 100:.2f} pp (paired_exact) "
+            f"and {bounds['paired_score_exact']['one_sided_lower_bound'] * 100:.2f} pp "
+            "(paired_score_exact). Both miss the gate.",
+            "180 pairs: Proof 2 tolerated "
+            f"{completion['declared_tolerance_per_variant']} non-completions per variant. "
+            f"An illustrative {rate:.2%} failure rate gives a model-derived tolerance of "
+            f"{completion['model_derived_tolerance_per_variant']} at a 95% per-variant target.",
+            f"At {historical_assumptions['expected_success_rate']:.0%} expected success and "
+            f"{historical_assumptions['expected_discordance_rate']:.0%} discordance, "
+            "joint task-quality power is "
+            f"{historical_power['paired_exact']['quality_gates']:.1%} with paired_exact "
+            f"and {historical_power['paired_score_exact']['quality_gates']:.1%} with paired_score_exact.",
+            "Proof 2 remains invalid under its frozen contract.",
+            "",
+            "Proof 3 FP8 vs BF16 scenario: "
+            f"{assumptions['expected_success_rate']:.0%} expected success, "
+            f"{assumptions['expected_discordance_rate']:.0%} discordance, "
+            f"{assumptions['expected_difference'] * 100:g} pp expected success difference, "
+            f"absolute floor {contract['min_task_success_rate']:.0%}, "
+            f"non-inferiority margin {contract['max_task_success_regression'] * 100:g} pp.",
+            f"At {proof['target_power']:.0%} target task-quality power: "
+            f"{methods['paired_score_exact']} pairs with paired_score_exact "
+            f"({power:.1%} power), versus {methods['paired_exact']} with paired_exact.",
+            f"Model-derived tolerance at the score-method sample: "
+            f"{proof['completion']['model_derived_tolerance_per_variant']} per variant.",
+            f"Illustrative cost: ${proof['cost_estimate']['estimated_usd']:.2f} "
+            "at Proof 2's measured cost per attempt. Calibrate on the new workload before freezing.",
+        ]
+    )
+
+
 def _format_experiment_plan(plan: Mapping[str, Any]) -> str:
     sample = plan.get("sample")
     success = plan.get("task_success")
@@ -765,8 +1122,55 @@ def _format_experiment_plan(plan: Mapping[str, Any]) -> str:
                 f"{required_text} must clear a {success['minimum_lower_bound']:.2%} "
                 "exact lower-confidence-bound gate.",
                 "All observed successes still do not imply a true 100% success rate.",
+                f"Paired task-success method: {success['method_id']}.",
             ]
         )
+    sizing = plan.get("sample_size")
+    if sizing and sizing["status"] == "scenario_estimate":
+        gate = sizing["gate"]
+        minimum = sizing["minimum_pairs_for_target_power"]
+        minimum_text = (
+            f"{minimum} pairs" if minimum is not None else "no recommendation within the search limit"
+        )
+        lines.append(
+            f"Task-success power ({gate.replace('_', ' ')}): "
+            f"{sizing['planned_power'][gate]:.1%} at {sizing['planned_pairs']} pairs "
+            f"using {sizing['assumptions']['source']} assumptions. "
+            f"At {sizing['target_power']:.0%} target power: {minimum_text}."
+        )
+        all_gates = sizing["planned_power"]["all_gates_lower_bound"]
+        if all_gates is not None and len(sizing["planned_power"]["components"]) == 3:
+            lines.append(f"Modeled all-gates power lower bound: {all_gates:.1%}.")
+    elif sizing:
+        lines.append(f"Task-success power unknown: {sizing['reason']}.")
+    completion = plan.get("completion")
+    completion_contract = plan.get("completion_model")
+    model = completion_contract.get("expected_failure_model") if completion_contract else None
+    if completion:
+        tolerance = completion["maximum_failed_or_incomplete_attempts_per_variant"]
+        lines.append(f"Declared completion tolerance: {tolerance} per variant.")
+    if model and model["status"] == "derived":
+        lines.append(
+            f"Model-derived tolerance: {model['derived_max_noncompleted_attempts_per_variant']} "
+            f"per variant at {model['pass_probability_target_per_variant']:.0%} per-variant "
+            f"pass probability (min_completed_rate {model['derived_min_completed_rate']!r}, "
+            f"source: {model['source']})."
+        )
+    if completion_contract:
+        classification = completion_contract["common_mode_paired_failures"]
+        lines.append(f"Common-mode completion policy: {classification}.")
+    cost = plan.get("cost_estimate")
+    if cost and cost["status"] == "estimate":
+        lines.append(
+            f"Estimated cost at planned sample: ${cost['estimated_usd']:.2f} "
+            f"({cost['source']})."
+        )
+        if cost["estimated_usd_at_minimum_pairs"] is not None:
+            lines.append(
+                f"Estimated cost at recommended sample: ${cost['estimated_usd_at_minimum_pairs']:.2f}."
+            )
+    if plan.get("preregistration"):
+        lines.append("Preregistration draft: available under preregistration in the JSON output.")
     if isinstance(performance, Mapping):
         lines.extend(
             [
@@ -832,6 +1236,12 @@ def _next_action_for_error(args: argparse.Namespace) -> str:
             return "Import evidence first, then run `runeconomy experiment init --from-evidence evidence.json --output experiment/`."
         if subcommand == "validate":
             return "Correct the manifest field named above, then rerun `runeconomy experiment validate MANIFEST`."
+        if subcommand == "patch":
+            return "Correct the patch path or value named above; nothing was written. Check with `runeconomy experiment patch WORKSPACE --dry-run` before applying."
+        if subcommand == "freeze":
+            return "Resolve the validation or planning issues named above with `runeconomy experiment patch`, then rerun `runeconomy experiment freeze WORKSPACE`."
+        if subcommand == "plan":
+            return "Correct the workspace named above, then rerun `runeconomy experiment plan WORKSPACE`."
         if subcommand == "run":
             return "Preserve the checkpoint and partial result, run `runeconomy doctor` against the backend, then retry or resume only after correcting the cause."
         return "Verify the result JSON, then rerun `runeconomy experiment report`."
@@ -855,47 +1265,229 @@ def _error_stage(args: argparse.Namespace) -> str:
     return command
 
 
+_FREEZE_NEXT_ACTIONS = {
+    "runeconomy.freeze.drift": "Restore the locked files listed in error.details, or create a new workspace and freeze it; a frozen contract never changes.",
+    "runeconomy.freeze.required": "Run `runeconomy experiment freeze WORKSPACE`, then rerun with --require-frozen.",
+    "runeconomy.workspace.frozen": "Create a new workspace for the changed design; the frozen workspace and its preregistration record stay as they are.",
+}
+
+
 def _cli_error_payload(exc: Exception, args: argparse.Namespace) -> dict[str, Any]:
     stage = _error_stage(args)
     descriptor = classify_exception(exc, stage=stage)
+    next_action = (
+        "Recapture with a unique X-RunEconomy-Workflow-Id per concurrent workflow "
+        "or propagate a distinct W3C traceparent trace ID."
+        if descriptor.code == "runeconomy.evidence.workflow_ambiguous"
+        else _FREEZE_NEXT_ACTIONS.get(descriptor.code) or _next_action_for_error(args)
+    )
+    error: dict[str, Any] = {
+        "code": descriptor.code,
+        "category": descriptor.category,
+        "stage": stage,
+        "message": descriptor.summary,
+        "evidence_complete": False,
+        "next_action_code": descriptor.next_action_code,
+        "next_action": next_action,
+    }
+    # Only exceptions that opt in (patch and freeze) carry content-free details.
+    details = getattr(exc, "public_details", None)
+    if isinstance(details, Mapping):
+        error["details"] = dict(details)
     return {
         "schema_version": "0.1",
         "error_code_version": ERROR_CODE_VERSION,
         "status": "error",
-        "error": {
-            "code": descriptor.code,
-            "category": descriptor.category,
-            "stage": stage,
-            "message": descriptor.summary,
-            "evidence_complete": False,
-            "next_action_code": descriptor.next_action_code,
-            "next_action": _next_action_for_error(args),
-        },
+        "error": error,
     }
 
 
 def _format_cli_error(exc: Exception, args: argparse.Namespace) -> str:
     error = _cli_error_payload(exc, args)["error"]
+    detail = error.get("details", {}).get("reason")
     return "\n".join(
         [
             "RunEconomy · ERROR",
             f"Code: {error['code']}",
             f"What failed: {getattr(args, 'command', 'command')} did not complete.",
             f"Why: {error['message']}",
+            *([f"Detail: {detail}"] if detail else []),
             "Evidence: output may be absent or incomplete; do not treat a partial artifact as a verdict.",
             f"What to do next: {error['next_action']}",
         ]
     )
 
 
+def _run_capture_proxy(args: argparse.Namespace) -> int:
+    from .proxy import (
+        AttemptCaptureError,
+        CaptureProxy,
+        RedactionPolicy,
+        SessionRecorder,
+        UpstreamTarget,
+        load_redaction_hook,
+        run_agent_under_capture,
+    )
+    from .proxy.recorder import RecorderError
+
+    command = args.agent_command
+    if command and command[0] == "--":
+        command = command[1:]
+    try:
+        if args.attempt and (not command or args.port is not None):
+            raise ValueError("--attempt requires an agent command after -- and uses an available local port")
+        if not args.attempt and command:
+            raise ValueError("an agent command requires --attempt")
+        if args.port is not None and not 0 <= args.port <= 65535:
+            raise ValueError("--port must be between 0 and 65535")
+        target = UpstreamTarget.parse(args.upstream)
+        options = {
+            "token_resolution": args.token_resolution,
+            "payload_capture": args.payload_capture,
+            "redaction": RedactionPolicy(hooks=tuple(load_redaction_hook(spec) for spec in args.redact)),
+        }
+        if args.attempt:
+            code, capture = run_agent_under_capture(command, target, recorder_options=options)
+            if capture.reason:
+                print(f"RunEconomy proxy · {capture.reason}", file=sys.stderr)
+            exit_code = 128 - code if code < 0 else code
+            if _json_mode(args):
+                _emit(
+                    "proxy",
+                    {"mode": "attempt", "agent_exit_code": exit_code, "reason": capture.reason, "summary": None, "session": None, "gaps": None},
+                )
+            return exit_code
+
+        recorder = SessionRecorder(args.record, upstream=target, **options)
+        stop_requested = threading.Event()
+
+        def request_stop(_signum: int, _frame: object) -> None:
+            stop_requested.set()
+
+        signals = (signal.SIGINT, signal.SIGTERM)
+        previous = {sig: signal.signal(sig, request_stop) for sig in signals}
+        try:
+            proxy = CaptureProxy(target, recorder, port=8767 if args.port is None else args.port).start()
+            try:
+                # In --json mode stdout is reserved for the single result object.
+                notice = sys.stderr if _json_mode(args) else sys.stdout
+                print(f"RunEconomy proxy · OPENAI_BASE_URL={proxy.base_url}", file=notice, flush=True)
+                print(
+                    f"Recording to {args.record}. Press Ctrl-C to finish and flush the session.",
+                    file=notice,
+                    flush=True,
+                )
+                stop_requested.wait()
+            finally:
+                summary = proxy.stop()
+        finally:
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
+    except (AttemptCaptureError, RecorderError, OSError, ValueError, ImportError) as exc:
+        if _json_mode(args):
+            payload = _cli_error_payload(exc, args)
+            payload["error"]["details"] = {"reason": str(exc)}
+            print(cli_contracts.render("error", payload), file=sys.stderr)
+        else:
+            print(f"error: proxy: {exc}", file=sys.stderr)
+        return 2
+
+    gaps = not summary["in_flight_drained"] or any(
+        summary[key] for key in (
+            "observations_dropped", "observations_after_close",
+            "token_resolution_incomplete_at_close", "record_errors",
+        )
+    )
+    if _json_mode(args):
+        _emit(
+            "proxy",
+            {
+                "mode": "record",
+                "session": str(args.record),
+                "summary": dict(summary),
+                "gaps": bool(gaps),
+                "agent_exit_code": None,
+                "reason": None,
+            },
+        )
+        return 1 if gaps else 0
+    print(
+        f"Recorded {summary['exchanges_recorded']} exchange(s), "
+        f"{summary['token_resolution_exact']} exact prompt(s), "
+        f"{summary['token_resolution_unknown']} unknown token resolution(s)."
+    )
+    if not summary["in_flight_drained"] or any(
+        summary[key] for key in (
+            "observations_dropped", "observations_after_close",
+            "token_resolution_incomplete_at_close", "record_errors",
+        )
+    ):
+        print("Capture has gaps. Inspect the session close counters before using the evidence.", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
+        if args.command == "proxy":
+            return _run_capture_proxy(args)
+
+        if args.command == "mcp":
+            from .mcp_server import serve_stdio
+
+            return serve_stdio()
+
+        if args.command == "ci-summary":
+            from .ci import post_pull_request_comment, render_summary
+
+            summary = render_summary(_load_json_object(args.result), mode=args.mode, title=args.title)
+            if args.output:
+                _write_text(args.output, summary["markdown"])
+            comment = post_pull_request_comment(summary["markdown"]) if args.github_comment else None
+            if _json_mode(args):
+                _emit("ci-summary", {**summary, "comment": comment, "output": str(args.output) if args.output else None})
+            else:
+                print(summary["markdown"], end="")
+            return 0
+
+        if args.command == "schema":
+            if args.name:
+                try:
+                    schema = cli_contracts.load_schema(args.name)
+                except KeyError as exc:
+                    raise ExperimentValidationError(
+                        f"unknown CLI contract {args.name!r}; run `runeconomy schema` to list contracts"
+                    ) from exc
+                print(json.dumps(schema, indent=2, sort_keys=True))
+                return 0
+            listing = cli_contracts.list_contracts()
+            if _json_mode(args):
+                _emit("schema-list", listing)
+                return 0
+            print("RunEconomy --json output contracts")
+            for item in listing["contracts"]:
+                print(f"  {item['id']:<46} {', '.join(item['commands']) or '(all commands, on failure)'}")
+            for item in listing["exempt_commands"]:
+                print(f"  no --json: {item['command']} ({item['reason']})")
+            print("Print one schema with `runeconomy schema NAME`.")
+            return 0
+
         if args.command == "analyze":
-            trace = _load_trace(args.trace)
-            report = analyze_trace(trace)
+            raw = _load_json_object(args.trace) if args.trace.suffix == ".json" else None
+            if isinstance(raw, Mapping) and isinstance(raw.get("decision"), Mapping):
+                from .detectors import diagnose_result
+
+                # A RunEconomy result: run the result-level (server telemetry) detectors.
+                report = diagnose_result(raw)
+            else:
+                trace = Trace.from_dict(raw) if raw is not None else _load_trace(args.trace)
+                report = analyze_trace(
+                    trace,
+                    dependency_evidence=(raw or {}).get("dependency_evidence"),
+                )
             rendered = (
-                json.dumps(report, indent=2, sort_keys=True)
+                cli_contracts.render("analyze", report)
                 if args.format == "json"
                 else _format_human(report)
             )
@@ -906,6 +1498,15 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "import":
+            if args.idle_gap_ms is not None and (
+                not math.isfinite(args.idle_gap_ms) or args.idle_gap_ms <= 0
+            ):
+                raise TraceValidationError("--idle-gap-ms must be finite and positive")
+            identity = _load_json_object(args.proxy_identity) if args.proxy_identity else None
+            if identity is not None and any(
+                not isinstance(value, str) or not value for value in identity.values()
+            ):
+                raise TraceValidationError("--proxy-identity values must be nonempty strings")
             payload = import_evidence(
                 args.source,
                 source_type=args.type,
@@ -914,21 +1515,36 @@ def main(argv: list[str] | None = None) -> int:
                 backend=args.backend,
                 model=args.model,
                 block_size=args.block_size,
+                context=_load_json_object(args.replay_context) if args.replay_context else None,
+                identity=identity,
+                idle_gap_ms=args.idle_gap_ms,
             )
             _write_json(args.output, payload)
-            rendered = (
-                json.dumps(payload["capability_assessment"], indent=2, sort_keys=True)
-                if args.format == "json"
-                else _format_evidence_assessment(payload)
-            )
-            print(rendered)
-            if args.format == "human":
-                print(f"Evidence bundle: {args.output}")
-            if args.format == "human" and payload["capability_assessment"]["runnable_experiment"]:
-                print(
-                    "What to do next: run "
-                    f"`runeconomy experiment init --from-evidence {args.output} --output experiment/`."
+            next_command = None
+            if payload["capability_assessment"]["runnable_experiment"]:
+                findings = payload.get("analysis", payload).get("findings", [])
+                selection = (
+                    " --finding-id FINDING_ID"
+                    if "proxy_session" in payload and len(findings) > 1
+                    else ""
                 )
+                next_command = (
+                    f"runeconomy experiment init --from-evidence {args.output}{selection} --output experiment/"
+                )
+            if args.format == "json":
+                _emit(
+                    "import",
+                    {
+                        **payload["capability_assessment"],
+                        "evidence_bundle": str(args.output),
+                        "next_command": next_command,
+                    },
+                )
+                return 0
+            print(_format_evidence_assessment(payload))
+            print(f"Evidence bundle: {args.output}")
+            if next_command:
+                print(f"What to do next: run `{next_command}`.")
             return 0
 
         if args.command == "import-vllm-jsonl":
@@ -946,6 +1562,9 @@ def main(argv: list[str] | None = None) -> int:
                 success=args.success,
             )
             _write_json(args.output, payload)
+            if _json_mode(args):
+                _emit("convert", _convert_payload(args, payload))
+                return 0
             print(
                 f"RunEconomy import · wrote normalized trace with {len(payload['requests'])} requests "
                 f"to {args.output}"
@@ -962,6 +1581,9 @@ def main(argv: list[str] | None = None) -> int:
                 block_size=args.block_size,
             )
             _write_json(args.output, payload)
+            if _json_mode(args):
+                _emit("convert", _convert_payload(args, payload))
+                return 0
             print(
                 f"RunEconomy import · wrote normalized trace with {len(payload['requests'])} requests "
                 f"to {args.output}"
@@ -972,6 +1594,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "import-ledger-jsonl":
             payload = import_ledger_jsonl(args.export)
             _write_json(args.output, payload)
+            if _json_mode(args):
+                _emit("convert", _convert_payload(args, payload))
+                return 0
             print(
                 f"RunEconomy import · wrote {len(payload['findings'])} imported findings to {args.output}"
             )
@@ -984,6 +1609,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "import-prefixwise-jsonl":
             payload = import_ledger_jsonl(args.export, source_name="prefixwise")
             _write_json(args.output, payload)
+            if _json_mode(args):
+                _emit("convert", _convert_payload(args, payload))
+                return 0
             print(
                 f"RunEconomy import · wrote {len(payload['findings'])} Prefixwise finding(s) to {args.output}"
             )
@@ -1006,7 +1634,7 @@ def main(argv: list[str] | None = None) -> int:
             rendered = json.dumps(capture_result, indent=2)
             if args.output:
                 _write_text(args.output, rendered + "\n")
-            else:
+            elif not _json_mode(args):
                 print(rendered)
             if args.append_trace_jsonl:
                 record: dict[str, Any] = {
@@ -1017,6 +1645,15 @@ def main(argv: list[str] | None = None) -> int:
                 if args.request_id:
                     record["request_id"] = args.request_id
                 _append_jsonl(args.append_trace_jsonl, record)
+            if _json_mode(args):
+                _emit(
+                    "capture-vllm",
+                    {
+                        "capture": capture_result,
+                        "output": str(args.output) if args.output else None,
+                        "appended_to": str(args.append_trace_jsonl) if args.append_trace_jsonl else None,
+                    },
+                )
             return 0
 
         if args.command == "demo":
@@ -1024,6 +1661,18 @@ def main(argv: list[str] | None = None) -> int:
             rendered = render_demo_html(demo_result)
             _write_text(args.output, rendered)
             status = str(demo_result["decision"]["status"]).title()
+            if _json_mode(args):
+                opened = bool(args.open) and webbrowser.open(args.output.resolve().as_uri())
+                _emit(
+                    "demo",
+                    {
+                        "case": args.case,
+                        "verdict": demo_result["decision"]["status"],
+                        "report": str(args.output),
+                        "opened": opened,
+                    },
+                )
+                return 0
             print(
                 f"RunEconomy demo · Verdict: {status} · report written to {args.output}"
             )
@@ -1047,14 +1696,26 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "tutorial":
             if args.tutorial_command == "init":
                 created = materialize_tutorial(args.output, port=args.port)
+                serve_command = "runeconomy tutorial serve"
+                if args.port != DEFAULT_TUTORIAL_PORT:
+                    serve_command += f" --port {args.port}"
+                if _json_mode(args):
+                    _emit(
+                        "tutorial-init",
+                        {
+                            "directory": str(args.output),
+                            "tutorial_schema_version": "0.1",
+                            "files": sorted(path.name for path in created),
+                            "port": args.port,
+                            "next_command": serve_command,
+                        },
+                    )
+                    return 0
                 print(
                     "RunEconomy tutorial · Created deterministic local tutorial · "
                     f"{args.output}"
                 )
                 print(f"Tutorial schema: 0.1 · Files: {len(created)}")
-                serve_command = "runeconomy tutorial serve"
-                if args.port != DEFAULT_TUTORIAL_PORT:
-                    serve_command += f" --port {args.port}"
                 print(f"What to do next: run `{serve_command}` in another terminal.")
                 return 0
             serve_tutorial(port=args.port)
@@ -1068,7 +1729,7 @@ def main(argv: list[str] | None = None) -> int:
                 validation_report=args.validation_report,
             )
             if args.format == "json":
-                print(json.dumps(summary, indent=2, sort_keys=True))
+                _emit("support-bundle", {**summary, "output": str(args.output)})
             else:
                 print(f"RunEconomy support bundle · Created · {args.output}")
                 print("Included:")
@@ -1095,22 +1756,29 @@ def main(argv: list[str] | None = None) -> int:
                             "on_startup_retry": _startup_retry_notice,
                         }
                     )
-                capabilities = discover_vllm_capabilities(
-                    args.base_url, **doctor_options
-                ).to_dict()
+                if args.backend == "vllm":
+                    capabilities = discover_vllm_capabilities(
+                        args.base_url, **doctor_options
+                    ).to_dict()
+                else:
+                    capabilities = create_adapter(
+                        args.backend, args.base_url, **doctor_options
+                    ).discover()
             except (BackendProbeError, ExperimentValidationError) as exc:
                 payload = _doctor_error_payload(exc)
                 rendered = (
-                    json.dumps(payload, indent=2, sort_keys=True)
+                    cli_contracts.render("error", payload)
                     if args.format == "json"
                     else _format_doctor_error(payload)
                 )
                 print(rendered, file=sys.stderr)
                 return 2
             print(
-                json.dumps(capabilities, indent=2, sort_keys=True)
+                cli_contracts.render("doctor", capabilities)
                 if args.format == "json"
                 else _format_capabilities(args.base_url, capabilities)
+                if args.backend == "vllm"
+                else format_adapter_report(capabilities)
             )
             return 0 if capabilities["readiness"]["status"] == "ready" else 1
 
@@ -1149,6 +1817,19 @@ def main(argv: list[str] | None = None) -> int:
                 resume=args.resume,
             )
             _write_json(args.output, result)
+            verified = result["decision"]["status"] == "verified"
+            if _json_mode(args):
+                _emit(
+                    "compare",
+                    {
+                        "verdict": result["decision"]["status"],
+                        "result": str(args.output),
+                        "artifacts": str(artifacts_dir),
+                        "require_verified": bool(args.require_verified),
+                        "verified": verified,
+                    },
+                )
+                return 3 if args.require_verified and not verified else 0
             print(
                 f"RunEconomy compare · Verdict: {str(result['decision']['status']).title()} · wrote "
                 f"to {args.output}"
@@ -1178,6 +1859,15 @@ def main(argv: list[str] | None = None) -> int:
                     f"cannot render experiment report: {exc}"
                 ) from exc
             _write_text(args.output, rendered)
+            if _json_mode(args):
+                if args.open and report_format != "html":
+                    raise ExperimentValidationError("--open requires an HTML report")
+                opened = bool(args.open) and webbrowser.open(args.output.resolve().as_uri())
+                _emit(
+                    "experiment-report",
+                    {"report": str(args.output), "format": report_format, "opened": opened},
+                )
+                return 0
             print(f"RunEconomy report · wrote experiment report to {args.output}")
             print(
                 "What to do next: read the verdict and quality gates before "
@@ -1231,7 +1921,17 @@ def main(argv: list[str] | None = None) -> int:
                     latency_semantics=args.latency_semantics,
                     max_latency_regression_ms=args.max_latency_regression_ms,
                     cost_ceiling_usd=args.cost_ceiling_usd,
+                    identity_policy=(
+                        None
+                        if args.min_identity_grade is None
+                        else {
+                            "schema_version": "0.1",
+                            "minimum_grade": args.min_identity_grade.replace("-", "_"),
+                        }
+                    ),
                 )
+                if _init_json(args, descriptor):
+                    return 0
                 print(f"RunEconomy experiment init · Runnable agent-process workspace · {args.output}")
                 print(f"What to do next: {descriptor['next_command']}")
                 return 0
@@ -1248,6 +1948,8 @@ def main(argv: list[str] | None = None) -> int:
                     output=args.output,
                     finding_id=args.finding_id,
                 )
+                if _init_json(args, descriptor):
+                    return 0
                 print(
                     "RunEconomy experiment init · "
                     f"{str(descriptor['generation_status']).title()} workspace · {args.output}"
@@ -1261,6 +1963,17 @@ def main(argv: list[str] | None = None) -> int:
                 artifact = initialize_experiment(finding)
                 _write_json(args.output, artifact)
                 status = artifact.get("generation_status", "runnable")
+                if _init_json(
+                    args,
+                    {
+                        "mode": "static_request",
+                        "generation_status": status,
+                        "unresolved_fields": artifact.get("unresolved_fields", []),
+                        "next_command": f"runeconomy experiment validate {args.output}",
+                    },
+                    output_kind="artifact",
+                ):
+                    return 0
                 print(f"RunEconomy experiment init · {str(status).title()} artifact · {args.output}")
                 print(f"What to do next: run `runeconomy experiment validate {args.output}`.")
                 return 0
@@ -1270,6 +1983,8 @@ def main(argv: list[str] | None = None) -> int:
                 output=args.output,
                 finding_id=args.finding_id,
             )
+            if _init_json(args, descriptor):
+                return 0
             print(
                 "RunEconomy experiment init · "
                 f"{str(descriptor['generation_status']).title()} workspace · {args.output}"
@@ -1288,22 +2003,98 @@ def main(argv: list[str] | None = None) -> int:
                 manifest = resolve_static_manifest(args.manifest)
                 _require_trusted_evaluators(manifest, args.allow_exec_evaluators)
             print(
-                json.dumps(report, indent=2, sort_keys=True)
+                cli_contracts.render(
+                    "experiment-validate", {**report, "freeze": _freeze_state(args.manifest)}
+                )
                 if args.format == "json"
                 else _format_validation_report(report, args.manifest)
             )
             return 0 if report["status"] == "runnable" else 2 if report["status"] == "invalid" else 1
 
         if args.experiment_command == "plan":
+            if args.examples:
+                examples = worked_examples()
+                print(
+                    cli_contracts.render("experiment-plan-examples", examples)
+                    if args.format == "json"
+                    else _format_planning_examples(examples)
+                )
+                return 0
             planning = plan_experiment(args.manifest)
             print(
-                json.dumps(planning, indent=2, sort_keys=True)
+                cli_contracts.render("experiment-plan", planning)
                 if args.format == "json"
                 else _format_experiment_plan(planning)
             )
             return 2 if planning["state"] == "blocked" else 1 if planning["state"] == "needs_design_input" else 0
 
+        if args.experiment_command == "patch":
+            operations = load_patch_file(args.patch_file) if args.patch_file else []
+            operations.extend(parse_assignment(item) for item in args.patch_set)
+            operations.extend(parse_assignment(item, raw_string=True) for item in args.patch_set_string)
+            operations.extend(PatchOperation("unset", path) for path in args.patch_unset)
+            outcome = patch_workspace(
+                args.workspace,
+                operations,
+                reason=args.reason,
+                repin=args.repin,
+                dry_run=args.dry_run,
+            )
+            if _json_mode(args):
+                _emit("experiment-patch", outcome)
+                return 0
+            label = {"patched": "Patched", "unchanged": "Unchanged", "dry_run": "Dry run (nothing written)"}
+            print(f"RunEconomy experiment patch · {label[outcome['status']]} · {args.workspace}")
+            for change in outcome["operations"]:
+                origin = " (derived digest)" if change["source"] == "derived_digest" else ""
+                print(f"  {change['op']} {change['path']}{origin}")
+            if outcome["untracked_change_before"]:
+                print(
+                    "WARNING: manifest.json changed outside `experiment patch` since the last "
+                    "provenance entry; that edit is recorded as untracked.",
+                    file=sys.stderr,
+                )
+            if outcome["written"]:
+                print(f"Provenance: {outcome['provenance']['file']} entry {outcome['provenance']['entries']}")
+            print(f"What to do next: run `{outcome['next_command']}`.")
+            return 0
+
+        if args.experiment_command == "freeze":
+            outcome = freeze_workspace(
+                args.workspace,
+                lock_files=args.lock_files,
+                allow_incomplete_design=args.allow_incomplete_design,
+                reason=args.reason,
+            )
+            if _json_mode(args):
+                _emit("experiment-freeze", outcome)
+                return 0
+            headline = "Frozen" if outcome["status"] == "frozen" else "Already frozen (locks intact)"
+            print(f"RunEconomy experiment freeze · {headline} · {args.workspace}")
+            print(f"Preregistration record: {outcome['record']} ({outcome['record_sha256']})")
+            print(f"Design completeness: {outcome['design_completeness']} (planner: {outcome['planner_state']})")
+            print(f"Locked: manifest, gates, execution design, {len(outcome['locks']['inputs'])} input file(s), "
+                  f"{len(outcome['locks']['additional_files'])} additional file(s).")
+            for item in outcome["unlocked_inputs"]:
+                print(f"Not digest-locked: {item['field']}: {item['reason']}")
+            if outcome["unknown_fields"]:
+                print("Unknown preregistration fields: " + ", ".join(outcome["unknown_fields"]))
+            print("Patches are now refused; any change needs a new workspace.")
+            print(f"What to do next: run `{outcome['next_command']}`.")
+            return 0
+
+        freeze_state = require_intact_freeze(args.manifest, require_frozen=args.require_frozen)
         result_path, artifacts_path = _result_output_path(args.output)
+        preregistration = (
+            {
+                "status": freeze_state["status"],
+                "record_sha256": freeze_state["record_sha256"],
+                "frozen_at": freeze_state.get("frozen_at"),
+                "design_completeness": freeze_state.get("design_completeness"),
+            }
+            if freeze_state["status"] == "intact"
+            else None
+        )
         if args.manifest.is_dir():
             descriptor, _ = load_workspace(args.manifest)
             if descriptor.get("mode") == "agent_process":
@@ -1315,12 +2106,17 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 result = run_comparison(
                     **run_args,
+                    observers=_metrics_observers(args),
                     output_path=result_path,
                     artifacts_dir=artifacts_path,
                     workdir=Path.cwd(),
                     resume=args.resume,
                 )
+                if preregistration is not None:
+                    result["preregistration"] = preregistration
                 _write_json(result_path, result)
+                if _json_mode(args):
+                    return _run_json(args, "agent_process", result, result_path, artifacts_path, None, freeze_state)
                 print(
                     "RunEconomy experiment · Agent process · Verdict: "
                     f"{str(result['decision']['status']).title()} · wrote {result_path}"
@@ -1336,14 +2132,24 @@ def main(argv: list[str] | None = None) -> int:
         manifest = resolve_static_manifest(args.manifest)
         _require_trusted_evaluators(manifest, args.allow_exec_evaluators)
 
-        client = VLLMClient(
+        client = create_adapter(
+            manifest.backend.kind,
             manifest.backend.base_url,
             api_key=_api_key(manifest.backend.api_key_env),
             timeout_seconds=args.timeout,
             startup_retry_seconds=args.startup_timeout,
             api_dialect=manifest.backend.api_dialect,
             on_startup_retry=_startup_retry_notice,
+            **(
+                {
+                    "provider": manifest.backend.provider,
+                    "undisclosed_fields": manifest.backend.undisclosed_identity,
+                }
+                if manifest.backend.kind == "openai_compat"
+                else {}
+            ),
         )
+        observers = _metrics_observers(args, client)
         checkpoint = args.checkpoint or result_path.with_name(
             result_path.name + ".trials.jsonl"
         )
@@ -1356,8 +2162,16 @@ def main(argv: list[str] | None = None) -> int:
             client,
             checkpoint_path=checkpoint,
             resume=args.resume,
+            attempt_economics=(
+                None if manifest.cost_model is None else parse_cost_model(manifest.cost_model)
+            ),
+            observers=observers,
         )
+        if preregistration is not None:
+            result["preregistration"] = preregistration
         _write_json(result_path, result)
+        if _json_mode(args):
+            return _run_json(args, "static_request", result, result_path, None, checkpoint, freeze_state)
         print(
             f"RunEconomy experiment · Verdict: {str(result['decision']['status']).title()} · "
             f"wrote result to {result_path}"
@@ -1384,8 +2198,8 @@ def main(argv: list[str] | None = None) -> int:
         EvaluatorInfrastructureError,
     ) as exc:
         rendered = (
-            json.dumps(_cli_error_payload(exc, args), indent=2, sort_keys=True)
-            if getattr(args, "format", None) == "json"
+            cli_contracts.render("error", _cli_error_payload(exc, args))
+            if _json_mode(args)
             else _format_cli_error(exc, args)
         )
         print(rendered, file=sys.stderr)

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunEconomy verification card 0.1",
+  "type": "object",
+  "required": ["schema_version", "id", "kind", "title", "preregistered", "verdict", "record"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "id": {"type": "string", "pattern": "^(proof|study)-[A-Za-z0-9_.-]+$"},
+    "kind": {"enum": ["proof", "study"]},
+    "title": {"type": "string", "minLength": 1},
+    "preregistered": {"type": "boolean"},
+    "verdict": {"enum": ["verified", "regression", "inconclusive", "invalid", "descriptive"]},
+    "record": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  },
+  "allOf": [
+    {"if": {"properties": {"kind": {"const": "study"}}}, "then": {"properties": {"verdict": {"const": "descriptive"}, "preregistered": {"const": false}}}},
+    {"if": {"properties": {"kind": {"const": "proof"}}}, "then": {"properties": {"verdict": {"not": {"const": "descriptive"}}}, "required": ["intervention", "decisive_gate", "claim_boundary"]}}
+  ]
+}

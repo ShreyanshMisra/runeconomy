@@ -91,6 +91,32 @@ The experiment verifies only the declared workload, evaluator, identities,
 hardware, execution order, and gates. It does not establish universal model
 quality, production-concurrency behavior, or superiority on failed tasks.
 
+### Hosted API versus self-hosted vLLM
+
+The same target covers a hosted → self-hosted migration. The
+[hosted-versus-self-hosted example](../examples/hosted_vs_self_hosted/README.md)
+runs one agent against a hosted OpenAI-compatible API as the baseline and a
+self-hosted vLLM model as the candidate. The hosted arm records only what a
+hosted API exposes. Exact prompt tokens, server TTFT and queue time are
+omitted, so they stay `null` rather than being estimated.
+
+Hosted identity is graded `provider_declared`. Identity fields the provider
+doesn't publish are `null` and declared undisclosed on each span, never filled
+with placeholder strings. The workspace preregisters identity policy `0.1`:
+
+```bash
+runeconomy experiment init --mode agent-process ... \
+  --optimization-target engine-change-latency \
+  --min-identity-grade provider-declared
+```
+
+The decision then records `identity_assurance`, with each arm's grade, claim
+scope `observed_service_window`, the claim limits and a privacy-safe count of
+distinct provider fingerprints. A missing self-hosted identity value, or a
+hosted model snapshot that changes during the run, still makes the verdict
+`invalid`. Fingerprint changes never do. See
+[serving backends and identity grades](backends.md#identity-grades).
+
 ## Dataset
 
 The dataset is either a JSON array or an object with a `tasks` array. Every
@@ -157,6 +183,39 @@ an application failure, then the original exception is re-raised. A normal
 context exit without a terminal method records an integration failure and
 raises `AttemptLifecycleError`. Call `completed()` only after output and trace
 writing have succeeded.
+
+### Explicit workflow DAGs without OpenTelemetry
+
+Critical-path analysis needs explicit `depends_on` edges. The
+`runeconomy.track_workflow` and `runeconomy.step` helpers write that trace to
+`RUNECONOMY_TRACE_PATH` with no OpenTelemetry setup:
+
+```python
+import runeconomy
+from runeconomy.agent import Attempt
+
+with Attempt.from_environment() as attempt:
+    @runeconomy.track_workflow
+    def solve() -> str:
+        with runeconomy.step("plan") as plan:
+            reply = call_model(...)
+            plan.record_llm(model=reply.model, input_tokens=reply.usage.prompt_tokens,
+                            output_tokens=reply.usage.completion_tokens)
+        with runeconomy.step("search", kind="TOOL", depends_on=[plan]) as search:
+            hits = search_repository(...)
+        with runeconomy.step("answer", depends_on=[plan, search]) as answer:
+            ...
+        return text
+
+    attempt.output_path.write_text(solve())
+    attempt.completed()
+```
+
+A step without `depends_on` is a root. An edge may name only a step that has
+already started, so nothing is inferred from timing. Token counts are recorded
+only when you pass them, and omitted values stay unknown. The trace is written
+even when the workflow raises, keeping the evidence of the steps that ran.
+`runeconomy.depends_on(a, b)` normalizes steps or span IDs into an edge list.
 
 ### Attempt status protocol
 
@@ -279,7 +338,7 @@ conservative exact bound. This is the failure mode observed in the frozen
 
 Order is seeded and either randomized or alternating. Pairing uses
 `(task_id, repetition)`. Task success uses absolute Clopper-Pearson intervals
-and the existing conservative paired exact non-inferiority bound. The default
+and defaults to the conservative `paired_exact` non-inferiority bound. The default
 absolute-success gate requires the lower confidence bound to reach 80%. Change
 it only as a predeclared property of the workload.
 
@@ -292,6 +351,35 @@ The planner also translates the completion-rate threshold into an exact
 integer failure tolerance. A 100% threshold reports that zero failed or
 incomplete attempts are tolerated. Lower thresholds report the exact minimum
 completed count and maximum failure count for the planned sample.
+
+### Preregistered completion policy
+
+For a new agent-process contract, set the manifest `schema_version` to
+`"0.3"`. The following acceptance fields opt in to both prospective
+semantics. Merge these fields into the existing `acceptance` object.
+
+```json
+{
+  "task_success_method": "paired_score_exact",
+  "completion_policy": {
+    "schema_version": "0.1",
+    "common_mode_paired_failures": "task_outcome"
+  }
+}
+```
+
+`task_outcome` applies when both arms fail the same task and repetition with
+the same declared `application_failure` or `model_output_failure` status and
+matching provenance component, stage and code. The pair still counts as
+two failed task outcomes and is excluded from successful-pair latency.
+It counts as complete for the completion gate. Timeouts, infrastructure
+failures and unmatched failures still count against completion.
+
+The default classification is `variant_non_completion`. The decision
+artifact records the selected policy and counts in
+`common_mode_paired_failures`. Freeze the policy alongside the methods and
+gates before execution. Proof 2 retains the semantics of its original
+contract. [Plan sample size and completion tolerance](experiment-format.md).
 
 Verdicts are:
 

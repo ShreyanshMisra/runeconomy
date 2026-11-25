@@ -9,7 +9,7 @@ compatible backend.
 RunEconomy requires Python 3.11 or newer.
 
 ```bash
-python -m pip install runeconomy==0.2.2
+python -m pip install runeconomy==0.3.0
 runeconomy --version
 ```
 
@@ -35,7 +35,7 @@ prompt tokens, prompt segments, workflow dependencies, and experiment context.
 Ordinary OpenTelemetry or OpenInference evidence may support diagnosis while
 still producing an unresolved workspace.
 
-To inspect the bundled frozen rejection proof, run:
+To inspect the bundled frozen proof with an `invalid` verdict, run:
 
 ```bash
 runeconomy demo --open
@@ -68,6 +68,9 @@ artifact can support:
 ```bash
 runeconomy import otlp.json --output evidence.json
 ```
+
+To collect new evidence from an OpenAI-compatible agent, use the local
+[capture proxy](proxy.md) and import its JSONL session.
 
 Use `--type` only when detection is ambiguous. Supported inputs include
 OpenInference or OpenTelemetry OTLP JSON, Phoenix JSON traces, exact-token vLLM

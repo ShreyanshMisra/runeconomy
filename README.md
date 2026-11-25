@@ -1,8 +1,11 @@
 # RunEconomy
 
+<!-- mcp-name: io.github.ShreyanshMisra/runeconomy -->
+
 RunEconomy identifies inference waste on the critical path of an agent workflow
 and tests whether a change improves successful-task performance. It is an alpha
-CLI for engineers running multi-step agents on self-hosted vLLM.
+CLI for engineers running multi-step agents on self-hosted vLLM or SGLang, or
+comparing a hosted OpenAI-compatible API against self-hosted serving.
 
 RunEconomy sits between agent observability and inference infrastructure:
 
@@ -14,7 +17,7 @@ It reports `verified`, `regression`, `inconclusive`, or `invalid`. Favorable
 cache, token, TTFT, or latency measurements are not called improvements unless
 the declared task-quality and performance gates pass.
 
-## The flagship result is an honest rejection
+## The flagship result is an honest invalid verdict
 
 In the frozen 40-task proof, the candidate gained about 105 cached tokens,
 reduced server TTFT by about 9.08 ms, and reduced workflow latency by about
@@ -23,8 +26,8 @@ returned **`invalid`**: the baseline task-success lower bound was 79.61%, below
 the frozen 80% gate, and paired success non-inferiority also failed.
 
 All 80 attempts completed with valid traces. The quality gate, not
-infrastructure, rejected the apparent speedup. The workload is consumed and
-cannot be reused or retuned as fresh held-out evidence.
+infrastructure, made the apparent speedup ineligible for verification. The
+workload is consumed and cannot be reused or retuned as fresh held-out evidence.
 
 [Read the complete public proof](https://runeconomy.vercel.app/proof/) ·
 [Inspect the aggregate evidence](https://github.com/ShreyanshMisra/runeconomy/blob/main/src/runeconomy/data/public-proof-rejection.json)
@@ -35,7 +38,7 @@ RunEconomy requires Python 3.11 or newer. The tutorial is CPU-only and makes no
 network or GPU calls.
 
 ```bash
-python -m pip install runeconomy==0.2.2
+python -m pip install runeconomy==0.3.0
 runeconomy tutorial init ./runeconomy-tutorial
 runeconomy tutorial serve
 ```
@@ -68,7 +71,7 @@ RunEconomy does not upload the archive or copy raw traces, prompts, results,
 credentials, endpoints, or arbitrary workspace files. Inspect every file before
 sharing it.
 
-Read the [privacy and support-bundle contract](docs/privacy.md) before attaching
+Read the [privacy and support-bundle contract](https://github.com/ShreyanshMisra/runeconomy/blob/main/docs/privacy.md) before attaching
 an archive to an issue.
 
 [Follow the complete quickstart](https://runeconomy.vercel.app/start/) ·
@@ -117,12 +120,21 @@ npx skills add ShreyanshMisra/runeconomy --skill runeconomy --all
 
 [Install the skill for Codex, Claude Code, or adapt it for Cursor](https://runeconomy.vercel.app/agents/)
 
+Agents and CI can also drive the whole workflow without editing JSON:
+
+- `runeconomy mcp` serves typed MCP tools, and runs execute only after an
+  approved estimate ([MCP server](https://github.com/ShreyanshMisra/runeconomy/blob/main/docs/mcp.md)).
+- `experiment patch` and `experiment freeze` change and lock a workspace.
+- Every command's `--json` output follows a versioned contract
+  ([JSON contracts](https://github.com/ShreyanshMisra/runeconomy/blob/main/docs/json-contracts-patch-freeze.md)).
+- The GitHub Action posts a verdict table on pull requests
+  ([GitHub Action](https://github.com/ShreyanshMisra/runeconomy/blob/main/docs/github-action.md)).
+
 ## Alpha boundaries
 
 RunEconomy is ready for narrow private testing, not unattended production use.
-It does not provide a hosted dashboard, managed OTLP collector,
-framework-specific SDK, automatic resume, SGLang runner, or broad diagnosis
-catalog. Raw prompts, traces, evaluator data, and experiment artifacts remain
+It does not provide a hosted dashboard, a managed OTLP collector, or a
+framework-specific SDK. Raw prompts, traces, evaluator data, and experiment artifacts remain
 the operator's responsibility.
 
 [Alpha and migration notes](https://runeconomy.vercel.app/alpha/) ·

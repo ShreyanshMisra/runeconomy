@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.ShreyanshMisra/runeconomy",
+  "title": "RunEconomy",
+  "description": "Verify whether a serving change makes agent workflows cheaper or faster while preserving quality.",
+  "repository": {
+    "url": "https://github.com/ShreyanshMisra/runeconomy",
+    "source": "github"
+  },
+  "version": "0.3.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "runeconomy",
+      "version": "0.3.0",
+      "runtimeHint": "uvx",
+      "transport": {"type": "stdio"},
+      "packageArguments": [{"type": "positional", "value": "mcp"}]
+    }
+  ]
+}

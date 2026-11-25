@@ -38,6 +38,14 @@ const referencePages = [
     kind: "guide",
   },
   {
+    route: "proxy",
+    source: "docs/proxy.md",
+    title: "Capture inference through the local proxy",
+    description: "Record OpenAI-compatible exchanges and prepare a controlled replay.",
+    active: "start",
+    kind: "guide",
+  },
+  {
     route: "cli",
     source: "docs/cli-reference.md",
     title: "CLI reference",
@@ -122,8 +130,8 @@ const referencePages = [
 const homePage = {
   route: "",
   source: "site/content/index.md",
-  title: "Verify your inference optimizations",
-  description: "RunEconomy connects inference evidence to complete workflow latency and task success.",
+  title: "Verify serving changes without breaking your agent",
+  description: "Verify that a serving change or model migration makes your agent cheaper or faster without breaking it.",
   active: "home",
   kind: "home",
 };
@@ -156,7 +164,18 @@ const articlePages = resolvedArticles.map((article) => ({
   kind: article.primaryPage ? "primary" : "article",
 }));
 
-const pages = [homePage, ...referencePages, ...articlePages];
+// The scoreboard is built from docs/scoreboard.md but stays unpublished until
+// the owner sets RUNECONOMY_PUBLISH_SCOREBOARD=1 for the production build.
+const scoreboardPages = process.env.RUNECONOMY_PUBLISH_SCOREBOARD === "1" ? [{
+  route: "scoreboard",
+  source: "docs/scoreboard.md",
+  title: "Verified decision cards",
+  description: "Frozen RunEconomy decision records, one card each, with verdicts, gates and claim boundaries.",
+  active: "start",
+  kind: "reference",
+}] : [];
+
+const pages = [homePage, ...referencePages, ...scoreboardPages, ...articlePages];
 const routeBySource = new Map(pages.map((page) => [page.source.replace(/^docs\//, ""), `/${page.route}/`]));
 routeBySource.set("public-proof.md", "/proof/");
 routeBySource.set("doctor.md", "/doctor/");
@@ -283,7 +302,7 @@ function installStrip() {
   return `<section class="install-section" aria-labelledby="install-heading">
     <div class="install-copy">
       <p class="eyebrow" id="install-heading">Install</p>
-      <p>RunEconomy ${currentVersion} installs by default. The package remains alpha-stage software for controlled experiments and private testing.</p>
+      <p>Install RunEconomy ${currentVersion}, then inspect the bundled report or start a controlled experiment.</p>
     </div>
     <div class="install-options">
       <div class="install-command">
@@ -367,13 +386,19 @@ function layout(page, content) {
   const isHome = page.kind === "home";
   const bodyClass = isHome ? "home-page" : page.kind === "article" ? "article-page" : "documentation-page";
   const extras = isHome
-    ? `${installStrip()}${articleRail()}${homeFooter()}`
+    ? `${articleRail()}${homeFooter()}`
     : page.route === "agents"
       ? agentActions()
       : "";
-  const renderedContent = page.thumbnail
+  let renderedContent = page.thumbnail
     ? content.replace("</h1>", `</h1>${articleLead(page)}`)
     : content;
+  if (isHome) {
+    if (!renderedContent.includes("<!-- INSTALL -->")) {
+      throw new Error("home page is missing its install marker");
+    }
+    renderedContent = renderedContent.replace("<!-- INSTALL -->", installStrip());
+  }
   return `<!doctype html>
 <html lang="en">
 ${head(page)}
@@ -416,6 +441,8 @@ const skillReferences = ["evidence-imports.md", "experiment-contract.md", "verdi
 const fullSkill = [skillSource, ...await Promise.all(skillReferences.map(async (name) => `\n\n${await readFile(join(skillDirectory, "references", name), "utf8")}`))].join("");
 await writeFile(join(output, "llms-full.txt"), fullSkill);
 await cp(join(siteDir, "assets", "thumbnails"), join(output, "assets", "thumbnails"), { recursive: true });
+await mkdir(join(output, "demo"), { recursive: true });
+await cp(join(siteDir, "static", "demo", "index.html"), join(output, "demo", "index.html"));
 
 for (const page of pages) {
   const markdown = await readFile(join(root, page.source), "utf8");

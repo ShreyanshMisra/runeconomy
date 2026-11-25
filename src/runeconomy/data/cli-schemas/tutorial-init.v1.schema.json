@@ -1,0 +1,39 @@
+{
+  "$id": "runeconomy.cli.tutorial-init.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Materialized deterministic tutorial directory.",
+  "properties": {
+    "directory": {
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "next_command": {
+      "type": "string"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.tutorial-init.v1"
+    },
+    "port": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "tutorial_schema_version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "directory",
+    "files",
+    "next_command",
+    "output_schema",
+    "port",
+    "tutorial_schema_version"
+  ],
+  "title": "runeconomy tutorial-init --json output, version 1",
+  "type": "object"
+}

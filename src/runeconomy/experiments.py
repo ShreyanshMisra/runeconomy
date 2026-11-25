@@ -10,15 +10,66 @@ import random
 import re
 import secrets
 import statistics
+import threading
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
+from .binomial import (
+    binomial_cdf as _binomial_cdf,  # noqa: F401 - historical private export
+    binomial_lower_bound as _one_sided_binomial_lower,
+    binomial_upper_bound as _one_sided_binomial_upper,
+    clopper_pearson_interval as _clopper_pearson_interval,
+    inverse_binomial_cdf as _inverse_binomial_cdf,  # noqa: F401 - compatibility
+)
 from .cache import longest_common_prefix
 from .decision_artifacts import enrich_decision_artifact
+from .adapters import BACKEND_KINDS, PROFILES as BACKEND_PROFILES
+from .identity import (
+    IdentityPolicyError,
+    assess_request_identity,
+    identity_assurance_record,
+    is_placeholder as is_placeholder_identity,
+    parse_identity_policy,
+    variant_identity_summary,
+)
 from .evaluators import EvaluatorError, evaluate_output, validate_evaluator_spec
+from .execution import (
+    CONCURRENT_ARRIVAL_PATTERNS,
+    ROLE_FILLER,
+    ROLE_WARMUP,
+    SEQUENTIAL,
+    SHARED,
+    ArrivalSchedule,
+    JsonlArtifactStore,
+    LoadRunner,
+    LoadSpec,
+    LoadSpecError,
+    ScheduledTrial,
+    build_arrival_schedule,
+    verify_schedule_pin,
+)
+from .cost_model import CostModelError, parse_cost_model
+from .metric_gates import (
+    MetricGate,
+    MetricGateError,
+    Observation,
+    economics_of,
+    evaluate_metric_gates,
+    load_integrity_checks,
+    merge_load_and_metric_checks,
+    parse_metric_gates,
+    tpot_ms,
+)
+from .paired_inference import (
+    PAIRED_EXACT,
+    PAIRED_SCORE_EXACT,
+    POINT_ESTIMATE,
+    outcome_counts,
+    paired_score_exact_statistics,
+)
 from .vllm import CapturedResponse
 
 
@@ -63,73 +114,33 @@ class BackendConfig:
     block_size: int
     engine_config: dict[str, Any]
     api_dialect: str = "responses"
+    # Adapter backends (manifest schema 0.3+). Defaults keep every vLLM
+    # manifest, fingerprint and result exactly as before.
+    kind: str = "vllm"
+    provider: str | None = None
+    undisclosed_identity: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
-class ExecutionConfig:
-    repetitions: int
-    warmup_repetitions: int
-    order: str
-    seed: int
-    cache_treatment: str
-    arrival_pattern: str
-    reset_external: bool
-    require_evaluation: bool
-    cases_form_workflow: bool
-    cache_isolation: str = "shared"
+# Static identity fields an openai_compat manifest may declare undisclosed.
+STATIC_UNDISCLOSABLE_FIELDS = frozenset(
+    {
+        "model_revision",
+        "tokenizer_revision",
+        "chat_template_digest",
+        "backend_version",
+        "hardware",
+        "engine_config",
+    }
+)
 
 
-@dataclass(frozen=True)
-class AcceptanceConfig:
-    primary_metric: str
-    optimization_target: str
-    max_task_success_regression: float
-    min_completed_rate: float
-    min_cached_token_gain: float
-    min_input_token_reduction: float
-    require_latency_improvement: bool
-    min_task_success_rate: float = 0.0
-    task_success_method: str = "paired_exact"
-    require_environment_identity: bool = False
-
-
-@dataclass(frozen=True)
-class ExperimentCase:
-    case_id: str
-    baseline: dict[str, Any]
-    candidate: dict[str, Any]
-    evaluator: dict[str, Any] | None
-    baseline_transform: dict[str, Any] | None
-    candidate_transform: dict[str, Any] | None
-    workflow_id: str | None = None
-
-
-@dataclass(frozen=True)
-class ExperimentManifest:
-    schema_version: str
-    experiment_id: str
-    backend: BackendConfig
-    sampling: dict[str, Any]
-    execution: ExecutionConfig
-    acceptance: AcceptanceConfig
-    constants: dict[str, Any]
-    cases: tuple[ExperimentCase, ...]
-    design: dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, payload: Any) -> "ExperimentManifest":
-        root = _object(payload, "manifest")
-        version = _string(root.get("schema_version"), "schema_version")
-        if version not in {"0.1", "0.2", "0.3"}:
-            raise ExperimentValidationError(
-                f"unsupported schema_version {version!r}; expected '0.1', '0.2', "
-                "or '0.3'"
-            )
-        experiment_id = _string(root.get("experiment_id"), "experiment_id")
-
-        backend_data = _object(root.get("backend"), "backend")
-        if backend_data.get("kind") != "vllm":
-            raise ExperimentValidationError("backend.kind must be 'vllm'")
+def _parse_backend(backend_data: Mapping[str, Any], version: str) -> BackendConfig:
+    kind = backend_data.get("kind")
+    if kind not in BACKEND_KINDS:
+        raise ExperimentValidationError(
+            "backend.kind must be 'vllm', 'sglang', or 'openai_compat'"
+        )
+    if kind == "vllm":
         backend = BackendConfig(
             base_url=_string(backend_data.get("base_url"), "backend.base_url"),
             api_key_env=(
@@ -172,6 +183,240 @@ class ExperimentManifest:
             raise ExperimentValidationError(
                 "backend.engine_config.enable_prefix_caching must be true"
             )
+        return backend
+
+    # Adapter kinds are new in this release, so no recorded manifest uses them.
+    if version not in {"0.3", "0.4"}:
+        raise ExperimentValidationError(
+            f"backend.kind {kind!r} requires schema_version '0.3' or later"
+        )
+    profile = BACKEND_PROFILES[kind]
+    raw_undisclosed = backend_data.get("undisclosed_identity", [])
+    if kind != "openai_compat" and raw_undisclosed:
+        raise ExperimentValidationError(
+            f"backend.undisclosed_identity is allowed only for openai_compat; "
+            f"{profile.label} identity is operator-verified and must be pinned"
+        )
+    if not isinstance(raw_undisclosed, list) or not all(
+        isinstance(item, str) for item in raw_undisclosed
+    ):
+        raise ExperimentValidationError(
+            "backend.undisclosed_identity must be a list of field names"
+        )
+    unsupported = sorted(set(raw_undisclosed) - STATIC_UNDISCLOSABLE_FIELDS)
+    if unsupported:
+        raise ExperimentValidationError(
+            "backend.undisclosed_identity names fields that must always be declared: "
+            + ", ".join(unsupported)
+        )
+    undisclosed = tuple(sorted(set(raw_undisclosed)))
+
+    def identity_field(name: str) -> str | None:
+        value = backend_data.get(name)
+        if name in undisclosed:
+            if value is not None:
+                raise ExperimentValidationError(
+                    f"backend.{name} is listed as undisclosed and must be null or absent"
+                )
+            return None
+        return _string(value, f"backend.{name}")
+
+    provider = backend_data.get("provider")
+    if kind == "openai_compat":
+        provider = _string(provider, "backend.provider")
+    elif provider is not None:
+        raise ExperimentValidationError("backend.provider is allowed only for openai_compat")
+    if "engine_config" in undisclosed:
+        if backend_data.get("engine_config") is not None:
+            raise ExperimentValidationError(
+                "backend.engine_config is listed as undisclosed and must be null or absent"
+            )
+        engine_config: dict[str, Any] = {}
+    else:
+        engine_config = _object(backend_data.get("engine_config"), "backend.engine_config")
+        if not engine_config:
+            raise ExperimentValidationError(
+                "backend.engine_config must pin the serving configuration"
+            )
+    if kind == "sglang" and engine_config.get("disable_radix_cache") is not False:
+        raise ExperimentValidationError(
+            "backend.engine_config.disable_radix_cache must be pinned to false for SGLang"
+        )
+    api_dialect = backend_data.get("api_dialect", "chat_completions")
+    if api_dialect not in profile.api_dialects:
+        raise ExperimentValidationError(
+            f"backend.api_dialect must be 'chat_completions' for {kind}"
+        )
+    return BackendConfig(
+        base_url=_string(backend_data.get("base_url"), "backend.base_url"),
+        api_key_env=(
+            None
+            if backend_data.get("api_key_env") is None
+            else _string(backend_data.get("api_key_env"), "backend.api_key_env")
+        ),
+        model=_string(backend_data.get("model"), "backend.model"),
+        model_revision=identity_field("model_revision"),  # type: ignore[arg-type]
+        tokenizer_revision=identity_field("tokenizer_revision"),  # type: ignore[arg-type]
+        chat_template_digest=identity_field("chat_template_digest"),  # type: ignore[arg-type]
+        backend_version=identity_field("backend_version"),  # type: ignore[arg-type]
+        hardware=identity_field("hardware"),  # type: ignore[arg-type]
+        block_size=_positive_int(backend_data.get("block_size", 16), "backend.block_size"),
+        engine_config=engine_config,
+        api_dialect=api_dialect,
+        kind=kind,
+        provider=provider,
+        undisclosed_identity=undisclosed,
+    )
+
+
+def _validate_backend_execution(
+    backend: BackendConfig, execution: "ExecutionConfig"
+) -> None:
+    """Reject execution modes the backend kind cannot provide."""
+
+    if backend.kind == "vllm":
+        return
+    profile = BACKEND_PROFILES[backend.kind]
+    if execution.cache_isolation not in profile.cache_isolation_modes:
+        raise ExperimentValidationError(
+            f"execution.cache_isolation {execution.cache_isolation!r} is unavailable "
+            f"on {backend.kind}; supported: "
+            + ", ".join(sorted(profile.cache_isolation_modes))
+        )
+    if execution.reset_external and not profile.supports_reset_external:
+        raise ExperimentValidationError(
+            f"execution.reset_external is unavailable on {backend.kind}"
+        )
+
+
+def _parse_identity_policy_field(
+    acceptance_data: Mapping[str, Any], version: str, backend: BackendConfig
+) -> dict[str, Any] | None:
+    raw = acceptance_data.get("identity_policy")
+    if raw is None:
+        if backend.kind == "openai_compat":
+            raise ExperimentValidationError(
+                "openai_compat identity is provider-declared: declare "
+                "acceptance.identity_policy with minimum_grade provider_declared"
+            )
+        return None
+    if version not in {"0.3", "0.4"}:
+        raise ExperimentValidationError(
+            "acceptance.identity_policy requires schema_version '0.3' or later"
+        )
+    try:
+        policy = parse_identity_policy(raw)
+    except IdentityPolicyError as exc:
+        raise ExperimentValidationError(str(exc)) from exc
+    assert policy is not None
+    if not policy.accepts(BACKEND_PROFILES[backend.kind].identity_grade):
+        raise ExperimentValidationError(
+            f"{backend.kind} identity is provider-declared, so minimum_grade "
+            "operator_verified can never be met; declare provider_declared"
+        )
+    for name in (
+        "model",
+        "model_revision",
+        "tokenizer_revision",
+        "chat_template_digest",
+        "backend_version",
+        "hardware",
+    ):
+        if is_placeholder_identity(getattr(backend, name)):
+            raise ExperimentValidationError(
+                f"backend.{name} is a placeholder; under an identity policy pin a "
+                "concrete value or (openai_compat only) list it in "
+                "backend.undisclosed_identity"
+            )
+    return policy.to_dict()
+
+
+@dataclass(frozen=True)
+class ExecutionConfig:
+    repetitions: int
+    warmup_repetitions: int
+    order: str
+    seed: int
+    cache_treatment: str
+    arrival_pattern: str
+    reset_external: bool
+    require_evaluation: bool
+    cases_form_workflow: bool
+    cache_isolation: str = "shared"
+    load: LoadSpec | None = None
+
+
+@dataclass(frozen=True)
+class AcceptanceConfig:
+    primary_metric: str
+    optimization_target: str
+    max_task_success_regression: float
+    min_completed_rate: float
+    min_cached_token_gain: float
+    min_input_token_reduction: float
+    require_latency_improvement: bool
+    min_task_success_rate: float = 0.0
+    task_success_method: str = "paired_exact"
+    require_environment_identity: bool = False
+
+
+@dataclass(frozen=True)
+class ExperimentCase:
+    case_id: str
+    baseline: dict[str, Any]
+    candidate: dict[str, Any]
+    evaluator: dict[str, Any] | None
+    baseline_transform: dict[str, Any] | None
+    candidate_transform: dict[str, Any] | None
+    workflow_id: str | None = None
+
+
+def _parse_manifest_cost_model(root: Mapping[str, Any], version: str) -> dict[str, Any] | None:
+    if root.get("cost_model") is None:
+        return None
+    if version != "0.4":
+        raise ExperimentValidationError("cost_model requires schema_version '0.4'")
+    try:
+        model = parse_cost_model(root["cost_model"])
+    except CostModelError as exc:
+        raise ExperimentValidationError(str(exc)) from exc
+    return None if model is None else model.to_dict()
+
+
+@dataclass(frozen=True)
+class ExperimentManifest:
+    schema_version: str
+    experiment_id: str
+    backend: BackendConfig
+    sampling: dict[str, Any]
+    execution: ExecutionConfig
+    acceptance: AcceptanceConfig
+    constants: dict[str, Any]
+    cases: tuple[ExperimentCase, ...]
+    design: dict[str, Any] = field(default_factory=dict)
+    # Parsed from acceptance.metric_gates (schema 0.4). Held here rather than
+    # on AcceptanceConfig so asdict(acceptance) keeps its historical shape.
+    metric_gates: tuple[MetricGate, ...] = ()
+    # Parsed from acceptance.identity_policy (schema 0.3+), held here for the
+    # same reason: legacy acceptance payloads keep their exact shape.
+    identity_policy: dict[str, Any] | None = None
+    # Optional versioned cost model (schema 0.4). It prices attempts for the
+    # unit-economics metric gates and is part of the fingerprint when set.
+    cost_model: dict[str, Any] | None = None
+
+    @classmethod
+    def from_dict(cls, payload: Any) -> "ExperimentManifest":
+        root = _object(payload, "manifest")
+        version = _string(root.get("schema_version"), "schema_version")
+        if version not in {"0.1", "0.2", "0.3", "0.4"}:
+            raise ExperimentValidationError(
+                f"unsupported schema_version {version!r}; expected '0.1', '0.2', "
+                "'0.3', or '0.4'"
+            )
+        experiment_id = _string(root.get("experiment_id"), "experiment_id")
+
+        backend_data = _object(root.get("backend"), "backend")
+        backend = _parse_backend(backend_data, version)
 
         execution_data = _object(root.get("execution"), "execution")
         order = execution_data.get("order", "alternating")
@@ -184,10 +429,32 @@ class ExperimentManifest:
             raise ExperimentValidationError(
                 "execution.cache_treatment must be 'warm' or 'cold'"
             )
-        arrival_pattern = execution_data.get("arrival_pattern", "sequential")
-        if arrival_pattern != "sequential":
+        arrival_pattern = execution_data.get("arrival_pattern", SEQUENTIAL)
+        load: LoadSpec | None = None
+        if arrival_pattern != SEQUENTIAL:
+            if arrival_pattern not in CONCURRENT_ARRIVAL_PATTERNS:
+                raise ExperimentValidationError(
+                    "execution.arrival_pattern must be sequential, closed_loop, "
+                    "constant_rps, or poisson"
+                )
+            if version != "0.4":
+                raise ExperimentValidationError(
+                    f"execution.arrival_pattern {arrival_pattern!r} requires "
+                    "schema_version '0.4'"
+                )
+            try:
+                # Static replay targets one backend.base_url, so both variants
+                # always share a serving stack.
+                load = LoadSpec.from_value(
+                    arrival_pattern,
+                    execution_data.get("load"),
+                    forced_topology=SHARED,
+                )
+            except LoadSpecError as exc:
+                raise ExperimentValidationError(str(exc)) from exc
+        elif "load" in execution_data:
             raise ExperimentValidationError(
-                "execution.arrival_pattern currently supports only 'sequential'"
+                "execution.load requires a concurrent execution.arrival_pattern"
             )
         seed = execution_data.get("seed", 0)
         if not isinstance(seed, int) or isinstance(seed, bool):
@@ -222,6 +489,11 @@ class ExperimentManifest:
             raise ExperimentValidationError(
                 "cold cache treatment requires salt_isolated or physical_reset isolation"
             )
+        if load is not None and cache_isolation == "physical_reset":
+            raise ExperimentValidationError(
+                "physical_reset cache isolation cannot run under concurrent load; "
+                "use salt_isolated cold isolation or a warm cache treatment"
+            )
         execution = ExecutionConfig(
             repetitions=_positive_int(
                 execution_data.get("repetitions"), "execution.repetitions"
@@ -239,7 +511,9 @@ class ExperimentManifest:
             require_evaluation=require_evaluation,
             cases_form_workflow=cases_form_workflow,
             cache_isolation=cache_isolation,
+            load=load,
         )
+        _validate_backend_execution(backend, execution)
 
         acceptance_data = _object(root.get("acceptance", {}), "acceptance")
         primary_metric = acceptance_data.get("primary_metric", "total_latency_ms")
@@ -316,9 +590,37 @@ class ExperimentManifest:
             require_latency_improvement=require_latency,
             require_environment_identity=require_environment_identity,
         )
-        if acceptance.task_success_method not in {"paired_exact", "point_estimate"}:
+        identity_policy = _parse_identity_policy_field(acceptance_data, version, backend)
+        metric_gates: tuple[MetricGate, ...] = ()
+        if "metric_gates" in acceptance_data:
+            if version != "0.4":
+                raise ExperimentValidationError(
+                    "acceptance.metric_gates requires schema_version '0.4'"
+                )
+            try:
+                metric_gates = parse_metric_gates(acceptance_data["metric_gates"])
+            except MetricGateError as exc:
+                raise ExperimentValidationError(str(exc)) from exc
+        if acceptance.task_success_method not in {
+            PAIRED_EXACT,
+            PAIRED_SCORE_EXACT,
+            POINT_ESTIMATE,
+        }:
             raise ExperimentValidationError(
-                "acceptance.task_success_method must be paired_exact or point_estimate"
+                "acceptance.task_success_method must be paired_exact, "
+                "paired_score_exact, or point_estimate"
+            )
+        if version == "0.1" and acceptance.task_success_method == PAIRED_SCORE_EXACT:
+            # Schema 0.1 fingerprints omit the method, so a non-default method
+            # would not be bound to the recorded manifest hash.
+            raise ExperimentValidationError(
+                "acceptance.task_success_method paired_score_exact requires "
+                "schema_version '0.2' or later"
+            )
+        if "completion_policy" in acceptance_data:
+            raise ExperimentValidationError(
+                "acceptance.completion_policy is supported only for agent-process "
+                "experiments, whose attempts carry failure provenance"
             )
 
         design = _object(root.get("design", {}), "design")
@@ -465,6 +767,9 @@ class ExperimentManifest:
             constants=constants,
             cases=tuple(cases),
             design=deepcopy(design),
+            metric_gates=metric_gates,
+            identity_policy=identity_policy,
+            cost_model=_parse_manifest_cost_model(root, version),
         )
         _validate_manifest_placeholders(manifest)
         workflow_ids = [case.workflow_id for case in manifest.cases]
@@ -504,6 +809,7 @@ class ExperimentManifest:
             cases.append(case_payload)
 
         backend = asdict(self.backend)
+        _normalize_backend_fields(backend)
         execution = asdict(self.execution)
         if backend.get("api_dialect") == "responses":
             backend.pop("api_dialect")
@@ -514,16 +820,24 @@ class ExperimentManifest:
         )
         if execution.get("cache_isolation") == legacy_isolation:
             execution.pop("cache_isolation")
+        _normalize_load_fields(
+            execution, self.execution.load, include_pin=True
+        )
+        acceptance = asdict(self.acceptance)
+        _normalize_metric_gates(acceptance, self.metric_gates)
+        if self.identity_policy is not None:
+            acceptance["identity_policy"] = dict(self.identity_policy)
         return {
             "schema_version": self.schema_version,
             "experiment_id": self.experiment_id,
-            "backend": {"kind": "vllm", **backend},
+            "backend": {"kind": self.backend.kind, **backend},
             "sampling": deepcopy(self.sampling),
             "execution": execution,
-            "acceptance": asdict(self.acceptance),
+            "acceptance": acceptance,
             "design": deepcopy(self.design),
             "constants": deepcopy(self.constants),
             "cases": cases,
+            **({"cost_model": deepcopy(self.cost_model)} if self.cost_model is not None else {}),
         }
 
     def _fingerprint_payload(self) -> dict[str, Any]:
@@ -544,6 +858,10 @@ class ExperimentManifest:
         # so parsing an old manifest does not alter its historical fingerprint.
         if payload["backend"].get("api_dialect") == "responses":
             payload["backend"].pop("api_dialect", None)
+        _normalize_backend_fields(payload["backend"], keep_kind=True)
+        identity_policy = payload.pop("identity_policy", None)
+        if identity_policy is not None:
+            payload["acceptance"]["identity_policy"] = identity_policy
         legacy_isolation = (
             "physical_reset"
             if payload["execution"].get("cache_treatment") == "cold"
@@ -551,6 +869,13 @@ class ExperimentManifest:
         )
         if payload["execution"].get("cache_isolation") == legacy_isolation:
             payload["execution"].pop("cache_isolation", None)
+        # Load and metric-gate fields exist only in schema 0.4; omitting them
+        # when absent keeps every earlier fingerprint unchanged.
+        _normalize_load_fields(payload["execution"], self.execution.load, include_pin=True)
+        payload.pop("metric_gates", None)
+        if payload.get("cost_model") is None:
+            payload.pop("cost_model", None)
+        _normalize_metric_gates(payload["acceptance"], self.metric_gates)
         return payload
 
     def fingerprint(self) -> str:
@@ -579,18 +904,9 @@ class ExperimentManifest:
     def uses_executable_evaluators(self) -> bool:
         """Return whether a manifest can execute local Python or commands."""
 
-        def executable(spec: Mapping[str, Any] | None) -> bool:
-            if spec is None:
-                return False
-            if spec.get("kind") in {"python", "command"}:
-                return True
-            return spec.get("kind") == "all" and any(
-                executable(child)
-                for child in spec.get("evaluators", [])
-                if isinstance(child, dict)
-            )
+        from .evaluators import is_executable_evaluator
 
-        return any(executable(case.evaluator) for case in self.cases)
+        return any(is_executable_evaluator(case.evaluator) for case in self.cases)
 
     @classmethod
     def from_path(cls, path: Path) -> "ExperimentManifest":
@@ -671,6 +987,42 @@ class ExperimentManifest:
         return cls.from_dict(root)
 
 
+def _normalize_backend_fields(
+    backend: dict[str, Any], *, keep_kind: bool = False
+) -> None:
+    """Drop adapter fields at their vLLM defaults so old payloads are unchanged."""
+
+    kind = backend.get("kind", "vllm")
+    if kind == "vllm" or not keep_kind:
+        backend.pop("kind", None)
+    if backend.get("provider") is None:
+        backend.pop("provider", None)
+    if not backend.get("undisclosed_identity"):
+        backend.pop("undisclosed_identity", None)
+    else:
+        backend["undisclosed_identity"] = list(backend["undisclosed_identity"])
+        if "engine_config" in backend["undisclosed_identity"]:
+            backend["engine_config"] = None
+
+
+def _normalize_load_fields(
+    execution: dict[str, Any], load: LoadSpec | None, *, include_pin: bool
+) -> None:
+    if load is None:
+        execution.pop("load", None)
+    else:
+        execution["load"] = load.to_dict(include_pin=include_pin)
+
+
+def _normalize_metric_gates(
+    acceptance: dict[str, Any], gates: tuple[MetricGate, ...]
+) -> None:
+    if gates:
+        acceptance["metric_gates"] = [gate.to_dict() for gate in gates]
+    else:
+        acceptance.pop("metric_gates", None)
+
+
 class CaptureClient(Protocol):
     def capture(self, request_body: Mapping[str, Any]) -> CapturedResponse: ...
 
@@ -686,6 +1038,100 @@ def _expected_environment_identity(manifest: ExperimentManifest) -> dict[str, An
         "backend_version": manifest.backend.backend_version,
         "engine_config": manifest.backend.engine_config,
     }
+
+
+def _can_reset(client: CaptureClient) -> bool:
+    """Adapters without a cache reset declare ``supports_cache_reset = False``.
+
+    Their warm runs start from an unknown cache state, which the adapter's
+    capability record states in the result.
+    """
+
+    return getattr(client, "supports_cache_reset", True) is not False
+
+
+_STATIC_IDENTITY_FIELDS = (
+    "backend",
+    "backend_version",
+    "model",
+    "model_revision",
+    "tokenizer_revision",
+    "chat_template_digest",
+)
+
+
+def _static_identity_assurance(
+    manifest: "ExperimentManifest", trials: list[dict[str, Any]]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Grade the static backend identity under a declared identity policy.
+
+    Both variants replay against one backend. Each measured trial's identity
+    is the pinned manifest identity, with the model the provider says served
+    it when the backend reports one. A served model that differs from the
+    manifest, or changes during the run, invalidates identity.
+    """
+
+    policy = parse_identity_policy(manifest.identity_policy)
+    assert policy is not None
+    backend = manifest.backend
+    grade = BACKEND_PROFILES[backend.kind].identity_grade
+    pinned = {
+        "backend": backend.provider or backend.kind,
+        "backend_version": backend.backend_version,
+        "model": backend.model,
+        "model_revision": backend.model_revision,
+        "tokenizer_revision": backend.tokenizer_revision,
+        "chat_template_digest": backend.chat_template_digest,
+    }
+    undisclosed = [name for name in backend.undisclosed_identity if name in pinned]
+    variants: dict[str, Any] = {}
+    for variant in ("baseline", "candidate"):
+        measured = [
+            trial for trial in trials if trial["variant"] == variant and not trial["warmup"]
+        ]
+        identities = [
+            {**pinned, "model": trial.get("response_model") or backend.model}
+            for trial in measured
+        ]
+        summary = variant_identity_summary(
+            policy,
+            [
+                assess_request_identity(
+                    identity,
+                    grade=grade,
+                    undisclosed=undisclosed,
+                    fields=_STATIC_IDENTITY_FIELDS,
+                )
+                for identity in identities
+            ],
+            [trial.get("provider_fingerprint_sha256") for trial in measured],
+        )
+        served = sorted({identity["model"] for identity in identities})
+        summary["served_models"] = served
+        summary["served_model_matches_manifest"] = served == [backend.model]
+        summary["valid"] = bool(summary["valid"] and summary["served_model_matches_manifest"])
+        variants[variant] = summary
+    record = identity_assurance_record(policy, variants)
+    passed = all(item["valid"] for item in variants.values())
+    check = {
+        "name": "serving_identity_grade",
+        "passed": passed,
+        "required": True,
+        "observed": {
+            name: {
+                "grade": item["grade"],
+                "valid": item["valid"],
+                "served_models": item["served_models"],
+                "undisclosed_fields": item["undisclosed_fields"],
+            }
+            for name, item in variants.items()
+        },
+        "threshold": (
+            f"complete graded identity at or above {policy.minimum_grade}, and the "
+            "served model equals the pinned manifest model throughout"
+        ),
+    }
+    return record, check
 
 
 def _read_environment_identity(client: CaptureClient) -> dict[str, Any] | None:
@@ -839,6 +1285,20 @@ def _predicted_eligible_tokens(
     return 0 if bounded <= 0 else (bounded // block_size) * block_size
 
 
+def _predicted_eligible_or_unknown(
+    token_ids: tuple[int, ...] | None,
+    prior_prompts: list[tuple[int, ...] | None],
+    block_size: int,
+) -> int | None:
+    """Unknown prompt tokens (an OpenAI-compatible API) predict unknown, not 0."""
+
+    if token_ids is None:
+        return None
+    return _predicted_eligible_tokens(
+        token_ids, [prior for prior in prior_prompts if prior is not None], block_size
+    )
+
+
 def _percentile(values: list[float], percentile: float) -> float | None:
     if not values:
         return None
@@ -871,71 +1331,6 @@ def _bootstrap_interval(
         _percentile(means, 0.025) or 0.0,
         _percentile(means, 0.975) or 0.0,
     ]
-
-
-def _binomial_cdf(successes: int, trials: int, probability: float) -> float:
-    if successes < 0:
-        return 0.0
-    if successes >= trials:
-        return 1.0
-    return sum(
-        math.comb(trials, count)
-        * probability**count
-        * (1.0 - probability) ** (trials - count)
-        for count in range(successes + 1)
-    )
-
-
-def _inverse_binomial_cdf(successes: int, trials: int, target: float) -> float:
-    """Invert the binomial CDF in p using monotone bisection."""
-
-    lower = 0.0
-    upper = 1.0
-    for _ in range(80):
-        midpoint = (lower + upper) / 2.0
-        if _binomial_cdf(successes, trials, midpoint) > target:
-            lower = midpoint
-        else:
-            upper = midpoint
-    return (lower + upper) / 2.0
-
-
-def _clopper_pearson_interval(
-    successes: int, trials: int, *, confidence: float = 0.95
-) -> list[float] | None:
-    """Return an exact two-sided binomial confidence interval."""
-
-    if trials <= 0:
-        return None
-    alpha = 1.0 - confidence
-    tail = alpha / 2.0
-    lower = (
-        0.0
-        if successes == 0
-        else _inverse_binomial_cdf(successes - 1, trials, 1.0 - tail)
-    )
-    upper = (
-        1.0
-        if successes == trials
-        else _inverse_binomial_cdf(successes, trials, tail)
-    )
-    return [lower, upper]
-
-
-def _one_sided_binomial_lower(
-    successes: int, trials: int, *, alpha: float
-) -> float:
-    if successes == 0:
-        return 0.0
-    return _inverse_binomial_cdf(successes - 1, trials, 1.0 - alpha)
-
-
-def _one_sided_binomial_upper(
-    successes: int, trials: int, *, alpha: float
-) -> float:
-    if successes == trials:
-        return 1.0
-    return _inverse_binomial_cdf(successes, trials, alpha)
 
 
 def _paired_success_statistics(
@@ -1004,6 +1399,44 @@ def _paired_success_statistics(
     }
 
 
+def _task_success_statistics(
+    pairs: list[tuple[bool, bool]],
+    *,
+    method: str = PAIRED_EXACT,
+    margin: float = 0.0,
+    confidence: float = 0.95,
+) -> dict[str, Any]:
+    """Return paired success statistics under the preregistered method.
+
+    Contracts that omit ``task_success_method`` keep the original
+    ``paired_exact`` statistics byte for byte. ``paired_score_exact`` adds an
+    exact p-value at the preregistered margin and an inverted lower bound.
+    """
+
+    if method == PAIRED_SCORE_EXACT:
+        return paired_score_exact_statistics(
+            outcome_counts(pairs), margin=margin, confidence=confidence
+        )
+    return _paired_success_statistics(pairs, confidence=confidence)
+
+
+def _task_success_noninferior(
+    effect: Mapping[str, Any], *, method: str, margin: float
+) -> bool:
+    """Apply the preregistered paired gate to one task-success effect."""
+
+    if method == POINT_ESTIMATE:
+        return True
+    if method == PAIRED_SCORE_EXACT:
+        return bool(
+            effect.get("method_id") == PAIRED_SCORE_EXACT
+            and effect.get("noninferiority_margin") == margin
+            and effect.get("rejects_inferiority") is True
+        )
+    lower = effect.get("one_sided_lower_bound")
+    return lower is not None and lower >= -margin
+
+
 def _schedule(
     manifest: ExperimentManifest, repetitions: int, *, warmup: bool
 ) -> list[tuple[int, ExperimentCase, str, bool]]:
@@ -1043,7 +1476,13 @@ def _schedule(
     return schedule
 
 
-def _build_summary(trials: list[dict[str, Any]], seed: int) -> dict[str, Any]:
+def _build_summary(
+    trials: list[dict[str, Any]],
+    seed: int,
+    *,
+    task_success_method: str = PAIRED_EXACT,
+    max_task_success_regression: float = 0.0,
+) -> dict[str, Any]:
     measured = [trial for trial in trials if not trial["warmup"]]
     metric_names = (
         "client_ttft_ms",
@@ -1150,7 +1589,13 @@ def _build_summary(trials: list[dict[str, Any]], seed: int) -> dict[str, Any]:
                 success_pairs.append(
                     (bool(baseline["task_success"]), bool(candidate["task_success"]))
                 )
-    effects["task_success"].update(_paired_success_statistics(success_pairs))
+    effects["task_success"].update(
+        _task_success_statistics(
+            success_pairs,
+            method=task_success_method,
+            margin=max_task_success_regression,
+        )
+    )
     digest_pairs = 0
     digest_matches = 0
     for case in sorted({trial["case_id"] for trial in measured}):
@@ -1203,7 +1648,12 @@ def _build_summary(trials: list[dict[str, Any]], seed: int) -> dict[str, Any]:
 
 
 def _build_workflow_summary(
-    trials: list[dict[str, Any]], seed: int, cases: tuple[ExperimentCase, ...]
+    trials: list[dict[str, Any]],
+    seed: int,
+    cases: tuple[ExperimentCase, ...],
+    *,
+    task_success_method: str = PAIRED_EXACT,
+    max_task_success_regression: float = 0.0,
 ) -> dict[str, Any]:
     """Aggregate sequential cases into critical-path workflow trials."""
 
@@ -1280,7 +1730,12 @@ def _build_workflow_summary(
         )
         aggregate_trials.append(aggregate)
 
-    summary = _build_summary(aggregate_trials, seed)
+    summary = _build_summary(
+        aggregate_trials,
+        seed,
+        task_success_method=task_success_method,
+        max_task_success_regression=max_task_success_regression,
+    )
     summary["claim"] = (
         "cases are treated as sequential critical-path inference steps; "
         "reported workflow latency is their sum and excludes tool runtime"
@@ -1389,15 +1844,12 @@ def _build_decision(
         and candidate_success
         >= baseline_success - acceptance.max_task_success_regression
     )
-    success_lower_bound = success_effect.get("one_sided_lower_bound")
     quality_noninferior = bool(
         point_quality_noninferior
-        and (
-            acceptance.task_success_method == "point_estimate"
-            or (
-                success_lower_bound is not None
-                and success_lower_bound >= -acceptance.max_task_success_regression
-            )
+        and _task_success_noninferior(
+            success_effect,
+            method=acceptance.task_success_method,
+            margin=acceptance.max_task_success_regression,
         )
     )
     completion_ok = (
@@ -1538,8 +1990,11 @@ def _prepared_request(
     case: ExperimentCase,
     variant: str,
     warmup: bool,
+    *,
+    trial_id: str | None = None,
 ) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
-    trial_id = f"{'warmup' if warmup else 'measured'}-{case.case_id}-{repetition:04d}"
+    if trial_id is None:
+        trial_id = f"{'warmup' if warmup else 'measured'}-{case.case_id}-{repetition:04d}"
     replacements = _trial_replacements(manifest, trial_id)
     request = _materialize_trial(
         case.baseline if variant == "baseline" else case.candidate,
@@ -1650,15 +2105,336 @@ def _load_checkpoint(
     return trials
 
 
+def _evaluate_trial(
+    case: ExperimentCase,
+    captured: CapturedResponse,
+    *,
+    variant: str,
+    repetition: int,
+    trial_id: str,
+    warmup: bool,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, bool | None]:
+    if case.evaluator is None:
+        return None, None, None
+    context = {
+        "case_id": case.case_id,
+        "variant": variant,
+        "repetition": repetition,
+        "trial_id": trial_id,
+        "warmup": warmup,
+        "response_status": captured.status,
+    }
+    try:
+        evaluated = evaluate_output(case.evaluator, captured.output_text, context)
+    except EvaluatorError as exc:
+        return None, {"kind": "evaluator_infrastructure_error", "message": str(exc)}, None
+    return (
+        evaluated.to_dict(),
+        None,
+        evaluated.success and captured.status == "completed",
+    )
+
+
+def _static_units(manifest: ExperimentManifest) -> list[list[ExperimentCase]]:
+    """Units dispatched under load: cases, or whole ordered workflows."""
+
+    if not manifest.execution.cases_form_workflow:
+        return [[case] for case in manifest.cases]
+    if all(case.workflow_id is not None for case in manifest.cases):
+        order = list(dict.fromkeys(case.workflow_id for case in manifest.cases))
+        return [
+            [case for case in manifest.cases if case.workflow_id == workflow_id]
+            for workflow_id in order
+        ]
+    return [list(manifest.cases)]
+
+
+def static_unit_ids(manifest: ExperimentManifest) -> list[str]:
+    units = _static_units(manifest)
+    if not manifest.execution.cases_form_workflow:
+        return [unit[0].case_id for unit in units]
+    return [str(unit[0].workflow_id or "workflow") for unit in units]
+
+
+def static_arrival_schedule(manifest: ExperimentManifest) -> ArrivalSchedule:
+    """Build the frozen arrival schedule of a concurrent static manifest."""
+
+    load = manifest.execution.load
+    if load is None:
+        raise ExperimentValidationError("the manifest declares sequential arrivals")
+    try:
+        return build_arrival_schedule(
+            load,
+            static_unit_ids(manifest),
+            repetitions=manifest.execution.repetitions,
+            seed=manifest.execution.seed,
+            order=manifest.execution.order,
+            warmup_repetitions=manifest.execution.warmup_repetitions,
+        )
+    except LoadSpecError as exc:
+        raise ExperimentValidationError(str(exc)) from exc
+
+
+class _StaticTrialExecutor:
+    """Replay one static unit (a case or an ordered workflow) per call."""
+
+    def __init__(self, manifest: ExperimentManifest, client: CaptureClient) -> None:
+        self.manifest = manifest
+        self.client = client
+        self.units = _static_units(manifest)
+        self._prior_prompts: list[tuple[int, ...]] = []
+        self._lock = threading.Lock()
+
+    def execute(
+        self, trial: ScheduledTrial, *, role: str, filler_index: int | None
+    ) -> dict[str, Any]:
+        execution = self.manifest.execution
+        warmup = role == ROLE_WARMUP
+        unit_trials: list[dict[str, Any]] = []
+        for case in self.units[trial.unit]:
+            if role == ROLE_FILLER:
+                trial_id = f"filler-{filler_index:06d}-{case.case_id}"
+            else:
+                prefix = "warmup" if warmup else "measured"
+                trial_id = f"{prefix}-s{trial.stage}-{case.case_id}-{trial.repetition:04d}"
+            trial_id, request, transform = _prepared_request(
+                self.manifest,
+                trial.repetition,
+                case,
+                trial.variant,
+                warmup,
+                trial_id=trial_id,
+            )
+            salted = execution.cache_isolation == "salt_isolated"
+            if salted:
+                request["cache_salt"] = secrets.token_urlsafe(32)
+            captured = self.client.capture(request)
+            if role == ROLE_FILLER:
+                unit_trials.append(
+                    {
+                        "case_id": case.case_id,
+                        "variant": trial.variant,
+                        "status": captured.status,
+                        "total_latency_ms": captured.total_latency_ms,
+                    }
+                )
+                continue
+            record = captured.to_dict()
+            with self._lock:
+                # Prompts of trials that finished before this one: a full-block
+                # static upper bound under the observed concurrent order.
+                record["predicted_eligible_cached_tokens"] = (
+                    0
+                    if salted
+                    else _predicted_eligible_or_unknown(
+                        captured.prompt_token_ids,
+                        self._prior_prompts,
+                        self.manifest.backend.block_size,
+                    )
+                )
+                if not salted:
+                    self._prior_prompts.append(captured.prompt_token_ids)
+            evaluation, evaluation_error, task_success = _evaluate_trial(
+                case,
+                captured,
+                variant=trial.variant,
+                repetition=trial.repetition,
+                trial_id=trial_id,
+                warmup=warmup,
+            )
+            record.update(
+                {
+                    "case_id": case.case_id,
+                    "workflow_id": case.workflow_id,
+                    "variant": trial.variant,
+                    "repetition": trial.repetition,
+                    "trial_id": trial_id,
+                    "warmup": warmup,
+                    "evaluation": evaluation,
+                    "evaluation_error": evaluation_error,
+                    "task_success": task_success,
+                    "request_transform": (
+                        None if transform is None else transform.get("kind")
+                    ),
+                }
+            )
+            unit_trials.append(record)
+        return {
+            "variant": trial.variant,
+            "unit": trial.unit,
+            "repetition": trial.repetition,
+            "unit_trials": unit_trials,
+        }
+
+
+def _static_observations(
+    trials: list[dict[str, Any]], *, workflow: bool
+) -> list[Observation]:
+    """Reduce measured static trials to metric-gate observations."""
+
+    groups: dict[tuple[str, int, str], list[dict[str, Any]]] = {}
+    for trial in trials:
+        cluster = (
+            str(trial.get("workflow_id") or "workflow")
+            if workflow
+            else str(trial["case_id"])
+        )
+        groups.setdefault((cluster, trial["repetition"], trial["variant"]), []).append(trial)
+    observations: list[Observation] = []
+    for (cluster, repetition, variant), steps in sorted(groups.items()):
+        latencies = [step.get("total_latency_ms") for step in steps]
+        successes = [step.get("task_success") for step in steps]
+        costs = [economics_of(step) for step in steps]
+
+        def total(values: list[Any]) -> float | None:
+            return None if any(value is None for value in values) else float(sum(values))
+
+        observations.append(
+            Observation(
+                cluster=cluster,
+                repetition=repetition,
+                variant=variant,
+                success=(
+                    None
+                    if any(value is None for value in successes)
+                    else all(bool(value) for value in successes)
+                ),
+                workflow_latency_ms=total(latencies),
+                requests={
+                    **{
+                        name: tuple(
+                            float(step[name])
+                            for step in steps
+                            if step.get(name) is not None
+                        )
+                        for name in ("client_ttft_ms", "server_ttft_ms")
+                    },
+                    "tpot_ms": tuple(
+                        value
+                        for value in (
+                            tpot_ms(
+                                step.get("total_latency_ms"),
+                                step.get("client_ttft_ms"),
+                                step.get("output_tokens"),
+                            )
+                            for step in steps
+                        )
+                        if value is not None
+                    ),
+                },
+                cost_usd=total([cost for cost, _ in costs]),
+                gpu_time_ms=total([gpu for _, gpu in costs]),
+            )
+        )
+    return observations
+
+
+def _run_static_under_load(
+    manifest: ExperimentManifest,
+    client: CaptureClient,
+    *,
+    checkpoint_path: Path | None,
+    observers: tuple[Any, ...],
+) -> tuple[ArrivalSchedule, list[dict[str, Any]], list[dict[str, Any]], Any]:
+    schedule = static_arrival_schedule(manifest)
+    try:
+        verify_schedule_pin(schedule)
+    except LoadSpecError as exc:
+        raise ExperimentValidationError(str(exc)) from exc
+    store = None
+    if checkpoint_path is not None:
+        if checkpoint_path.exists():
+            raise ExperimentValidationError(
+                f"checkpoint {checkpoint_path} already exists; choose another path"
+            )
+        store = JsonlArtifactStore(
+            checkpoint_path,
+            {
+                **_checkpoint_header(manifest),
+                "checkpoint_schema_version": "0.2",
+                "arrival_schedule_sha256": schedule.digest(),
+            },
+        )
+    if manifest.execution.cache_treatment == "warm" and _can_reset(client):
+        client.reset_prefix_cache(reset_external=manifest.execution.reset_external)
+    runner = LoadRunner(
+        schedule, _StaticTrialExecutor(manifest, client), store=store, observers=observers
+    )
+    result = runner.run()
+    trials: list[dict[str, Any]] = []
+    for unit_record in result.records:
+        for step in unit_record["unit_trials"]:
+            step["sequence"] = len(trials)
+            step["load"] = dict(unit_record["load"])
+            if "server_telemetry" in unit_record:
+                step["server_telemetry"] = unit_record["server_telemetry"]
+            trials.append(step)
+    return schedule, trials, result.records, result
+
+
 def run_experiment(
     manifest: ExperimentManifest,
     client: CaptureClient,
     *,
     checkpoint_path: Path | None = None,
     resume: bool = False,
+    observers: tuple[Any, ...] | list[Any] = (),
+    attempt_economics: Any = None,
+) -> dict[str, Any]:
+    """Run a frozen static experiment.
+
+    ``observers`` receive load-block and trial callbacks (see
+    :class:`runeconomy.execution.LoadObserver`). ``attempt_economics`` maps a
+    measured trial record to ``{"cost_usd", "gpu_time_ms", ...}``; the result
+    is stored on the record as ``economics`` before any decision is made.
+    """
+
+    if manifest.execution.load is not None:
+        if resume:
+            raise ExperimentValidationError(
+                "resume is not supported for concurrent arrival patterns; a "
+                "partial block cannot be replayed under the same load"
+            )
+        identity_before = _read_environment_identity(client)
+        schedule, trials, unit_records, load_result = _run_static_under_load(
+            manifest,
+            client,
+            checkpoint_path=checkpoint_path,
+            observers=tuple(observers),
+        )
+        return _finish_experiment(
+            manifest,
+            client,
+            trials,
+            identity_before=identity_before,
+            attempt_economics=attempt_economics,
+            schedule=schedule,
+            unit_records=unit_records,
+            load_result=load_result,
+        )
+    return _run_sequential_experiment(
+        manifest,
+        client,
+        checkpoint_path=checkpoint_path,
+        resume=resume,
+        attempt_economics=attempt_economics,
+    )
+
+
+def _run_sequential_experiment(
+    manifest: ExperimentManifest,
+    client: CaptureClient,
+    *,
+    checkpoint_path: Path | None,
+    resume: bool,
+    attempt_economics: Any,
 ) -> dict[str, Any]:
     execution = manifest.execution
-    expected_identity = _expected_environment_identity(manifest)
+    if resume and not BACKEND_PROFILES[manifest.backend.kind].exact_prompt_tokens:
+        raise ExperimentValidationError(
+            f"resume is not supported on {manifest.backend.kind}: replayed prompts "
+            "cannot be verified without exact prompt tokens"
+        )
     identity_before = _read_environment_identity(client)
     schedule = _schedule(
         manifest, execution.warmup_repetitions, warmup=True
@@ -1671,8 +2447,8 @@ def run_experiment(
             _initialize_checkpoint(checkpoint_path, manifest)
     else:
         trials = []
-    prior_prompts: list[tuple[int, ...]] = []
-    if execution.cache_treatment == "warm":
+    prior_prompts: list[tuple[int, ...] | None] = []
+    if execution.cache_treatment == "warm" and _can_reset(client):
         client.reset_prefix_cache(reset_external=execution.reset_external)
 
     for sequence, (repetition, case, variant, warmup) in enumerate(schedule):
@@ -1698,36 +2474,20 @@ def run_experiment(
             continue
         captured = client.capture(request)
         trial = captured.to_dict()
-        trial["predicted_eligible_cached_tokens"] = _predicted_eligible_tokens(
+        trial["predicted_eligible_cached_tokens"] = _predicted_eligible_or_unknown(
             captured.prompt_token_ids,
             prior_prompts,
             manifest.backend.block_size,
         )
         prior_prompts.append(captured.prompt_token_ids)
-        evaluation = None
-        evaluation_error = None
-        task_success = None
-        if case.evaluator is not None:
-            context = {
-                "case_id": case.case_id,
-                "variant": variant,
-                "repetition": repetition,
-                "trial_id": trial_id,
-                "warmup": warmup,
-                "response_status": captured.status,
-            }
-            try:
-                evaluated = evaluate_output(
-                    case.evaluator, captured.output_text, context
-                )
-            except EvaluatorError as exc:
-                evaluation_error = {
-                    "kind": "evaluator_infrastructure_error",
-                    "message": str(exc),
-                }
-            else:
-                evaluation = evaluated.to_dict()
-                task_success = evaluated.success and captured.status == "completed"
+        evaluation, evaluation_error, task_success = _evaluate_trial(
+            case,
+            captured,
+            variant=variant,
+            repetition=repetition,
+            trial_id=trial_id,
+            warmup=warmup,
+        )
         trial.update(
             {
                 "sequence": sequence,
@@ -1751,11 +2511,84 @@ def run_experiment(
                 checkpoint_path, {"record_type": "trial", "trial": trial}, "a"
             )
 
-    summary = _build_summary(trials, execution.seed)
+    return _finish_experiment(
+        manifest,
+        client,
+        trials,
+        identity_before=identity_before,
+        attempt_economics=attempt_economics,
+    )
+
+
+def _summaries(
+    manifest: ExperimentManifest, trials: list[dict[str, Any]]
+) -> dict[str, Any]:
+    execution = manifest.execution
+    method_arguments = {
+        "task_success_method": manifest.acceptance.task_success_method,
+        "max_task_success_regression": (
+            manifest.acceptance.max_task_success_regression
+        ),
+    }
+    summary = _build_summary(trials, execution.seed, **method_arguments)
     if execution.cases_form_workflow:
         summary["workflow"] = _build_workflow_summary(
-            trials, execution.seed, manifest.cases
+            trials, execution.seed, manifest.cases, **method_arguments
         )
+    return summary
+
+
+def _finish_experiment(
+    manifest: ExperimentManifest,
+    client: CaptureClient,
+    trials: list[dict[str, Any]],
+    *,
+    identity_before: Mapping[str, Any] | None,
+    attempt_economics: Any,
+    schedule: ArrivalSchedule | None = None,
+    unit_records: list[dict[str, Any]] | None = None,
+    load_result: Any = None,
+) -> dict[str, Any]:
+    execution = manifest.execution
+    expected_identity = _expected_environment_identity(manifest)
+    if attempt_economics is not None:
+        for trial in trials:
+            if not trial["warmup"]:
+                trial["economics"] = dict(attempt_economics(trial))
+    load = execution.load
+    stage_summaries: list[dict[str, Any]] = []
+    if load is not None:
+        gate_stage = load.gate_stage
+        gated_trials = [
+            trial for trial in trials if trial["load"]["stage"] == gate_stage
+        ]
+        for stage, level in enumerate(load.levels):
+            if stage == gate_stage:
+                continue
+            stage_trials = [trial for trial in trials if trial["load"]["stage"] == stage]
+            stage_summary = _summaries(manifest, stage_trials)
+            stage_basis = stage_summary.get("workflow", stage_summary)
+            stage_summaries.append(
+                {
+                    "stage": stage,
+                    load.level_name: level,
+                    "gated": False,
+                    "summary": stage_summary,
+                    "metric_gates": evaluate_metric_gates(
+                        manifest.metric_gates,
+                        _static_observations(
+                            [t for t in stage_trials if not t["warmup"]],
+                            workflow=execution.cases_form_workflow,
+                        ),
+                        seed=execution.seed,
+                    ),
+                    "descriptive_only": True,
+                    "basis_effects": stage_basis.get("effects"),
+                }
+            )
+    else:
+        gated_trials = trials
+    summary = _summaries(manifest, gated_trials)
     decision_basis = summary.get("workflow", summary)
     prediction_assessment = _assess_predeclared_prediction(
         decision_basis, manifest.design
@@ -1773,6 +2606,42 @@ def run_experiment(
         if trial.get("evaluation_error") is not None
     ]
     decision = _build_decision(decision_basis, manifest.acceptance)
+    if load is not None or manifest.metric_gates:
+        metric_checks = evaluate_metric_gates(
+            manifest.metric_gates,
+            _static_observations(
+                [trial for trial in gated_trials if not trial["warmup"]],
+                workflow=execution.cases_form_workflow,
+            ),
+            seed=execution.seed,
+        )
+        integrity_checks = (
+            []
+            if load is None or unit_records is None
+            else load_integrity_checks(
+                [
+                    record
+                    for record in unit_records
+                    if record["load"]["stage"] == load.gate_stage
+                    and record["load"]["role"] != ROLE_WARMUP
+                ],
+                open_loop=load.open_loop,
+                gate_level=load.gate_level,
+                max_dispatch_lag_ms=load.max_dispatch_lag_ms,
+            )
+        )
+        decision = merge_load_and_metric_checks(
+            decision, integrity_checks=integrity_checks, metric_checks=metric_checks
+        )
+        if load is not None:
+            summary["load"] = {
+                "arrival_schedule": schedule.summary() if schedule else None,
+                "gate_stage": load.gate_stage,
+                load.level_name: load.gate_level,
+                "population": "gate-stage measured trials only; other stages are descriptive",
+                "stages": stage_summaries,
+                "filler_trials": len(load_result.fillers) if load_result else 0,
+            }
     identity_after = _read_environment_identity(client)
     identity_check = _environment_identity_check(
         expected_identity, identity_before, identity_after
@@ -1821,13 +2690,39 @@ def run_experiment(
                 *decision["checks"],
             ],
         }
+    if manifest.identity_policy is not None:
+        assurance, identity_grade_check = _static_identity_assurance(manifest, trials)
+        decision_basis["identity_assurance"] = assurance
+        decision = {
+            **decision,
+            **(
+                {}
+                if identity_grade_check["passed"]
+                else {
+                    "status": "invalid",
+                    "reason": (
+                        "graded serving identity was incomplete, below the declared "
+                        "minimum grade, or the served model differed from the manifest"
+                    ),
+                }
+            ),
+            "checks": [identity_grade_check, *decision["checks"]],
+        }
     decision = enrich_decision_artifact(decision, decision_basis)
-    return {
-        "result_schema_version": "0.3",
+    acceptance_record = asdict(manifest.acceptance)
+    _normalize_metric_gates(acceptance_record, manifest.metric_gates)
+    if manifest.identity_policy is not None:
+        acceptance_record["identity_policy"] = dict(manifest.identity_policy)
+    result = {
+        "result_schema_version": (
+            "0.4"
+            if load is not None or manifest.metric_gates
+            else "0.3"
+        ),
         "experiment_id": manifest.experiment_id,
         "created_at": datetime.now(UTC).isoformat(),
         "provenance": {
-            "backend_kind": "vllm",
+            "backend_kind": manifest.backend.kind,
             "api_dialect": manifest.backend.api_dialect,
             "model": manifest.backend.model,
             "model_revision": manifest.backend.model_revision,
@@ -1844,7 +2739,7 @@ def run_experiment(
             "cases_form_workflow": execution.cases_form_workflow,
             "order": execution.order,
             "seed": execution.seed,
-            "acceptance": asdict(manifest.acceptance),
+            "acceptance": acceptance_record,
             "design": deepcopy(manifest.design),
             "manifest_sha256": manifest.fingerprint(),
             "reproducibility_manifest_sha256": (
@@ -1857,3 +2752,22 @@ def run_experiment(
         "summary": summary,
         "decision": decision,
     }
+    if manifest.cost_model is not None:
+        model = parse_cost_model(manifest.cost_model)
+        result["provenance"]["cost_model"] = {"model": model.to_dict(), "sha256": model.sha256}
+    if manifest.backend.kind != "vllm":
+        result["provenance"]["provider"] = manifest.backend.provider
+        result["provenance"]["undisclosed_identity"] = list(
+            manifest.backend.undisclosed_identity
+        )
+    capability_record = getattr(client, "capability_record", None)
+    serving_capabilities = capability_record() if callable(capability_record) else None
+    if serving_capabilities is not None:
+        result["serving_capabilities"] = serving_capabilities
+    if load is not None and schedule is not None:
+        result["provenance"]["load"] = load.to_dict()
+        result["provenance"]["arrival_schedule_sha256"] = schedule.digest()
+        result["arrival_schedule"] = schedule.to_dict()
+        result["load_blocks"] = load_result.blocks if load_result else []
+        result["load_fillers"] = load_result.fillers if load_result else []
+    return result

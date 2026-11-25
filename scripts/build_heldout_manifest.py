@@ -62,6 +62,21 @@ FROZEN_HELDOUT_CONTEXTS = {
         "SOURCE_CONTEXT_10",
         "033f25f0f7f2ae702d2ef41a1f732c2956ef9e4c9b496fc7b2633306552d9486",
     ),
+    # The live implementation moved to binomial.py after this held-out task
+    # was frozen. Preserve the exact predeclared source excerpt and prompt.
+    ("src/runeconomy/experiments.py", "_clopper_pearson_interval"): (
+        "SOURCE_CONTEXT_37",
+        "390aea3b9fb9ecf64f59ad582428b80198548ae0bb86228e916e798d181bda4f",
+    ),
+    # Phase 6 added evaluator kinds to these functions after the freeze.
+    ("src/runeconomy/evaluators.py", "validate_evaluator_spec"): (
+        "SOURCE_CONTEXT_22",
+        "ccb99ca760887330d6869592d462dc78486e79fcaca9db2000bb9da82e175680",
+    ),
+    ("src/runeconomy/evaluators.py", "evaluate_output"): (
+        "SOURCE_CONTEXT_25",
+        "8dc4bbc189e995bb00ebb9b796e861f350cadcde0c4babc548169547f99b157d",
+    ),
 }
 
 MODEL = "Qwen/Qwen2.5-7B-Instruct"

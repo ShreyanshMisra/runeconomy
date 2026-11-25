@@ -350,7 +350,11 @@ class CLITests(unittest.TestCase):
                 main(["doctor", "--base-url", "http://localhost:8000", "--json"]),
                 0,
             )
-        self.assertEqual(json.loads(stdout.getvalue()), capabilities)
+        # The CLI contract adds only its versioned output_schema identifier.
+        self.assertEqual(
+            json.loads(stdout.getvalue()),
+            {**capabilities, "output_schema": "runeconomy.cli.doctor.v1"},
+        )
 
     def test_compare_writes_result_and_honors_require_verified(self) -> None:
         result = {"decision": {"status": "inconclusive"}}

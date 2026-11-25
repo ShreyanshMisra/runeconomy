@@ -1,0 +1,125 @@
+name: RunEconomy verify
+description: >-
+  Run a frozen RunEconomy experiment (or a compatibility trial) and post its
+  verdict table on the pull request.
+author: RunEconomy
+branding:
+  icon: check-circle
+  color: gray-dark
+
+inputs:
+  workspace:
+    description: Experiment workspace directory, relative to the repository root.
+    required: true
+  mode:
+    description: >-
+      "frozen" runs with --require-frozen and reports the verdict.
+      "compatibility" runs an unfrozen trial that checks the agent contract and
+      makes no verdict claim.
+    required: false
+    default: frozen
+  output:
+    description: Directory for result.json and artifacts.
+    required: false
+    default: runeconomy-results
+  require-verified:
+    description: Fail the job unless a frozen run returns verified.
+    required: false
+    default: "false"
+  comment:
+    description: Create or update one verdict comment on the triggering pull request.
+    required: false
+    default: "true"
+  allow-exec-evaluators:
+    description: Allow python and command evaluators declared by the manifest.
+    required: false
+    default: "false"
+  runeconomy-version:
+    description: >-
+      Package specifier to install, for example "runeconomy==0.3.0". Use "."
+      to install the checked-out repository.
+    required: false
+    default: runeconomy==0.3.0
+  python-version:
+    description: Python version for the RunEconomy runner.
+    required: false
+    default: "3.12"
+
+outputs:
+  verdict:
+    description: The recorded decision status.
+    value: ${{ steps.summary.outputs.verdict }}
+  verified:
+    description: "true only for a frozen run whose verdict is verified."
+    value: ${{ steps.summary.outputs.verified }}
+  result:
+    description: Path to result.json.
+    value: ${{ steps.run.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install RunEconomy
+      shell: bash
+      env:
+        SPEC: ${{ inputs.runeconomy-version }}
+      run: python -m pip install --disable-pip-version-check --quiet "$SPEC"
+
+    - name: Run experiment
+      id: run
+      shell: bash
+      env:
+        WORKSPACE: ${{ inputs.workspace }}
+        OUTPUT: ${{ inputs.output }}
+        MODE: ${{ inputs.mode }}
+        ALLOW_EXEC: ${{ inputs.allow-exec-evaluators }}
+      run: |
+        set -euo pipefail
+        flags=(--json)
+        case "$MODE" in
+          frozen) flags+=(--require-frozen) ;;
+          compatibility) ;;
+          *) echo "::error title=RunEconomy::mode must be frozen or compatibility"; exit 1 ;;
+        esac
+        if [ "$ALLOW_EXEC" = "true" ]; then flags+=(--allow-exec-evaluators); fi
+        runeconomy experiment run "$WORKSPACE" --output "$OUTPUT" "${flags[@]}" > runeconomy-run.json
+        test -f "$OUTPUT/result.json"
+        echo "result=$OUTPUT/result.json" >> "$GITHUB_OUTPUT"
+
+    - name: Summarize verdict
+      id: summary
+      shell: bash
+      env:
+        RESULT: ${{ steps.run.outputs.result }}
+        MODE: ${{ inputs.mode }}
+        COMMENT: ${{ inputs.comment }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        flags=(--mode "$MODE" --output runeconomy-summary.md)
+        if [ "$COMMENT" = "true" ] && [ -n "${GITHUB_EVENT_PATH:-}" ] \
+          && python -c 'import json,os,sys; e=json.load(open(os.environ["GITHUB_EVENT_PATH"])); sys.exit(0 if "pull_request" in e else 1)'; then
+          flags+=(--github-comment)
+        fi
+        runeconomy ci-summary "$RESULT" "${flags[@]}" --json > runeconomy-summary.json
+        cat runeconomy-summary.md >> "$GITHUB_STEP_SUMMARY"
+        python - <<'PY' >> "$GITHUB_OUTPUT"
+        import json
+        summary = json.load(open("runeconomy-summary.json"))
+        print(f"verdict={summary['verdict']}")
+        print(f"verified={'true' if summary['verified'] else 'false'}")
+        PY
+
+    - name: Enforce verified verdict
+      if: ${{ inputs.require-verified == 'true' && steps.summary.outputs.verified != 'true' }}
+      shell: bash
+      env:
+        VERDICT: ${{ steps.summary.outputs.verdict }}
+      run: |
+        echo "::error title=RunEconomy::verdict is $VERDICT, not verified"
+        exit 1

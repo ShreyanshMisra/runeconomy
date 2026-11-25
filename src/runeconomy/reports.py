@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib.resources import files
 from typing import Any
 
@@ -139,9 +139,138 @@ def _status_copy(status: str, reason: str) -> tuple[str, str, str | None, str]:
     )
 
 
+def _preregistration_rows(result: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
+    """Freeze status and economics provenance. Empty for results without them."""
+
+    rows: list[tuple[str, str]] = []
+    record = result.get("preregistration")
+    if isinstance(record, Mapping):
+        rows.extend(
+            [
+                ("Preregistration record", str(record.get("record_sha256", "unknown"))),
+                ("Frozen at", str(record.get("frozen_at", "unknown"))),
+                ("Locks at run start", str(record.get("status", "unknown"))),
+                ("Design completeness", str(record.get("design_completeness", "unknown"))),
+            ]
+        )
+    provenance = result.get("provenance")
+    design = result.get("design")
+    cost = None
+    for source in (provenance, design):
+        if isinstance(source, Mapping) and isinstance(source.get("cost_model"), Mapping):
+            cost = source["cost_model"]
+    if cost is not None:
+        model = cost.get("model") if isinstance(cost.get("model"), Mapping) else {}
+        rows.append(
+            (
+                "Cost model",
+                f"{model.get('kind', 'unknown')} ({cost.get('sha256', 'unknown')})"
+                + (f"; source: {model['source']}" if model.get("source") else ""),
+            )
+        )
+    return tuple(rows)
+
+
+def _identity_assurance_rows(
+    decision: Mapping[str, Any],
+) -> tuple[tuple[str, str], ...]:
+    """Graded identity, shown separately from gates. Empty for legacy results."""
+
+    record = decision.get("identity_assurance")
+    if not isinstance(record, Mapping):
+        return ()
+    policy = record.get("policy") if isinstance(record.get("policy"), Mapping) else {}
+    rows: list[tuple[str, str]] = [
+        (
+            "Identity policy",
+            f"schema {policy.get('schema_version', 'unknown')}; minimum grade "
+            f"{policy.get('minimum_grade', 'unknown')}",
+        ),
+        ("Claim scope", str(record.get("claim_scope", "unknown"))),
+        ("Supported claim", str(record.get("supported_claim", "Not recorded."))),
+    ]
+    variants = record.get("variants") if isinstance(record.get("variants"), Mapping) else {}
+    for name in ("baseline", "candidate"):
+        item = variants.get(name)
+        if not isinstance(item, Mapping):
+            continue
+        undisclosed = ", ".join(item.get("undisclosed_fields") or []) or "none"
+        missing = ", ".join(
+            [*(item.get("missing_fields") or []), *(item.get("placeholder_fields") or [])]
+        ) or "none"
+        fingerprint = item.get("provider_fingerprint")
+        fingerprint = fingerprint if isinstance(fingerprint, Mapping) else {}
+        rows.append(
+            (
+                f"{name.title()} identity",
+                f"Grade: {item.get('grade') or 'unknown'}. Meets minimum: "
+                f"{'yes' if item.get('meets_minimum_grade') else 'no'}. "
+                f"Undisclosed: {undisclosed}. Missing or placeholder: {missing}.",
+            )
+        )
+        rows.append(
+            (
+                f"{name.title()} provider fingerprint",
+                f"{fingerprint.get('distinct_count', 0)} distinct value(s) across "
+                f"{fingerprint.get('reported_count', 0)} of "
+                f"{fingerprint.get('request_count', 0)} requests. Drift indicator "
+                "only; not part of identity and never affects validity.",
+            )
+        )
+    for limit in record.get("claim_limits") or []:
+        if isinstance(limit, Mapping):
+            rows.append(
+                (
+                    f"Claim limit · {limit.get('variant', 'unknown')}",
+                    f"{limit.get('code', 'unknown')}: {limit.get('statement', '')}",
+                )
+            )
+    return tuple(rows)
+
+
+def _serving_capability_rows(
+    result: Mapping[str, Any],
+) -> tuple[tuple[str, str], ...]:
+    """Adapter capability downgrades. Empty for results that record none."""
+
+    record = result.get("serving_capabilities")
+    if not isinstance(record, Mapping):
+        return ()
+    rows: list[tuple[str, str]] = [
+        ("Backend kind", str(record.get("backend_kind", "unknown"))),
+        (
+            "Capability table",
+            f"version {record.get('capability_table_version', 'unknown')}",
+        ),
+    ]
+    for item in record.get("downgrades") or []:
+        if isinstance(item, Mapping):
+            rows.append(
+                (
+                    f"Downgraded · {item.get('capability', 'unknown')}",
+                    f"{item.get('status', 'unknown')}: {item.get('effect', '')}",
+                )
+            )
+    if len(rows) == 2:
+        rows.append(("Downgrades", "None recorded."))
+    return tuple(rows)
+
+
 def _generic_recommendation(status: str, decision: Mapping[str, Any]) -> str:
     reason = str(decision.get("reason", "")).lower()
     decisive = str(decision.get("decisive_stage", "")).lower()
+    assurance = decision.get("identity_assurance")
+    if (
+        status == "verified"
+        and isinstance(assurance, Mapping)
+        and assurance.get("claim_scope") == "observed_service_window"
+    ):
+        return (
+            "The candidate is eligible for deployment review for this workload only. "
+            "Identity is provider-declared, so the result describes the provider "
+            "service as observed during the run, not a pinned configuration. "
+            "Re-verify before relying on it later."
+        )
     if status == "verified":
         return "The candidate is eligible for deployment review. Review operational risk and production safeguards first."
     if status == "regression":
@@ -492,9 +621,13 @@ def _generic_technical_sections(
             ("Statistical details", effect_rows),
             ("Environment and provenance", environment_rows),
             ("Evidence quality", evidence_rows),
+            ("Preregistration and economics", _preregistration_rows(result)),
+            ("Identity assurance", _identity_assurance_rows(decision)),
+            ("Serving capabilities", _serving_capability_rows(result)),
             ("Evidence integrity", integrity_rows),
             ("Limitations", limitation_rows),
         )
+        if rows
     )
 
 
@@ -1011,11 +1144,20 @@ summary:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; }
 """
 
 
-def render_experiment_html(result: Mapping[str, Any]) -> str:
+def render_experiment_html(result: Mapping[str, Any], *, descriptive_study: bool = False) -> str:
     """Render a self-contained experiment report from recorded evidence."""
 
     view = _build_report_view_model(result)
-    return f"""<!doctype html>
+    if descriptive_study:
+        view = replace(
+            view,
+            badges=("Descriptive study", *view.badges),
+            primary_message="Descriptive study",
+            status_label=f"{view.status_label} (recorded gates only)",
+            verdict_explanation="These observations come from a study without preregistration.",
+            recommendation="Use these observations to design a preregistered comparison.",
+        )
+    document = f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1034,6 +1176,7 @@ def render_experiment_html(result: Mapping[str, Any]) -> str:
 </main>
 </body>
 </html>"""
+    return "\n".join(line if line.strip() else "" for line in document.split("\n"))
 
 
 def _render_markdown(view: ReportView) -> str:
@@ -1185,6 +1328,6 @@ def load_demo_result(case: str = "rejection") -> dict[str, Any]:
 
 
 def render_demo_html(result: Mapping[str, Any]) -> str:
-    """Render either the flagship rejection or historical experiment result."""
+    """Render either the flagship invalid proof or historical experiment result."""
 
     return render_experiment_html(result)

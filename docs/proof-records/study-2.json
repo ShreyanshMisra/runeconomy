@@ -1,0 +1,411 @@
+{
+  "arms": {
+    "baseline": {
+      "cache_coverage": 0.001,
+      "client_ttft_ms": {
+        "mean": 1522.419,
+        "p50": 1548.475,
+        "p95": 1940.356
+      },
+      "mean_cached_tokens": 1.267,
+      "mean_input_tokens": 1793.5,
+      "requests": 240,
+      "server_ttft_ms": {
+        "mean": 899.643,
+        "p50": 934.962,
+        "p95": 1029.25
+      },
+      "task_success_rate": 1.0
+    },
+    "candidate": {
+      "cache_coverage": 0.971,
+      "client_ttft_ms": {
+        "mean": 159.847,
+        "p50": 138.72,
+        "p95": 372.74
+      },
+      "mean_cached_tokens": 1741.6,
+      "mean_input_tokens": 1793.5,
+      "requests": 240,
+      "server_ttft_ms": {
+        "mean": 113.337,
+        "p50": 95.655,
+        "p95": 318.46
+      },
+      "task_success_rate": 1.0
+    }
+  },
+  "decision": {
+    "decisive_gate": "all_required_gates",
+    "reason": "all required quality, optimization-target, and performance checks passed",
+    "status": "verified"
+  },
+  "design": "48 routing requests share one ~1.8K-token system prompt. The baseline puts a per-request ID and timestamp first; the candidate moves it after the stable prefix. Same model, server, and sampling; 8 closed-loop clients; 5 repetitions.",
+  "effects": {
+    "cache_coverage": {
+      "bootstrap_95_ci": [
+        0.954,
+        0.982
+      ],
+      "candidate_minus_baseline_mean": 0.97,
+      "paired_count": 240,
+      "relative_change": 1373.61
+    },
+    "cached_tokens": {
+      "bootstrap_95_ci": [
+        1711.133,
+        1762.533
+      ],
+      "candidate_minus_baseline_mean": 1740.333,
+      "paired_count": 240,
+      "relative_change": 1373.947
+    },
+    "client_server_ttft_gap_ms": {
+      "bootstrap_95_ci": [
+        -611.761,
+        -542.11
+      ],
+      "candidate_minus_baseline_mean": -576.267,
+      "paired_count": 240,
+      "relative_change": -0.925
+    },
+    "client_ttft_ms": {
+      "bootstrap_95_ci": [
+        -1404.623,
+        -1319.714
+      ],
+      "candidate_minus_baseline_mean": -1362.572,
+      "paired_count": 240,
+      "relative_change": -0.895
+    },
+    "generation_time_ms": {
+      "bootstrap_95_ci": [
+        -608.892,
+        -582.181
+      ],
+      "candidate_minus_baseline_mean": -595.511,
+      "paired_count": 240,
+      "relative_change": -0.86
+    },
+    "input_tokens": {
+      "bootstrap_95_ci": [
+        0.0,
+        0.0
+      ],
+      "candidate_minus_baseline_mean": 0.0,
+      "paired_count": 240,
+      "relative_change": 0.0
+    },
+    "output_tokens": {
+      "bootstrap_95_ci": [
+        0.0,
+        0.0
+      ],
+      "candidate_minus_baseline_mean": 0.0,
+      "paired_count": 240,
+      "relative_change": 0.0
+    },
+    "predicted_eligible_cached_tokens": {
+      "bootstrap_95_ci": [
+        1760.0,
+        1760.0
+      ],
+      "candidate_minus_baseline_mean": 1760.0,
+      "paired_count": 240,
+      "relative_change": 137.5
+    },
+    "server_queue_ms": {
+      "bootstrap_95_ci": [
+        -394.387,
+        -323.529
+      ],
+      "candidate_minus_baseline_mean": -356.031,
+      "paired_count": 240,
+      "relative_change": -1.0
+    },
+    "server_ttft_ms": {
+      "bootstrap_95_ci": [
+        -808.086,
+        -762.238
+      ],
+      "candidate_minus_baseline_mean": -786.306,
+      "paired_count": 240,
+      "relative_change": -0.874
+    },
+    "task_success": {
+      "bootstrap_95_ci": [
+        0.0,
+        0.0
+      ],
+      "candidate_minus_baseline_mean": 0.0,
+      "confidence_interval": null,
+      "confidence_level": 0.95,
+      "interval_note": "this method reports a one-sided lower bound that inverts the exact test; no two-sided interval is preregistered",
+      "method": "exact unconditional non-inferiority test ordered by the Tango paired score",
+      "method_id": "paired_score_exact",
+      "noninferiority_alpha": 0.05,
+      "noninferiority_margin": 0.05,
+      "noninferiority_p_value": 0.0,
+      "one_sided_lower_bound": -0.012,
+      "outcome_counts": {
+        "baseline_only": 0,
+        "both_failure": 0,
+        "both_success": 240,
+        "candidate_only": 0
+      },
+      "paired_count": 240,
+      "rejects_inferiority": true,
+      "relative_change": 0.0
+    },
+    "total_latency_ms": {
+      "bootstrap_95_ci": [
+        -2000.777,
+        -1906.078
+      ],
+      "candidate_minus_baseline_mean": -1954.301,
+      "paired_count": 240,
+      "relative_change": -0.883
+    }
+  },
+  "evidence_grade": "descriptive (not preregistered)",
+  "gates": [
+    {
+      "name": "minimum_task_success_rate",
+      "observed": {
+        "baseline": 1.0,
+        "baseline_95_ci": [
+          0.9847,
+          1.0
+        ],
+        "candidate": 1.0,
+        "candidate_95_ci": [
+          0.9847,
+          1.0
+        ]
+      },
+      "passed": true,
+      "required": true,
+      "threshold": {
+        "method": "Clopper-Pearson exact binomial",
+        "minimum_95_ci_lower_bound": 0.8
+      }
+    },
+    {
+      "name": "task_success_noninferior",
+      "observed": {
+        "baseline": 1.0,
+        "baseline_95_ci": [
+          0.9847,
+          1.0
+        ],
+        "candidate": 1.0,
+        "candidate_95_ci": [
+          0.9847,
+          1.0
+        ],
+        "paired_difference": {
+          "bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "candidate_minus_baseline_mean": 0.0,
+          "confidence_interval": null,
+          "confidence_level": 0.95,
+          "interval_note": "this method reports a one-sided lower bound that inverts the exact test; no two-sided interval is preregistered",
+          "method": "exact unconditional non-inferiority test ordered by the Tango paired score",
+          "method_id": "paired_score_exact",
+          "noninferiority_alpha": 0.05,
+          "noninferiority_margin": 0.05,
+          "noninferiority_p_value": 0.0002,
+          "one_sided_lower_bound": -0.0124,
+          "outcome_counts": {
+            "baseline_only": 0,
+            "both_failure": 0,
+            "both_success": 240,
+            "candidate_only": 0
+          },
+          "paired_count": 240,
+          "rejects_inferiority": true,
+          "relative_change": 0.0
+        }
+      },
+      "passed": true,
+      "required": true,
+      "threshold": {
+        "max_regression": 0.05,
+        "method": "paired_score_exact"
+      }
+    },
+    {
+      "name": "completion_rate",
+      "observed": {
+        "baseline": 1.0,
+        "candidate": 1.0
+      },
+      "passed": true,
+      "required": true,
+      "threshold": 1.0
+    },
+    {
+      "name": "cached_token_gain",
+      "observed": {
+        "bootstrap_95_ci": [
+          1711.1333,
+          1762.5333
+        ],
+        "candidate_minus_baseline_mean": 1740.3333,
+        "paired_count": 240,
+        "relative_change": 1373.9474
+      },
+      "passed": true,
+      "required": true,
+      "threshold": 256.0
+    },
+    {
+      "name": "prediction_direction_matches_observation",
+      "observed": {
+        "claim": "prediction is a full-block static upper bound under the observed request order",
+        "observed_candidate_minus_baseline_cached_tokens": 1740.3333,
+        "predicted_candidate_minus_baseline_cached_tokens": 1760.0,
+        "realization_ratio": 0.9888
+      },
+      "passed": true,
+      "required": true,
+      "threshold": "both deltas > 0"
+    },
+    {
+      "name": "input_token_reduction",
+      "observed": {
+        "bootstrap_95_ci": [
+          0.0,
+          0.0
+        ],
+        "candidate_minus_baseline_mean": 0.0,
+        "paired_count": 240,
+        "relative_change": 0.0
+      },
+      "passed": true,
+      "required": false,
+      "threshold": 0.0
+    },
+    {
+      "name": "server_ttft_ms_improvement",
+      "observed": {
+        "bootstrap_95_ci": [
+          -808.0856,
+          -762.2375
+        ],
+        "candidate_minus_baseline_mean": -786.3058,
+        "paired_count": 240,
+        "relative_change": -0.874
+      },
+      "passed": true,
+      "required": true,
+      "threshold": "upper bound of 95% CI < 0"
+    },
+    {
+      "name": "observed_concurrency_balance",
+      "observed": {
+        "declared_level": 8,
+        "median_mean_in_flight": {
+          "baseline": 7.9975,
+          "candidate": 7.8589
+        }
+      },
+      "passed": true,
+      "required": false,
+      "threshold": "both variants' median time-weighted in-flight >= 90% of the declared concurrency"
+    },
+    {
+      "name": "p95_client_ttft_ms_superiority",
+      "observed": {
+        "analyzable_observations": 240,
+        "baseline": 1940.3565,
+        "bootstrap_replicates": 4000,
+        "candidate": 372.7402,
+        "candidate_unbounded": false,
+        "candidate_worse_by": -1567.6162,
+        "clusters": 48,
+        "confidence_interval": [
+          -1766.011,
+          -1411.3895
+        ],
+        "confidence_level": 0.95,
+        "difference_direction": "positive means the candidate is worse",
+        "difference_scale": "absolute",
+        "lower_unbounded": false,
+        "method": "paired_cluster_bootstrap",
+        "method_detail": "percentile bootstrap over 4000 task-cluster resamples, both arms and all repetitions resampled together",
+        "minimum_sample": {
+          "clusters": 20,
+          "observations": 200,
+          "rule": "at least 10 observations above the quantile and 20 clusters"
+        },
+        "population": "successful_pairs",
+        "status": "evaluated",
+        "upper_unbounded": false
+      },
+      "passed": true,
+      "required": true,
+      "threshold": {
+        "margin": 0.0,
+        "relative_margin": null,
+        "rule": "upper bound of the two-sided 95% interval < -0 ms",
+        "semantics": "superiority"
+      }
+    },
+    {
+      "name": "usd_per_1k_successful_workflows_superiority",
+      "observed": {
+        "analyzable_observations": 240,
+        "baseline": 0.151,
+        "bootstrap_replicates": 4000,
+        "candidate": 0.022,
+        "candidate_unbounded": false,
+        "candidate_worse_by": -0.129,
+        "clusters": 48,
+        "confidence_interval": [
+          -0.133,
+          -0.1251
+        ],
+        "confidence_level": 0.95,
+        "difference_direction": "positive means the candidate is worse",
+        "difference_scale": "absolute",
+        "lower_unbounded": false,
+        "method": "paired_cluster_bootstrap",
+        "method_detail": "percentile bootstrap over 4000 task-cluster resamples, both arms and all repetitions resampled together",
+        "minimum_sample": {
+          "clusters": 20,
+          "observations": null,
+          "rule": "at least 20 clusters (tasks)"
+        },
+        "population": "all_attempts_conservative",
+        "status": "evaluated",
+        "upper_unbounded": false
+      },
+      "passed": true,
+      "required": true,
+      "threshold": {
+        "margin": 0.0,
+        "relative_margin": null,
+        "rule": "upper bound of the two-sided 95% interval < -0 usd",
+        "semantics": "superiority"
+      }
+    }
+  ],
+  "provenance": {
+    "private_raw_archive_sha256": "sha256:1d6f272a11f308fa5675147e05aea50b8cf2df56f7f3c64a667368f407bb7d0f",
+    "result_sha256": "sha256:4fca959784463ed86bb4d693d97d5f921912e5c6061e315b767d6c057e15bf5c"
+  },
+  "publication_status": "private_unpublished",
+  "result_type": "runeconomy.phase7_study",
+  "schema_version": "0.1",
+  "study": 2,
+  "superseded_execution": {
+    "private_raw_archive_sha256": "sha256:cdef3b25e1d2f9f85f7cbc50ad9c7611898d6025b28bb98e4f1aec998ce65707",
+    "result_sha256": "sha256:d7d9591eb1d4ae6bcdf663fbf5f0e6d6813d2325e37a4f778caab8e461bafd87",
+    "status": "inconclusive",
+    "why_superseded": "Measurement defect, not an outcome: the runner launched vLLM without per-request usage details and metrics, so cached tokens and server TTFT were unmeasured, and 144 requests per variant was below the p95 gate's 200-observation minimum. The runner and planner were fixed before the rerun."
+  },
+  "title": "What a dynamic value at the start of a prompt prefix costs in vLLM prefix-cache reuse"
+}

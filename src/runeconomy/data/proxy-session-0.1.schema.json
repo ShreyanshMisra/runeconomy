@@ -1,0 +1,275 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://runeconomy.dev/schemas/proxy-session-0.1.schema.json",
+  "title": "RunEconomy capture-proxy session record 0.1",
+  "description": "One line of a capture session JSONL file. The first line is a session record. Exchange, token-resolution and upstream-identity records follow in write order. A clean shutdown appends a session_close record. Normative wire semantics live in runeconomy.proxy.contract.",
+  "oneOf": [
+    {"$ref": "#/$defs/session"},
+    {"$ref": "#/$defs/exchange"},
+    {"$ref": "#/$defs/record_error"},
+    {"$ref": "#/$defs/token_resolution"},
+    {"$ref": "#/$defs/upstream_identity"},
+    {"$ref": "#/$defs/session_close"}
+  ],
+  "$defs": {
+    "ms": {"type": ["number", "null"]},
+    "nonneg_int_or_null": {"type": ["integer", "null"], "minimum": 0},
+    "digest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+    "headers": {
+      "type": "object",
+      "propertyNames": {"not": {"enum": ["authorization", "proxy-authorization", "cookie", "set-cookie", "api-key", "x-api-key", "openai-organization", "openai-project"]}},
+      "additionalProperties": {"type": "string"}
+    },
+    "redaction": {
+      "type": ["object", "null"],
+      "required": ["policy", "builtin", "hooks", "modified"],
+      "properties": {
+        "policy": {"type": "string"},
+        "builtin": {"type": "boolean"},
+        "hooks": {"type": "integer", "minimum": 0},
+        "modified": {"type": "boolean"},
+        "builtin_paths": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "interval_summary": {
+      "type": ["object", "null"],
+      "required": ["count", "mean", "p50", "p90", "p99", "max"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 1},
+        "mean": {"type": "number"},
+        "p50": {"type": "number"},
+        "p90": {"type": "number"},
+        "p99": {"type": "number"},
+        "max": {"type": "number"}
+      }
+    },
+    "segment": {
+      "type": "object",
+      "required": ["kind", "label", "start_token", "end_token", "attribution_quality", "source"],
+      "properties": {
+        "kind": {"type": "string"},
+        "label": {"type": "string"},
+        "start_token": {"type": "integer", "minimum": 0},
+        "end_token": {"type": "integer", "minimum": 1},
+        "attribution_quality": {"const": "exact_token_boundary"},
+        "source": {"type": "string"},
+        "message_index": {"type": "integer", "minimum": 0}
+      }
+    },
+    "session": {
+      "type": "object",
+      "required": ["record_type", "session_version", "session_id", "started_unix_ns", "clock", "upstream", "scope", "capture"],
+      "properties": {
+        "record_type": {"const": "runeconomy.proxy.session"},
+        "session_version": {"const": "0.1"},
+        "session_id": {"type": "string", "minLength": 1},
+        "runeconomy_version": {"type": "string"},
+        "started_unix_ns": {"type": "integer"},
+        "clock": {"type": "object", "required": ["timeline", "wall_anchor_unix_ns"]},
+        "upstream": {
+          "type": "object",
+          "required": ["origin", "base_path", "openai_base_url"],
+          "properties": {
+            "origin": {"type": "string", "pattern": "^https?://[^/@?#]+$"},
+            "base_path": {"type": "string"},
+            "openai_base_url": {"type": "string"},
+            "stripped_trailing_v1": {"type": "boolean"}
+          }
+        },
+        "scope": {
+          "type": "object",
+          "required": ["kind"],
+          "properties": {"kind": {"enum": ["session", "attempt"]}}
+        },
+        "capture": {
+          "type": "object",
+          "required": ["token_resolution", "payload_capture", "redaction_policy"],
+          "properties": {
+            "token_resolution": {"enum": ["background", "on_close", "off"]},
+            "payload_capture": {"enum": ["full", "digest_only"]},
+            "redaction_policy": {"type": "string"},
+            "redaction_hooks": {"type": "integer", "minimum": 0}
+          }
+        },
+        "configuration": {"type": "object"}
+      }
+    },
+    "exchange": {
+      "type": "object",
+      "required": ["record_type", "session_id", "exchange_id", "sequence", "route", "outcome", "timing", "correlation", "request", "response", "telemetry"],
+      "properties": {
+        "record_type": {"const": "runeconomy.proxy.exchange"},
+        "session_id": {"type": "string"},
+        "exchange_id": {"type": "string"},
+        "sequence": {"type": "integer", "minimum": 1},
+        "method": {"type": "string"},
+        "path": {"type": "string", "pattern": "^[^?]*$"},
+        "route": {"enum": ["chat_completions", "completions", "responses"]},
+        "received_unix_ns": {"type": "integer"},
+        "outcome": {"enum": ["completed", "upstream_http_error", "upstream_unreachable", "upstream_interrupted", "client_disconnected"]},
+        "error": {"type": ["string", "null"]},
+        "upstream_retried_stale_connection": {"type": "boolean"},
+        "timing": {
+          "type": "object",
+          "properties": {
+            "headers_received_ms": {"$ref": "#/$defs/ms"},
+            "request_received_ms": {"$ref": "#/$defs/ms"},
+            "upstream_sent_ms": {"$ref": "#/$defs/ms"},
+            "response_headers_ms": {"$ref": "#/$defs/ms"},
+            "first_byte_ms": {"$ref": "#/$defs/ms"},
+            "first_output_ms": {"$ref": "#/$defs/ms"},
+            "last_output_ms": {"$ref": "#/$defs/ms"},
+            "completed_ms": {"$ref": "#/$defs/ms"}
+          }
+        },
+        "correlation": {
+          "type": "object",
+          "required": ["workflow_id", "traceparent", "span_id", "depends_on", "task_id", "attempt_id", "header_errors"],
+          "properties": {
+            "workflow_id": {"type": ["string", "null"]},
+            "traceparent": {
+              "type": ["object", "null"],
+              "required": ["trace_id", "parent_id", "flags"],
+              "properties": {
+                "trace_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+                "parent_id": {"type": "string", "pattern": "^[0-9a-f]{16}$"},
+                "flags": {"type": "string", "pattern": "^[0-9a-f]{2}$"}
+              }
+            },
+            "span_id": {"type": ["string", "null"]},
+            "depends_on": {
+              "type": "object",
+              "required": ["asserted", "span_ids"],
+              "properties": {
+                "asserted": {"type": "boolean"},
+                "span_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+              }
+            },
+            "task_id": {"type": ["string", "null"]},
+            "attempt_id": {"type": ["string", "null"]},
+            "header_errors": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "request": {
+          "type": "object",
+          "required": ["headers", "body_format", "body_bytes", "body_sha256", "body"],
+          "properties": {
+            "headers": {"$ref": "#/$defs/headers"},
+            "body_format": {"enum": ["json", "non_json", "empty"]},
+            "body_bytes": {"type": "integer", "minimum": 0},
+            "body_sha256": {"$ref": "#/$defs/digest"},
+            "model": {"type": ["string", "null"]},
+            "stream": {"type": "boolean"},
+            "stream_include_usage": {"type": "boolean"},
+            "body": {},
+            "redaction": {"$ref": "#/$defs/redaction"}
+          }
+        },
+        "response": {
+          "type": "object",
+          "required": ["status", "headers", "body_bytes", "body_sha256", "body"],
+          "properties": {
+            "status": {"type": ["integer", "null"]},
+            "headers": {"$ref": "#/$defs/headers"},
+            "content_type": {"type": ["string", "null"]},
+            "content_encoding": {"type": ["string", "null"]},
+            "body_bytes": {"type": "integer", "minimum": 0},
+            "body_sha256": {"$ref": "#/$defs/digest"},
+            "body": {},
+            "error_excerpt": {"type": ["string", "null"]},
+            "redaction": {"$ref": "#/$defs/redaction"}
+          }
+        },
+        "telemetry": {
+          "type": "object",
+          "required": ["stream", "usage", "client_ttft_ms", "itl_ms", "tpot_ms", "total_latency_ms", "invoked_tools", "stream_termination"],
+          "properties": {
+            "stream": {"type": "boolean"},
+            "decodable": {"type": "boolean"},
+            "stream_termination": {"type": "string"},
+            "usage": {
+              "type": "object",
+              "properties": {
+                "prompt_tokens": {"$ref": "#/$defs/nonneg_int_or_null"},
+                "completion_tokens": {"$ref": "#/$defs/nonneg_int_or_null"},
+                "cached_tokens": {"$ref": "#/$defs/nonneg_int_or_null"},
+                "reasoning_tokens": {"$ref": "#/$defs/nonneg_int_or_null"}
+              }
+            },
+            "server_metrics": {"type": "object", "additionalProperties": {"type": "number"}},
+            "invoked_tools": {"type": "array", "items": {"type": "string"}},
+            "client_ttft_ms": {"$ref": "#/$defs/ms"},
+            "itl_ms": {"$ref": "#/$defs/interval_summary"},
+            "tpot_ms": {"$ref": "#/$defs/ms"},
+            "output_event_count": {"type": "integer", "minimum": 0},
+            "decode_window_ms": {"$ref": "#/$defs/ms"},
+            "time_to_response_headers_ms": {"$ref": "#/$defs/ms"},
+            "proxy_overhead_ms": {"$ref": "#/$defs/ms"},
+            "total_latency_ms": {"$ref": "#/$defs/ms"}
+          }
+        }
+      }
+    },
+    "record_error": {
+      "type": "object",
+      "required": ["record_type", "session_id", "outcome", "record_error"],
+      "properties": {
+        "record_type": {"const": "runeconomy.proxy.exchange"},
+        "outcome": {"const": "record_error"},
+        "record_error": {"type": "string"}
+      }
+    },
+    "token_resolution": {
+      "type": "object",
+      "required": ["record_type", "session_id", "exchange_id", "resolution_version", "status", "source", "verification", "prompt_token_ids", "prompt_token_count", "segmentation"],
+      "properties": {
+        "record_type": {"const": "runeconomy.proxy.token_resolution"},
+        "exchange_id": {"type": "string"},
+        "resolution_version": {"const": "0.1"},
+        "status": {"enum": ["exact", "unknown"]},
+        "source": {"enum": ["vllm_chat_render", "vllm_tokenize_chat", "vllm_tokenize_prompt", "vllm_responses_render", "request_prompt_token_ids", null]},
+        "verification": {"enum": ["usage_prompt_tokens_match", "usage_prompt_tokens_unavailable", "usage_prompt_tokens_mismatch", "not_resolved"]},
+        "reason": {"type": ["string", "null"]},
+        "prompt_token_ids": {"type": ["array", "null"], "items": {"type": "integer", "minimum": 0}},
+        "prompt_token_count": {"$ref": "#/$defs/nonneg_int_or_null"},
+        "segments": {"type": ["array", "null"], "items": {"$ref": "#/$defs/segment"}},
+        "segmentation": {
+          "type": "object",
+          "required": ["status"],
+          "properties": {"status": {"enum": ["exact", "partial", "none"]}}
+        }
+      },
+      "if": {"properties": {"status": {"const": "exact"}}},
+      "then": {"properties": {"prompt_token_ids": {"type": "array"}, "verification": {"enum": ["usage_prompt_tokens_match", "usage_prompt_tokens_unavailable"]}}},
+      "else": {"properties": {"prompt_token_ids": {"type": "null"}}}
+    },
+    "upstream_identity": {
+      "type": "object",
+      "required": ["record_type", "session_id", "backend", "backend_version", "models", "cache_config", "probe_errors"],
+      "properties": {
+        "record_type": {"const": "runeconomy.proxy.upstream_identity"},
+        "backend": {"enum": ["vllm", "openai_compatible", "unknown"]},
+        "backend_evidence": {"type": "string"},
+        "backend_version": {"type": ["string", "null"]},
+        "models": {"type": "array", "items": {"type": "object", "required": ["id"]}},
+        "cache_config": {"type": ["object", "null"]},
+        "probe_errors": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "session_close": {
+      "type": "object",
+      "required": ["record_type", "session_version", "session_id", "clean", "counters"],
+      "properties": {
+        "record_type": {"const": "runeconomy.proxy.session_close"},
+        "session_version": {"const": "0.1"},
+        "clean": {"type": "boolean"},
+        "counters": {
+          "type": "object",
+          "required": ["exchanges_observed", "exchanges_recorded", "observations_dropped", "token_resolution_exact", "token_resolution_unknown"],
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "unavailable_backend_endpoints": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

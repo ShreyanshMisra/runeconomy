@@ -216,6 +216,16 @@ initialization. An explicit `runeconomy.prompt_segments` extension may provide
 semantic token arrays. Exact boundaries are accepted only when those arrays
 concatenate to the complete `runeconomy.prompt_token_ids` sequence.
 
+### Graded identity attributes
+
+LLM spans may declare `runeconomy.identity_grade` (`operator_verified` or
+`provider_declared`), `runeconomy.identity_undisclosed` (a JSON array of
+undisclosed identity fields) and `runeconomy.provider_system_fingerprint`. The
+importer adds `identity_grade`, `identity_undisclosed_fields` and
+`provider_fingerprint_sha256` (a digest, never the raw value) to the
+normalized request only when a span declares them. Traces without them
+normalize exactly as before. See [backends](backends.md#identity-grades-in-agent-process-traces).
+
 ## Importing Prefixwise and cache-ledger evidence
 
 Some prompt-cache analysis tools export a JSONL ledger with one row per

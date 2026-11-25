@@ -96,6 +96,116 @@ defaults the absolute task-success floor to 80%. The runner is
 intentionally narrow today: requests use either vLLM's Responses or Chat
 Completions API, run sequentially, and contain their complete history inline.
 
+## Powered planning
+
+Use `design.planning.schema_version: "0.2"` for sample sizing. Keep the
+existing design declarations above and add the following fields inside
+`design.planning`. These are illustrative values with placeholder digests.
+
+```json
+{
+  "schema_version": "0.2",
+  "target_power": 0.8,
+  "success_assumptions": {
+    "source": "calibration",
+    "artifact_sha256": "sha256:...",
+    "expected_success_rate": 0.90,
+    "expected_discordance_rate": 0.06,
+    "expected_difference": 0.0
+  },
+  "completion_model": {
+    "source": "calibration",
+    "artifact_sha256": "sha256:...",
+    "infrastructure_failure_rate": 0.005,
+    "application_failure_rate": 0.01,
+    "pass_probability": 0.95
+  },
+  "cost_assumptions": {
+    "source": "calibration",
+    "usd_per_attempt": 0.002,
+    "fixed_usd": 0.0
+  }
+}
+```
+
+Estimate baseline success and discordance from paired calibration runs.
+Discordance is the fraction of pairs in which exactly one arm succeeds.
+`expected_difference` is candidate minus baseline success probability. The
+non-inferiority margin comes from `acceptance.max_task_success_regression`.
+Set `source` to `scenario` for hypothetical inputs. Use independent calibration
+evidence and its digest for a freeze-ready design. Never source these inputs
+from held-out outcomes.
+
+`paired_exact` remains the default. It combines one-sided Clopper–Pearson
+bounds for the two discordant cell probabilities using Bonferroni. Its
+one-sided coverage is at least nominal, and the bound can be conservative.
+`paired_score_exact` uses an unconditional exact trinomial test ordered by the
+Tango paired score and inverts that test for a one-sided lower bound. At
+`alpha = 0.05`, the target is at least 95% one-sided coverage under the paired
+model, subject to numerical accuracy when maximizing over nuisance
+discordance. Simulation tests check coverage at selected settings. Absolute
+success still uses the lower end of a two-sided 95% Clopper–Pearson interval
+for each arm. The static-only `point_estimate` method has no sampling-error
+control.
+
+Declare the method in `acceptance.task_success_method` before execution. For
+static replay, `paired_score_exact` requires manifest schema `0.2` or later.
+For agent-process experiments, use
+[agent manifest schema 0.3](closed-loop-comparison.md).
+
+Run `runeconomy experiment plan experiment/` to see the recommended sample.
+The power target covers both absolute-success gates and paired non-inferiority
+when an absolute-success floor is active. Joint power for the entire
+experiment also depends on completion and latency. Repetitions on one task
+can yield correlated pairs and reduce effective power. Review the assumptions,
+declared and modeled completion tolerances, and cost before freezing. The
+completion model adds the two failure rates and finds the smallest integer
+tolerance that reaches the specified per-variant binomial pass probability.
+Use the full `completion_model.expected_failure_model.derived_min_completed_rate`
+value from JSON in the acceptance contract. Include warm-up or other overhead
+in the cost inputs when applicable.
+
+`runeconomy experiment plan experiment/ --json` includes a
+`preregistration` draft with claim metadata, population and digests, gates,
+method, sample size, tolerance, cost and a stopping rule. Review the unknown
+fields and record the full claim and design separately before held-out
+execution. The planner labels the draft `draft_not_frozen`.
+
+### Designs that should catch a regression
+
+A design whose declared hypothesis is that the candidate *harms* task quality
+sets `"detection_target": "regression"` in `design.planning` (schema `0.2`).
+The planner then reports the exact probability of detecting that harm instead
+of the power to pass gates the design predicts will fail:
+
+- the baseline's absolute-success lower bound clears the floor, and
+- the candidate's does not
+
+Both use the two-sided 95% Clopper–Pearson bound that the decision applies.
+The result is a lower bound on the probability of a `regression` verdict,
+because a point-estimate drop beyond the margin also yields `regression`.
+`sample_size.regression_detection` reports this power and the minimum pairs.
+Declare it before execution, like every other planning input.
+
+### Worked examples
+
+Run `runeconomy experiment plan --examples` for the calculations.
+
+- **40 pairs.** With every pair successful, the one-sided lower bound is
+  −8.81 percentage points with `paired_exact` and about −7.22 points with
+  `paired_score_exact`. Both miss a 5-point margin in this example.
+- **180 pairs.** Proof 2's 100% threshold tolerated zero non-completions per
+  variant. An illustrative failure rate of 0.75% and a 95% per-variant pass
+  target yield a tolerance of three. Proof 2 remains `invalid` under its
+  frozen contract.
+- **Prospective FP8 vs BF16.** At 90% expected baseline success, 6%
+  discordance, zero expected difference, an 80% absolute floor and a
+  5-point margin, `paired_score_exact` recommends 197 pairs at 81.3% joint
+  task-quality power. `paired_exact` recommends 345 pairs for the same 80%
+  target. Using Proof 2's measured cost per attempt as an illustrative rate
+  gives about $0.76 for 197 pairs. Use new-workload calibration to estimate
+  actual cost and the power of the complete design.
+
 ## Why the runner renders first
 
 Before every generation, the adapter sends the same request to the matching
@@ -114,6 +224,14 @@ first non-empty delta and total latency, then reads cached tokens and optional
 server timing metrics from the completed response. Generated content is not
 saved. The raw result contains a SHA-256 digest of the response output for
 later evaluator wiring.
+
+## Other backend kinds
+
+Manifest schema `0.3` and later also accept `backend.kind` `sglang` and
+`openai_compat`, each checked against its capability limits.
+`openai_compat` requires `acceptance.identity_policy` and
+`backend.undisclosed_identity`. See
+[serving backends and identity grades](backends.md).
 
 ## Required vLLM configuration
 
@@ -176,7 +294,14 @@ Credentials are read only from the environment variable named by
   unique, unrecorded random `cache_salt` per trial. It prevents cross-trial
   prefix reuse but does not physically clear cached blocks, recover capacity,
   or remove eviction effects.
-- `arrival_pattern` currently supports only `sequential`.
+- `arrival_pattern` is `sequential` (the default) in every schema version.
+  Schema `0.4` adds `closed_loop`, `constant_rps`, and `poisson`, configured
+  by `execution.load`, plus preregistered `acceptance.metric_gates` for TTFT,
+  TPOT, and workflow-latency quantiles and for
+  `usd_per_1k_successful_workflows` and goodput. Static replay always uses
+  `serving_topology: shared` and `pairing: variant_blocked`.
+  `physical_reset` isolation is rejected under load. See
+  [Load, pairing, and tail-metric gates](load-pairing-and-tail-gates.md).
 - Every case contains exactly a `baseline` and `candidate` request.
 - Each case may define a deterministic evaluator. Set
   `execution.require_evaluation` to reject unevaluated cases.

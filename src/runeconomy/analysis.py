@@ -333,8 +333,15 @@ def _finding_for_unused_tools(
     )
 
 
-def analyze_trace(trace: Trace) -> dict[str, Any]:
-    """Analyze a normalized trace and return a JSON-serializable report."""
+def analyze_trace(trace: Trace, *, dependency_evidence: str | None = None) -> dict[str, Any]:
+    """Analyze a normalized trace and return a JSON-serializable report.
+
+    ``dependency_evidence`` is the trace payload's dependency classification.
+    Detectors that reason about the dependency DAG run only on
+    ``complete_explicit`` evidence.
+    """
+    from .detectors import run_trace_detectors
+
     analyses: list[RequestAnalysis] = []
     findings: list[Finding] = []
     prior: list[InferenceRequest] = []
@@ -401,6 +408,7 @@ def analyze_trace(trace: Trace) -> dict[str, Any]:
             findings.append(unused_tools_finding)
         prior.append(request)
 
+    detected = run_trace_detectors(trace, dependency_evidence=dependency_evidence)
     total_input = sum(
         request.metrics.input_tokens
         if request.metrics.input_tokens is not None
@@ -446,12 +454,12 @@ def analyze_trace(trace: Trace) -> dict[str, Any]:
             "total_actual_cached_tokens": total_actual_cached,
             "cache_telemetry_complete": cache_telemetry_complete,
             "observed_cache_coverage": observed_cache_coverage,
-            "finding_count": len(findings),
+            "finding_count": len(findings) + len(detected),
             "critical_path_duration_ms": (
                 critical_path.duration_ms if critical_path is not None else None
             ),
         },
         "critical_path": asdict(critical_path) if critical_path is not None else None,
         "requests": [asdict(item) for item in analyses],
-        "findings": [asdict(item) for item in findings],
+        "findings": [asdict(item) for item in findings] + detected,
     }

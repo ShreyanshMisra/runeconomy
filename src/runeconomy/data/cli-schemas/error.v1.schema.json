@@ -1,0 +1,91 @@
+{
+  "$id": "runeconomy.cli.error.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Failure envelope printed on stderr in --json mode. stdout stays empty. Exit 2.",
+  "properties": {
+    "error": {
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "code": {
+          "pattern": "^runeconomy\\.",
+          "type": "string"
+        },
+        "details": {
+          "description": "Optional, content-free context for errors that opt in (experiment patch and freeze).",
+          "properties": {
+            "issue_codes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "mismatched_locks": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "planner_state": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "validation_status": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "evidence_complete": {
+          "const": false
+        },
+        "message": {
+          "type": "string"
+        },
+        "next_action": {
+          "type": "string"
+        },
+        "next_action_code": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "category",
+        "code",
+        "evidence_complete",
+        "message",
+        "next_action",
+        "next_action_code",
+        "stage"
+      ],
+      "type": "object"
+    },
+    "error_code_version": {
+      "type": "string"
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.error.v1"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "status": {
+      "const": "error"
+    }
+  },
+  "required": [
+    "error",
+    "error_code_version",
+    "output_schema",
+    "schema_version",
+    "status"
+  ],
+  "title": "runeconomy error --json output, version 1",
+  "type": "object"
+}

@@ -1,0 +1,130 @@
+{
+  "evidence_grade": "descriptive (not preregistered; the gate verdict at the top level is reported, not claimed)",
+  "gate_level_verdict": "verified",
+  "interval_note": "per-level intervals are normal approximations for description, not preregistered gates",
+  "levels": [
+    {
+      "arms": {
+        "baseline": {
+          "attempts": 100,
+          "successes": 100,
+          "successful_workflow_latency_ms": {
+            "mean": 1324.129,
+            "p50": 1297.189,
+            "p95": 1650.148
+          },
+          "usd_per_1k_successful_workflows": 0.737
+        },
+        "candidate": {
+          "attempts": 100,
+          "successes": 100,
+          "successful_workflow_latency_ms": {
+            "mean": 932.619,
+            "p50": 909.715,
+            "p95": 1149.239
+          },
+          "usd_per_1k_successful_workflows": 0.526
+        }
+      },
+      "concurrency": 1,
+      "paired_successful_latency_difference_ms": {
+        "approximate_95_ci": [
+          -402.781,
+          -380.24
+        ],
+        "mean": -391.51,
+        "pairs": 100,
+        "relative_to_baseline": -0.296
+      },
+      "server_prefix_cache_hit_rate_in_block": {
+        "baseline": 0.526,
+        "candidate": 0.526
+      }
+    },
+    {
+      "arms": {
+        "baseline": {
+          "attempts": 100,
+          "successes": 100,
+          "successful_workflow_latency_ms": {
+            "mean": 1556.407,
+            "p50": 1546.466,
+            "p95": 1920.317
+          },
+          "usd_per_1k_successful_workflows": 0.109
+        },
+        "candidate": {
+          "attempts": 100,
+          "successes": 100,
+          "successful_workflow_latency_ms": {
+            "mean": 1066.315,
+            "p50": 1049.491,
+            "p95": 1289.972
+          },
+          "usd_per_1k_successful_workflows": 0.076
+        }
+      },
+      "concurrency": 8,
+      "paired_successful_latency_difference_ms": {
+        "approximate_95_ci": [
+          -504.8,
+          -475.383
+        ],
+        "mean": -490.092,
+        "pairs": 100,
+        "relative_to_baseline": -0.315
+      },
+      "server_prefix_cache_hit_rate_in_block": {
+        "baseline": 0.82,
+        "candidate": 0.82
+      }
+    },
+    {
+      "arms": {
+        "baseline": {
+          "attempts": 100,
+          "successes": 100,
+          "successful_workflow_latency_ms": {
+            "mean": 2321.099,
+            "p50": 2311.745,
+            "p95": 2879.354
+          },
+          "usd_per_1k_successful_workflows": 0.043
+        },
+        "candidate": {
+          "attempts": 100,
+          "successes": 100,
+          "successful_workflow_latency_ms": {
+            "mean": 1602.067,
+            "p50": 1603.466,
+            "p95": 2053.735
+          },
+          "usd_per_1k_successful_workflows": 0.03
+        }
+      },
+      "concurrency": 32,
+      "paired_successful_latency_difference_ms": {
+        "approximate_95_ci": [
+          -767.002,
+          -671.063
+        ],
+        "mean": -719.033,
+        "pairs": 100,
+        "relative_to_baseline": -0.31
+      },
+      "server_prefix_cache_hit_rate_in_block": {
+        "baseline": 0.821,
+        "candidate": 0.822
+      }
+    }
+  ],
+  "provenance": {
+    "private_raw_archive_sha256": "sha256:cdef3b25e1d2f9f85f7cbc50ad9c7611898d6025b28bb98e4f1aec998ce65707",
+    "result_sha256": "sha256:53e9042f0f5fc462a81a5bb3116749f60fcc9aae6e5bfa82bdeadb8505154ca9"
+  },
+  "publication_status": "private_unpublished",
+  "result_type": "runeconomy.phase7_study",
+  "schema_version": "0.1",
+  "study": 1,
+  "title": "FP8 vs BF16 on a multi-step agent under load"
+}

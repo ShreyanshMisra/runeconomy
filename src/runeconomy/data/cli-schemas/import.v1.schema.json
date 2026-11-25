@@ -1,0 +1,69 @@
+{
+  "$id": "runeconomy.cli.import.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Capability assessment for an imported evidence bundle. The bundle itself is written to evidence_bundle.",
+  "properties": {
+    "assessment_version": {
+      "type": "string"
+    },
+    "capabilities": {
+      "additionalProperties": {
+        "properties": {
+          "evidence": {
+            "type": "string"
+          },
+          "next_action": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence",
+          "status"
+        ],
+        "type": "object"
+      },
+      "type": "object"
+    },
+    "evidence_bundle": {
+      "type": "string"
+    },
+    "evidence_quality": {},
+    "next_action": {
+      "type": "string"
+    },
+    "next_command": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "output_schema": {
+      "const": "runeconomy.cli.import.v1"
+    },
+    "recommended_mode": {
+      "enum": [
+        "static_request",
+        "agent_process",
+        null
+      ]
+    },
+    "runnable_experiment": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "assessment_version",
+    "capabilities",
+    "evidence_bundle",
+    "next_action",
+    "next_command",
+    "output_schema",
+    "recommended_mode",
+    "runnable_experiment"
+  ],
+  "title": "runeconomy import --json output, version 1",
+  "type": "object"
+}

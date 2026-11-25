@@ -1,0 +1,174 @@
+{
+ "schema_version": "0.1",
+ "trace_id": "serialized",
+ "workload": "detector-fixture",
+ "success": true,
+ "dependency_evidence": "complete_explicit",
+ "spans": [
+  {
+   "span_id": "plan",
+   "kind": "inference",
+   "start_ms": 0,
+   "end_ms": 200,
+   "request_id": "q1",
+   "depends_on": []
+  },
+  {
+   "span_id": "lookup-a",
+   "kind": "inference",
+   "start_ms": 200,
+   "end_ms": 600,
+   "request_id": "q2",
+   "depends_on": [
+    "plan"
+   ]
+  },
+  {
+   "span_id": "lookup-b",
+   "kind": "inference",
+   "start_ms": 600,
+   "end_ms": 1000,
+   "request_id": "q3",
+   "depends_on": [
+    "plan"
+   ]
+  },
+  {
+   "span_id": "answer",
+   "kind": "inference",
+   "start_ms": 1000,
+   "end_ms": 1200,
+   "request_id": "q4",
+   "depends_on": [
+    "lookup-a",
+    "lookup-b"
+   ]
+  }
+ ],
+ "requests": [
+  {
+   "request_id": "q1",
+   "sequence": 1,
+   "model": "Qwen/Qwen2.5-14B-Instruct",
+   "model_revision": "fixture",
+   "backend": "vllm",
+   "backend_version": "0.34.0",
+   "tokenizer": "Qwen/Qwen2.5-14B-Instruct",
+   "tokenizer_revision": "fixture",
+   "chat_template_digest": "sha256:fixture",
+   "prompt_token_ids": [
+    1,
+    2,
+    3,
+    1
+   ],
+   "segments": [],
+   "available_tools": [],
+   "invoked_tools": [],
+   "cache": {
+    "enabled": true,
+    "block_size": 16,
+    "cache_salt_digest": null
+   },
+   "metrics": {
+    "input_tokens": 4,
+    "output_tokens": 80,
+    "cached_input_tokens": 0,
+    "total_latency_ms": 400.0
+   }
+  },
+  {
+   "request_id": "q2",
+   "sequence": 2,
+   "model": "Qwen/Qwen2.5-14B-Instruct",
+   "model_revision": "fixture",
+   "backend": "vllm",
+   "backend_version": "0.34.0",
+   "tokenizer": "Qwen/Qwen2.5-14B-Instruct",
+   "tokenizer_revision": "fixture",
+   "chat_template_digest": "sha256:fixture",
+   "prompt_token_ids": [
+    1,
+    2,
+    3,
+    2
+   ],
+   "segments": [],
+   "available_tools": [],
+   "invoked_tools": [],
+   "cache": {
+    "enabled": true,
+    "block_size": 16,
+    "cache_salt_digest": null
+   },
+   "metrics": {
+    "input_tokens": 4,
+    "output_tokens": 80,
+    "cached_input_tokens": 0,
+    "total_latency_ms": 400.0
+   }
+  },
+  {
+   "request_id": "q3",
+   "sequence": 3,
+   "model": "Qwen/Qwen2.5-14B-Instruct",
+   "model_revision": "fixture",
+   "backend": "vllm",
+   "backend_version": "0.34.0",
+   "tokenizer": "Qwen/Qwen2.5-14B-Instruct",
+   "tokenizer_revision": "fixture",
+   "chat_template_digest": "sha256:fixture",
+   "prompt_token_ids": [
+    1,
+    2,
+    3,
+    3
+   ],
+   "segments": [],
+   "available_tools": [],
+   "invoked_tools": [],
+   "cache": {
+    "enabled": true,
+    "block_size": 16,
+    "cache_salt_digest": null
+   },
+   "metrics": {
+    "input_tokens": 4,
+    "output_tokens": 80,
+    "cached_input_tokens": 0,
+    "total_latency_ms": 400.0
+   }
+  },
+  {
+   "request_id": "q4",
+   "sequence": 4,
+   "model": "Qwen/Qwen2.5-14B-Instruct",
+   "model_revision": "fixture",
+   "backend": "vllm",
+   "backend_version": "0.34.0",
+   "tokenizer": "Qwen/Qwen2.5-14B-Instruct",
+   "tokenizer_revision": "fixture",
+   "chat_template_digest": "sha256:fixture",
+   "prompt_token_ids": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "segments": [],
+   "available_tools": [],
+   "invoked_tools": [],
+   "cache": {
+    "enabled": true,
+    "block_size": 16,
+    "cache_salt_digest": null
+   },
+   "metrics": {
+    "input_tokens": 4,
+    "output_tokens": 80,
+    "cached_input_tokens": 0,
+    "total_latency_ms": 400.0
+   }
+  }
+ ]
+}

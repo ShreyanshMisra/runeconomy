@@ -189,19 +189,15 @@ class VLLMClient:
         self._clock = clock
         self._on_startup_retry = on_startup_retry
 
-    def _headers(self) -> dict[str, str]:
-        headers = {"Accept": "application/json", "Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        return headers
-
     def _open(self, path: str, payload: Mapping[str, Any]) -> Any:
         request = urllib.request.Request(
             f"{self.base_url}{path}",
             data=json.dumps(payload).encode("utf-8"),
-            headers=self._headers(),
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
             method="POST",
         )
+        if self.api_key:
+            request.add_unredirected_header("Authorization", f"Bearer {self.api_key}")
         startup = StartupRetry(
             self.startup_retry_seconds,
             on_retry=self._on_startup_retry,

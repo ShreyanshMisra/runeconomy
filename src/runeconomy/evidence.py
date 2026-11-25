@@ -29,6 +29,12 @@ def _digest_path(path: Path) -> str:
     return "sha256:" + hashlib.sha256(content).hexdigest()
 
 
+def _is_proxy_session(path: Path) -> bool:
+    from .proxy.session import is_proxy_session
+
+    return is_proxy_session(path)
+
+
 def _capability(
     status: str, evidence: str, *, next_action: str | None = None
 ) -> dict[str, Any]:
@@ -282,8 +288,38 @@ def import_evidence(
     backend: str = "unknown",
     model: str | None = None,
     block_size: int = 16,
+    context: Mapping[str, Any] | None = None,
+    identity: Mapping[str, str] | None = None,
+    idle_gap_ms: float | None = None,
 ) -> dict[str, Any]:
-    """Import one supported source into a capability-graded evidence bundle."""
+    """Import one supported source into a capability-graded evidence bundle.
+
+    ``context``, ``identity`` and ``idle_gap_ms`` apply only to RunEconomy
+    capture-proxy sessions (``source_type="proxy"``, or auto-detected from the
+    session record). For those sessions, ``trace_id`` selects one workflow and
+    an observed ``vllm:cache_config_info`` block size takes precedence over
+    ``block_size``.
+    """
+
+    if source_type == "proxy" or (
+        source_type == "auto" and path.is_file() and _is_proxy_session(path)
+    ):
+        from .proxy.session import DEFAULT_IDLE_GAP_MS, import_proxy_session
+
+        return import_proxy_session(
+            path,
+            workflow_id=trace_id,
+            idle_gap_ms=DEFAULT_IDLE_GAP_MS if idle_gap_ms is None else idle_gap_ms,
+            workload=workload,
+            backend=None if backend == "unknown" else backend,
+            block_size=block_size,
+            identity=identity,
+            context=context,
+        )
+    if context is not None or identity is not None or idle_gap_ms is not None:
+        raise TraceValidationError(
+            "replay context, identity and idle-gap options apply only to proxy sessions"
+        )
 
     if path.is_dir():
         if source_type not in {"auto", "openinference", "phoenix"}:
@@ -347,7 +383,12 @@ def import_evidence(
             loaded = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             loaded = None
-        if isinstance(loaded, dict):
+        # A one-row JSONL ledger or capture also parses as a JSON object;
+        # leave it to the row-based detection below.
+        single_row = source_type == "auto" and isinstance(loaded, dict) and (
+            "cause" in loaded or "capture" in loaded or "prompt_token_ids" in loaded
+        )
+        if isinstance(loaded, dict) and not single_row:
             raw_json = loaded
             if source_type == "auto":
                 detected = (
@@ -419,7 +460,9 @@ def import_evidence(
         raise TraceValidationError(f"unsupported evidence type {detected!r}")
 
     trace = Trace.from_dict(trace_payload)
-    analysis = analyze_trace(trace)
+    analysis = analyze_trace(
+        trace, dependency_evidence=trace_payload.get("dependency_evidence")
+    )
     _enrich_findings(analysis, context, digest)
     assessment = assess_trace_evidence(trace_payload, analysis, context)
     return {
